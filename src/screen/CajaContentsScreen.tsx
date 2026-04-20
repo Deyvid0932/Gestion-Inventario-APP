@@ -153,8 +153,8 @@ const CajaContentsScreen = () => {
               onPress: async () => {
                 for (const prenda of listaExtraida) {
                   await db.runAsync(
-                    'INSERT INTO prendas (id, cajaId, estilo, color, estado) VALUES (?, ?, ?, ?, ?)', //op ,?
-                    [prenda.id, prenda.cajaId, prenda.estilo, prenda.color, 1] // prenda.op,
+                    'INSERT INTO prendas (id, cajaId, estilo, color, estado) VALUES (?, ?, ?, ?, ?)', 
+                    [prenda.id, prenda.cajaId, prenda.estilo, prenda.color, 1] 
                   );
                 }
                 fetchPrendas();
