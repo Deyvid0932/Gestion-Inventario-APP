@@ -1,20 +1,18 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SQLiteProvider } from 'expo-sqlite';
+import { AppNavigation } from './src/navigation/AppNavigation';
+import { migrateDbIfNeeded } from './src/database/database';
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <SQLiteProvider databaseName="inventario.db" onInit={migrateDbIfNeeded} useSuspense>
+        <NavigationContainer>
+          <AppNavigation />
+        </NavigationContainer>
+      </SQLiteProvider>
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
