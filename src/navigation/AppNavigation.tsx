@@ -19,13 +19,35 @@ const MainStack = () => {
   return (
     <Stack.Navigator 
       initialRouteName="MainTabs"
-      screenOptions={{ headerShown: false }}
+      screenOptions={{ 
+        animation: 'fade_from_bottom',
+        headerShown: false,
+        gestureEnabled: true,
+        transitionSpec: {
+          open: { animation: 'spring', config: { stiffness: 1000, damping: 500, mass: 3, overshootClamping: true, restDisplacementThreshold: 0.01, restSpeedThreshold: 0.01 } },
+          close: { animation: 'spring', config: { stiffness: 1000, damping: 500, mass: 3, overshootClamping: true, restDisplacementThreshold: 0.01, restSpeedThreshold: 0.01 } },
+        },
+        cardStyleInterpolator: ({ current, layouts }) => {
+          return {
+            cardStyle: {
+              opacity: current.progress,
+              transform: [
+                {
+                  translateX: current.progress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [layouts.screen.width * 0.1, 0],
+                  }),
+                },
+              ],
+            },
+          };
+        },
+      }}
     >
       <Stack.Screen name="MainTabs" component={TabNavigator} />
       <Stack.Screen name="Cajas" component={CajasScreen} />
       <Stack.Screen name="ExcelGrid" component={CajaContentsScreen} />
       <Stack.Screen name="Form" component={FormScreen} />
-      
     </Stack.Navigator>
   );
 };

@@ -15,10 +15,11 @@ interface AppState {
   setDetallesPrenda: (detalles: DetallePrenda[]) => void;
   
   addPrendaToState: (prenda: Prenda) => void;
-  updatePrendaInState: (id: string, updates: Partial<Prenda>) => void;
-  
   addDetallePrendaToState: (detalle: DetallePrenda) => void;
+
+  updatePrendaInState: (id: string, updates: Partial<Prenda>) => void;
   updateDetallePrendaInState: (id: string, updates: Partial<DetallePrenda>) => void;
+  
   removeDetallesPrendaFromState: (ids: string[]) => void;
 
   toggleSelectPrenda: (id: string) => void;
@@ -50,30 +51,45 @@ export const useAppStore = create<AppState>((set) => ({
     prendas: [prenda, ...state.prendas] 
   })),
 
-  updatePrendaInState: (id, updates) => set((state) => ({
-    prendas: state.prendas.map(p => p.id === id ? { ...p, ...updates } : p)
-  })),
+  updatePrendaInState: (id, updates) => set((state) => {
+    const index = state.prendas.findIndex(p => p.id === id);
+    if (index === -1) return state;
+    const newPrendas = [...state.prendas];
+    newPrendas[index] = { ...newPrendas[index], ...updates };
+    return { prendas: newPrendas };
+  }),
 
   addDetallePrendaToState: (detalle) => set((state) => ({ 
     detallesPrenda: [detalle, ...state.detallesPrenda] 
   })),
 
-  updateDetallePrendaInState: (id, updates) => set((state) => ({
-    detallesPrenda: state.detallesPrenda.map(d => d.id === id ? { ...d, ...updates } : d)
-  })),
+  updateDetallePrendaInState: (id, updates) => set((state) => {
+    const index = state.detallesPrenda.findIndex(d => d.id === id);
+    if (index === -1) return state;
+    const newDetalles = [...state.detallesPrenda];
+    newDetalles[index] = { ...newDetalles[index], ...updates };
+    return { detallesPrenda: newDetalles };
+  }),
 
-  removeDetallesPrendaFromState: (ids) => set((state) => ({
-    detallesPrenda: state.detallesPrenda.filter(d => !ids.includes(d.id)),
-    selectedPrendas: state.selectedPrendas.filter(id => !ids.includes(id))
-  })),
+  removeDetallesPrendaFromState: (ids) => set((state) => {
+    const idSet = new Set(ids);
+    return {
+      detallesPrenda: state.detallesPrenda.filter(d => !idSet.has(d.id)),
+      selectedPrendas: state.selectedPrendas.filter(id => !idSet.has(id))
+    };
+  }),
 
-  toggleSelectPrenda: (id) => set((state) => ({
-    selectedPrendas: state.selectedPrendas.includes(id)
-      ? state.selectedPrendas.filter(sid => sid !== id)
-      : [...state.selectedPrendas, id]
-  })),
+  toggleSelectPrenda: (id) => set((state) => {
+    const isSelected = state.selectedPrendas.includes(id);
+    return {
+      selectedPrendas: isSelected
+        ? state.selectedPrendas.filter(sid => sid !== id)
+        : [...state.selectedPrendas, id]
+    };
+  }),
 
   clearSelectedPrendas: () => set({ selectedPrendas: [] }),
   selectAllPrendas: (ids) => set({ selectedPrendas: ids }),
   clearSelectedDetallesPrenda: () => set({ selectedPrendas: [] }),
 }));
+

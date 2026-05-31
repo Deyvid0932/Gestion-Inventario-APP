@@ -1,6 +1,7 @@
 {
   "expo": {
-    "name": "Inventario_App",
+    "name": "Inventario_Pro",
+    "scheme": "inventario-app",
     "slug": "Inventario_frontend-App",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -21,10 +22,8 @@
         "CAMERA"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android_icon_foreground.png",
-        "backgroundImage": "./assets/android_icon_background.png"
-        
+        "foregroundImage": "./assets/android_icon_foreground-01.png",
+        "backgroundColor": "#FFFFFF"
       }
     },
     "plugins": [

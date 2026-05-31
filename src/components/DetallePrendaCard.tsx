@@ -1,9 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, Animated } from 'react-native';
 import { useAppStore } from '../store/useAppStore';
-import { Ionicons } from '@expo/vector-icons';
 import { DetallePrenda } from '../types';
+import { Ionicons } from '@expo/vector-icons';
+import { getColorHex } from '../utils/colorUtils';
 
+//Interface son las propiedades del componente
 interface DetallePrendaCardProps {
   detallePrenda: DetallePrenda;
   onToggleStatus: () => void;
@@ -12,139 +14,103 @@ interface DetallePrendaCardProps {
   onSelect?: (id: string) => void;
 }
 
+//prev: son las propiedades anteriores del componente, next: son las nuevas propiedades del componente
 const areEqual = (prev: DetallePrendaCardProps, next: DetallePrendaCardProps) => {
   return (
     prev.detallePrenda.id === next.detallePrenda.id &&
-    prev.detallePrenda.op === next.detallePrenda.op &&
+    Number(prev.detallePrenda.estado) === Number(next.detallePrenda.estado) &&
+    prev.isSelected === next.isSelected &&
     prev.detallePrenda.estilo === next.detallePrenda.estilo &&
-    prev.detallePrenda.color === next.detallePrenda.color &&
-    (prev.detallePrenda).estado === (next.detallePrenda).estado &&
-    
-    prev.isSelected === next.isSelected
+    prev.detallePrenda.op === next.detallePrenda.op &&
+    prev.detallePrenda.color === next.detallePrenda.color
   );
 };
 
+//React.memo es un componente que renderiza si los datos cambian
 export const DetallePrendaCard = React.memo(({ detallePrenda, onToggleStatus, onLongPress, isSelected, onSelect }: DetallePrendaCardProps) => {
 
+  //useAppStore es un hook que nos permite acceder al estado global de la aplicación, en este caso el tema actual
   const currentTheme = useAppStore((state) => state.currentTheme);
-  const estado = Number(detallePrenda.estado)
+  const estado = Number(detallePrenda.estado);
+
+  // UseRef cambia el valor de scaleAnim sin causar un re-renderizado del componente
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true }).start();
+  const onPressOut = () => Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
+
+  const colorHex = getColorHex(detallePrenda.color);
 
   return (
+    //TouchableOpacity es un button
     <TouchableOpacity 
-      style={[
-        styles.card, 
-        { 
-          backgroundColor: isSelected ? currentTheme.primary + '15' : currentTheme.card,
-          borderColor: isSelected ? currentTheme.primary : currentTheme.border 
-        }
-      ]}
+      activeOpacity={1}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       onLongPress={() => onLongPress?.(detallePrenda)}
       onPress={() => onSelect?.(detallePrenda.id)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.header}>
-        <View style={styles.opContainer}>
-          <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Estilo</Text>
-          <Text style={[styles.opValue, { color: currentTheme.text }]}>{detallePrenda.estilo}</Text>
-        </View>
-        <Switch
-          value={estado === 1 ? true : false}
-          onValueChange={onToggleStatus}
-          trackColor={{ false: '#767577', true: currentTheme.primary + '80' }}
-          thumbColor={estado === 1 ? currentTheme.primary : '#f4f3f4'}
-        />
-      </View>
-      <View style={styles.body}>
-        <View style={styles.infoRow}>
-         <Text style={[styles.label, { color: currentTheme.textSecondary }]}>OP</Text>
-          <Text style={[styles.estiloText, { color: currentTheme.text }]}>{detallePrenda.op}</Text>
-        </View>
-    
-        <View style={styles.detailsRow}>
-          <View style={styles.detailItem}>
-             <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Color:</Text>
-             <Text style={[styles.detailValue, { color: currentTheme.text }]}>{detallePrenda.color}</Text>
-          </View>
-
-          <View style={[styles.badge, { backgroundColor: estado === 1 ? '#2ecc7120' : '#95a5a620' }]}>
-            <Text style={[styles.badgeText, { color: estado === 1 ? '#27ae60' : '#7f8c8d' }]}>
-              {estado === 1 ? 'Activo' : 'Inactivo'}
+    >   
+      <Animated.View 
+        style={[
+          styles.card, 
+          { 
+            backgroundColor: isSelected ? currentTheme.primary + '15' : currentTheme.card,
+            borderColor: isSelected ? currentTheme.primary : currentTheme.border,
+            borderLeftColor: colorHex,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}
+      >
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={[styles.styleTitle, { color: currentTheme.text }]} numberOfLines={1}>
+              {detallePrenda.estilo}
             </Text>
+            <Switch
+              value={estado === 1}
+              onValueChange={onToggleStatus}
+              trackColor={{ false: '#767577', true: currentTheme.primary + '80' }}
+              thumbColor={estado === 1 ? currentTheme.primary : '#f4f3f4'}
+            />
+          </View>
+
+          <View style={styles.footer}>
+            <View style={styles.infoGroup}>
+              <Ionicons name="pricetag-outline" size={14} color={currentTheme.textSecondary} />
+              <Text style={[styles.infoValue, { color: currentTheme.textSecondary }]}>
+                {detallePrenda.op || 'Sin OP'}
+              </Text>
+            </View>
+            <View style={styles.infoGroup}>
+              <Ionicons name="color-palette-outline" size={14} color={currentTheme.textSecondary} />
+              <Text style={[styles.infoValue, { color: currentTheme.textSecondary }]}>
+                {detallePrenda.color}
+              </Text>
+            </View>
           </View>
         </View>
-
-      </View>
+      </Animated.View>
     </TouchableOpacity>
   );
 }, areEqual);
 
 const styles = StyleSheet.create({
   card: {
-    padding: 15,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 10,
-    elevation: 2,
+    borderLeftWidth: 8,
+    marginBottom: 12,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    overflow: 'hidden'
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  opContainer: {
-    flex: 1,
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  opValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  body: {
-    gap: 8,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  estiloText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  detailsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  detailLabel: {
-    fontSize: 12,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-  }
+  content: { padding: 15 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  styleTitle: { fontSize: 18, fontWeight: '800', flex: 1, marginRight: 10 },
+  footer: { flexDirection: 'row', gap: 15 },
+  infoGroup: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  infoValue: { fontSize: 13, fontWeight: '600' },
 });

@@ -4,12 +4,14 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '../store/useAppStore';
 
+// Son las propiedades del componente Navbar, el titulo y si se muestra el boton de regresar
 interface NavbarProps {
   title: string;
   showBackButton?: boolean;
 }
 
 export const Navbar = ({ title, showBackButton }: NavbarProps) => {
+  
   const navigation = useNavigation();
   const { currentTheme, toggleTheme, themeMode } = useAppStore();
 
@@ -23,7 +25,7 @@ export const Navbar = ({ title, showBackButton }: NavbarProps) => {
       <View style={styles.left}>
         {showBackButton && (
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#FFF" />
+            <Ionicons name="arrow-back" size={30} color="#FFF" />
           </TouchableOpacity>
         )}
         <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>

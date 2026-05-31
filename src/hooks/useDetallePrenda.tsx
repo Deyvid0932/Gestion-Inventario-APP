@@ -20,7 +20,7 @@ export const useDetallePrenda = () => {
     };
 
     const addDetalle = async (detalle: DetallePrenda) => {
-        const result = await DetallePrendaService.addDetallePrenda(db, detalle);
+        const result = await DetallePrendaService.addDetallePrenda(db, detalle, detalle.detalleId);
         if (result.success) {
             addDetallePrendaToState(detalle);
         }
