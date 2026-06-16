@@ -1,19 +1,26 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '../store/useAppStore';
 
-// Son las propiedades del componente Navbar, el titulo y si se muestra el boton de regresar
 interface NavbarProps {
   title: string;
   showBackButton?: boolean;
+  isLoading?: boolean;
 }
 
-export const Navbar = ({ title, showBackButton }: NavbarProps) => {
-  
+export const Navbar = ({ title, showBackButton, isLoading }: NavbarProps) => {
   const navigation = useNavigation();
   const { currentTheme, toggleTheme, themeMode } = useAppStore();
+  const lastBackPress = React.useRef(0);
+
+  const handleBack = () => {
+    const now = Date.now();
+    if (now - lastBackPress.current < 400) return;
+    lastBackPress.current = now;
+    navigation.goBack();
+  };
 
   return (
     <View style={[styles.header, { backgroundColor: currentTheme.primary }]}>
@@ -24,11 +31,14 @@ export const Navbar = ({ title, showBackButton }: NavbarProps) => {
       
       <View style={styles.left}>
         {showBackButton && (
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
             <Ionicons name="arrow-back" size={30} color="#FFF" />
           </TouchableOpacity>
         )}
         <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
+        {isLoading && (
+          <ActivityIndicator size="small" color="#FFF" style={{ marginLeft: 10 }} />
+        )}
       </View>
 
       <TouchableOpacity 

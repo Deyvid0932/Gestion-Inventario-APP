@@ -6,6 +6,11 @@ export interface Inventario {
   estado: 'Activo' | 'Inactivo';
 }
 
+export interface InventarioStats extends Inventario {
+  totalPrendas: number;
+  prendasEscaneadas: number;
+}
+
 export interface Caja {
   id: string;
   inventarioId: string;
@@ -14,23 +19,18 @@ export interface Caja {
   orden?: number;
 }
 
+export interface CajaWithStats extends Caja {
+  itemCount: number;
+}
+
 export interface Prenda {
   id: string;
   cajaId: string;
   op: string;
   estilo: string;
   color: string;
-  estado: 1 | 0 ; // 1 para Activo, 0 para Inactivo
+  estado: 1 | 0 ; 
   fechaCreacion?: string;
-}
-
-export interface DetallePrenda {
-  id: string;
-  detalleId: string;
-  op: string;
-  estilo: string;
-  color: string;
-  estado: 1 | 0 ; // 1 para Activo, 0 para Inactivo
 }
 
 export interface HistoryItem extends Prenda {
@@ -42,10 +42,9 @@ export type RootStackParamList = {
   MainTabs: undefined;
   Cajas: { inventarioId: string; nombreInventario: string };
   ExcelGrid: { cajaId: string;   nombreCaja: string, targetPrendaId?: string };
-  GarmentDetails: { cajaId: string; nombreCaja: string };
   Form: { 
-    mode: 'BASIC' | 'NAME_ONLY' | 'ADVANCED' | 'ADVANCED_LITE';
-    entityType: 'inventario' | 'caja' | 'prenda' | 'detalle_prenda';
+    mode: 'BASIC' | 'NAME_ONLY' | 'ADVANCED';
+    entityType: 'inventario' | 'caja' | 'prenda';
     parentId?: string; // inventarioId for cajas, cajaId for prendas
     initialData?: Record<string, any>;
   };

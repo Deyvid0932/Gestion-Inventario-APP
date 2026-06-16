@@ -78,9 +78,31 @@ export const PrendaService = {
     }
   },
 
-  getAllPrendasByCaja: async (db: SQLiteDatabase, cajaId: string) => {
+  getAllPrendasByCaja: async (db: SQLiteDatabase, cajaId: string, search: string = '') => {
     try {
-      return await db.getAllAsync<Prenda>('SELECT * FROM prendas WHERE cajaId = ? ORDER BY fechaCreacion DESC', [cajaId]);
+      if (search.trim() === '') {
+        return await db.getAllAsync<Prenda>('SELECT * FROM prendas WHERE cajaId = ? ORDER BY fechaCreacion DESC', [cajaId]);
+      }
+      
+      const startParam = `${search}%`;
+      const exactParam = search;
+      const searchParam = `%${search}%`;
+
+      return await db.getAllAsync<Prenda>(
+        `SELECT * FROM prendas 
+         WHERE cajaId = ? AND (op LIKE ? OR estilo LIKE ? OR color LIKE ?) 
+         ORDER BY 
+          (CASE 
+            WHEN op = ? OR estilo = ? OR color = ? THEN 0
+            WHEN op LIKE ? OR estilo LIKE ? OR color LIKE ? THEN 1
+            ELSE 2
+          END), fechaCreacion DESC`,
+        [
+          cajaId, searchParam, searchParam, searchParam, 
+          exactParam, exactParam, exactParam, 
+          startParam, startParam, startParam
+        ]
+      );
     } catch (error) {
       console.error('Error fetching prendas:', error);
       return [];

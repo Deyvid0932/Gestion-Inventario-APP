@@ -9,8 +9,6 @@ import { RootStackParamList, BottomTabParamList } from '../types';
 import { useAppStore } from '../store/useAppStore';
 import CajasScreen from '../screen/CajasScreen';
 import { FormScreen } from '../screen/FormScreen';
-import GarmentDetailsScreen from '../screen/GarmentDetailsScreen';
-
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -66,10 +64,7 @@ const TabNavigator = () => {
             iconName = focused ? 'file-tray-stacked' : 'file-tray-stacked-outline';
           } else if (route.name === 'History') {
             iconName = focused ? 'time' : 'time-outline';
-          } else if (route.name === 'GarmentDetails') {
-            iconName = focused ? 'shirt' : 'shirt-outline';
-          }
-          else {
+          } else {
             iconName = 'help';
           }
 
@@ -85,7 +80,6 @@ const TabNavigator = () => {
     >
       <Tab.Screen name="Inventarios" component={InventariosScreen} options={{ title: 'Lotes' }} />
       <Tab.Screen name="History" component={HistoryScreen} options={{ title: 'Historial' }} />
-      <Tab.Screen name="GarmentDetails" component={GarmentDetailsScreen} options={{ title: 'Registros' }} />
     </Tab.Navigator>
   );
 };

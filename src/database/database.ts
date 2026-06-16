@@ -1,7 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
-  const DATABASE_VERSION = 4;
+  const DATABASE_VERSION = 5;
   
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -46,24 +46,12 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         FOREIGN KEY (cajaId) REFERENCES cajas (id) ON DELETE CASCADE
       );
 
-      CREATE TABLE IF NOT EXISTS detalles_prendas (
-        id TEXT PRIMARY KEY NOT NULL,
-        detalleId TEXT NOT NULL,
-        op TEXT,
-        estilo TEXT NOT NULL,
-        color TEXT NOT NULL,
-        estado INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (detalleId) REFERENCES inventarios (id) ON DELETE CASCADE
-      );
-
-     
-      -- Indexes for performance para evitar escaneos completos de tablas y mejorar la velocidad de las consultas
+      -- Indexes for performance
       CREATE INDEX IF NOT EXISTS idx_cajas_inventario ON cajas(inventarioId);
       CREATE INDEX IF NOT EXISTS idx_prendas_caja ON prendas(cajaId);
       CREATE INDEX IF NOT EXISTS idx_prendas_estado ON prendas(estado);
       CREATE INDEX IF NOT EXISTS idx_prendas_fecha ON prendas(fechaCreacion);
       CREATE INDEX IF NOT EXISTS idx_cajas_orden ON cajas(orden);
-      CREATE INDEX IF NOT EXISTS idx_detalles_inventario ON detalles_prendas(detalleId);
 
       INSERT OR REPLACE INTO user_version (id, version) VALUES (1, ${DATABASE_VERSION});
     `);
@@ -91,32 +79,27 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       currentDbVersion = 3;
     }
 
-    if(currentDbVersion === 3) {
-      await db.execAsync(
-        `DROP TABLE IF EXISTS detalles_prendas;
-
-        CREATE TABLE IF NOT EXISTS detalles_prendas (
-        id TEXT PRIMARY KEY NOT NULL,
-        detalleId TEXT NOT NULL,
-        op TEXT,
-        estilo TEXT NOT NULL,
-        color TEXT NOT NULL,
-        estado INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (detalleId) REFERENCES inventarios (id) ON DELETE CASCADE
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_detalles_inventario ON detalles_prendas(detalleId);
-      INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 4); 
-      
-      `)
+    if (currentDbVersion === 3) {
+      await db.execAsync(`
+        DROP TABLE IF EXISTS detalles_prendas;
+        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 4);
+      `);
       currentDbVersion = 4;
+    }
+
+    if (currentDbVersion === 4) {
+      await db.execAsync(`
+        -- Limpieza de datos huérfanos
+        DELETE FROM prendas WHERE cajaId NOT IN (SELECT id FROM cajas);
+        DELETE FROM cajas WHERE inventarioId NOT IN (SELECT id FROM inventarios);
+        
+        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 5);
+      `);
+      currentDbVersion = 5;
     }
   }
 }
 
-
 export const generateId = () => {
   return Date.now().toString() + Math.random().toString(36).substring(2, 9);
 };
-
-

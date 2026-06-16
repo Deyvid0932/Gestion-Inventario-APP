@@ -18,8 +18,7 @@ import { RootStackParamList } from '../types';
 import { useSQLiteContext } from 'expo-sqlite';
 import { generateId } from '../database/database';
 import { useAppStore } from '../store/useAppStore';
-import { useDetallePrenda } from '../hooks/useDetallePrenda';
-import { DetallePrendaService } from '../services/DetallePrendaService';
+
 import { PrendaService } from '../services/PrendaService';
 import { usePrenda } from '../hooks/usePrenda';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,7 +30,8 @@ export const FormScreen = () => {
   const db = useSQLiteContext();
   const { currentTheme } = useAppStore();
   const { addPrenda } = usePrenda();
-  const { addDetalle: addDetallePrenda } = useDetallePrenda();
+  const lastSubmitTime = useRef(0);
+ 
 
   const { initialData, entityType, parentId } = route.params || {};
   const [formData, setFormData] = useState<Record<string, string>>(initialData || {});
@@ -63,6 +63,10 @@ export const FormScreen = () => {
   };
 
   const handleSubmit = async () => {
+    const now = Date.now();
+    if (now - lastSubmitTime.current < 400) return;
+    lastSubmitTime.current = now;
+
     const isUpdate = !!initialData?.id;
     const id = isUpdate ? initialData!.id : generateId();
     const fecha = new Date().toISOString();
@@ -70,7 +74,7 @@ export const FormScreen = () => {
     let isValid = true;
     if (entityType === 'inventario' || entityType === 'caja') {
       if (!isFieldValid('nombre')) isValid = false;
-    } else if (entityType === 'prenda' || entityType === 'detalle_prenda') {
+    } else if (entityType === 'prenda') {
       if (!isFieldValid('color') || !isFieldValid('estilo')) isValid = false;
     }
 
@@ -114,33 +118,6 @@ export const FormScreen = () => {
           }
         } else {
           const res = await addPrenda(prendaData);
-
-          if (!res.success) {
-            Alert.alert("Error", res.error);
-            setLoading(false);
-            return;
-          }
-        }
-      }
-      else if (entityType === 'detalle_prenda') {
-        const detalleData = {
-          id,
-          detalleId: parentId || initialData?.detalleId,
-          op: formData.op || '',
-          estilo: formData.estilo || '',
-          color: formData.color || '',
-          estado: formData.estado !== undefined ? Number(formData.estado) : 1
-        } as any;
-
-        if (isUpdate) {
-          const res = await DetallePrendaService.updateDetallePrenda(db, detalleData);
-          if (!res.success) {
-            Alert.alert('Registro Duplicado', res.error || 'Esta OP ya existe en otro registro.');
-            setLoading(false);
-            return;
-          }
-        } else {
-          const res = await addDetallePrenda(detalleData);
 
           if (!res.success) {
             Alert.alert("Error", res.error);
@@ -229,7 +206,7 @@ export const FormScreen = () => {
             
             {entityType === 'inventario' && renderInput('Descripción', 'descripcion', 'Descripción opcional', true)}
 
-            {(entityType === 'prenda' || entityType === 'detalle_prenda') && (
+            {(entityType === 'prenda') && (
               <>
                 {renderInput('Estilo', 'estilo', 'Ej. Polo Slim')}
                 {renderInput('OP', 'op', 'Orden de Producción', true)}

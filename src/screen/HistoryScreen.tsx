@@ -60,6 +60,10 @@ export const HistoryScreen = () => {
     }
     try {
       const estadoDb = status === 'Activo' ? 1 : 0;
+      const searchParam = `%${search}%`;
+      const startParam = `${search}%`;
+      const exactParam = search;
+
       const query = `
         SELECT p.id, p.cajaId, p.op, p.estilo, p.color, p.estado, p.fechaCreacion,
                c.nombre as cajaNombre, i.nombre as inventarioNombre
@@ -67,10 +71,19 @@ export const HistoryScreen = () => {
         JOIN cajas c ON p.cajaId = c.id
         JOIN inventarios i ON c.inventarioId = i.id
         WHERE p.estado = ? AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?)
-        ORDER BY p.fechaCreacion DESC
+        ORDER BY 
+          (CASE 
+            WHEN p.op = ? OR p.estilo = ? OR p.color = ? THEN 0
+            WHEN p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ? THEN 1
+            ELSE 2
+          END), p.fechaCreacion DESC
       `;
-      const searchParam = `%${search}%`;
-      const rows = await db.getAllAsync<HistoryItem>(query, [estadoDb, searchParam, searchParam, searchParam]);
+      
+      const rows = await db.getAllAsync<HistoryItem>(query, [
+        estadoDb, searchParam, searchParam, searchParam, 
+        exactParam, exactParam, exactParam, 
+        startParam, startParam, startParam
+      ]);
       setResults(rows);
       
       Animated.timing(fadeAnim, {
@@ -173,6 +186,7 @@ export const HistoryScreen = () => {
       {loading ? <SkeletonLoader theme={currentTheme} /> : (
         <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
           <FlatList
+            style={{ flex: 1 }}
             data={results}
             renderItem={renderItem}
             keyExtractor={item => item.id}
@@ -192,7 +206,7 @@ export const HistoryScreen = () => {
       <ExportModal 
                visible={showExportModal} 
                onClose={() => setShowExportModal(false)} 
-               data={results}
+               data={results} 
              />
     </View>
   );
@@ -207,7 +221,11 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', alignItems: 'center', paddingRight: 18, marginBottom: 5 },
   searchBarWrapper: { flex: 1 },
   exportBtn: { width: 46, height: 46, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 2 },
-  listContent: { padding: 18, paddingBottom: 40 },
+  listContent: { 
+    padding: 18, 
+    paddingBottom: 40,
+    flexGrow: 1,
+  },
   dateHeader: { marginBottom: 10, marginTop: 15 },
   dateHeaderText: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase' },
   timelineRow: { flexDirection: 'row', gap: 12 },
@@ -222,6 +240,11 @@ const styles = StyleSheet.create({
   opText: { fontSize: 12, fontWeight: '500' },
   colorSwatch: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5 },
   locationText: { fontSize: 11, fontWeight: '500', fontStyle: 'italic' },
-  emptyContainer: { alignItems: 'center', marginTop: 100, opacity: 0.5 },
+  emptyContainer: { 
+    flex: 1,
+    alignItems: 'center', 
+    justifyContent: 'center',
+    opacity: 0.5 
+  },
   emptyText: { fontSize: 16, fontWeight: '600', marginTop: 15 },
 });

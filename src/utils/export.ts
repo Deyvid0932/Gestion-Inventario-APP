@@ -12,101 +12,101 @@ export const exportToExcel = async (data: any[], fileName: string, separateByShe
 
     const wb = XLSX.utils.book_new();
 
-    // =========================================================================
-    // CAMINO 1: AGRUPADO POR HOJAS (Mantiene tu lógica intacta si decides usarla)
-    // =========================================================================
+    // 1. Agrupar datos por nombre de caja
+    const groupedData: { [key: string]: any[] } = {};
+    data.forEach(item => {
+      const cajaName = item['_cajaNombre'] || 'SIN CAJA';
+      if (!groupedData[cajaName]) groupedData[cajaName] = [];
+      
+      const { _cajaNombre, ...rest } = item;
+      groupedData[cajaName].push(rest);
+    });
+
+    // 2. Extraer encabezados (limpios)
+    const firstItem = data[0];
+    const { _cajaNombre: _, ...headersClean } = firstItem;
+    const headers = Object.keys(headersClean).map(h => h.toUpperCase());
+    const colCount = headers.length;
+
     if (separateBySheet) {
-      const groupedData: { [key: string]: any[] } = {};
-
-      data.forEach(item => {
-        const cajaName = item['_cajaNombre'] || 'General';
-        if (!groupedData[cajaName]) groupedData[cajaName] = [];
-
-        const { _cajaNombre, ...limpio } = item;
-        groupedData[cajaName].push(limpio);
-      });
-
+      // --- MODO: PESTAÑAS SEPARADAS ---
       Object.keys(groupedData).forEach(name => {
-        const ws = XLSX.utils.json_to_sheet(groupedData[name]);
+        const rows: any[][] = [];
+        
+        // Fila 0: Título de Sección
+        rows.push([`${name.toUpperCase()}`]);
+        // Fila 1: Encabezados
+        rows.push(headers);
+        // Filas 2+: Datos
+        groupedData[name].forEach(item => {
+          rows.push(Object.values(item));
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        
+        // COMBINAR CELDAS DEL TÍTULO (De la columna A hasta la última)
+        ws['!merges'] = [
+          { s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } }
+        ];
+
+        ws['!cols'] = Array(colCount).fill({ wch: 15 });
         XLSX.utils.book_append_sheet(wb, ws, name.substring(0, 31));
       });
 
-    // =========================================================================
-    // CAMINO 2: UNA SOLA HOJA SEPARADA POR BLOQUES VISUALES (¡Tu Segunda Imagen!)
-    // =========================================================================
     } else {
-      // 1. Agrupamos los datos en memoria por el nombre de la caja
-      const groupedData: { [key: string]: any[] } = {};
-      data.forEach(item => {
-        const cajaName = item['_cajaNombre'] || 'SIN CAJA';
-        if (!groupedData[cajaName]) groupedData[cajaName] = [];
-        
-        // Quitamos la propiedad interna para que las columnas salgan limpias
-        const { _cajaNombre, ...rest } = item;
-        groupedData[cajaName].push(rest);
-      });
-
-      // 2. Creamos una matriz de filas vacía para construir el Excel a mano
+      // --- MODO: UNA SOLA HOJA ---
       const rows: any[][] = [];
+      const merges: XLSX.Range[] = [];
+      let currentRow = 0;
 
-      // Extraemos los encabezados de las columnas dinámicamente usando el primer elemento
-      const firstItem = data[0];
-      const { _cajaNombre, ...headersClean } = firstItem;
-      const headers = Object.keys(headersClean).map(h => h.toUpperCase()); // Encabezados en Mayúsculas
-
-      // 3. Iteramos sobre cada caja para armar los bloques visuales
-      Object.keys(groupedData).forEach((cajaName, index) => {
-        // Si no es la primera caja, dejamos dos filas en blanco de separación para el digitador
+      Object.keys(groupedData).forEach((name, index) => {
+        // Espacio entre secciones
         if (index > 0) {
           rows.push([]);
           rows.push([]);
+          currentRow += 2;
         }
 
-        // Insertamos el Banner/Encabezado de la Caja (Fila divisoria visual)
-        rows.push([`📦 SECCIÓN: ${cajaName.toUpperCase()}`]);
-        
-        // Insertamos los nombres de las columnas debajo del título de la caja
-        rows.push(headers);
+        // TÍTULO DE LA SECCIÓN (Combinado)
+        rows.push([`${name.toUpperCase()}`]);
+        merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: colCount - 1 } });
+        currentRow++;
 
-        // Insertamos todas las prendas que pertenecen a esta caja
-        groupedData[cajaName].forEach(item => {
+        // ENCABEZADOS
+        rows.push(headers);
+        currentRow++;
+
+        // DATOS
+        groupedData[name].forEach(item => {
           rows.push(Object.values(item));
+          currentRow++;
         });
       });
 
-      // 4. Convertimos la matriz (AoA: Array of Arrays) en una Hoja de Excel
       const ws = XLSX.utils.aoa_to_sheet(rows);
-
-      // (Opcional) Ajustamos el ancho de las columnas automáticamente para que no se corte el texto
-      const maxCols = headers.length;
-      ws['!cols'] = Array(maxCols).fill({ wch: 15 }); // Ancho por defecto de 15 caracteres
-
+      ws['!merges'] = merges;
+      ws['!cols'] = Array(colCount).fill({ wch: 15 });
       XLSX.utils.book_append_sheet(wb, ws, "Reporte_Por_Cajas");
     }
 
-    // =========================================================================
-    // PROCESAMIENTO BINARIO Y COMPARTICIÓN (Tu lógica nativa perfecta)
-    // =========================================================================
+    // 3. GENERAR Y COMPARTIR
     const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
-    const uri = `${FileSystem.cacheDirectory}${fileName}.xlsx`;
+    const safeFileName = fileName.replace(/[/\\?%*:|"<>]/g, '_').substring(0, 50);
+    const uri = `${FileSystem.cacheDirectory}${safeFileName}.xlsx`;
     
     await FileSystem.writeAsStringAsync(uri, wbout, {
       encoding: 'base64' as any,
     });
 
-    const isAvailable = await Sharing.isAvailableAsync();
-    if (isAvailable) {
+    if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(uri, {
         mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         dialogTitle: 'Enviar Reporte de Inventario',
         UTI: 'com.microsoft.excel.xlsx'
       });
-    } else {
-      Alert.alert("Error", "Tu dispositivo no permite compartir archivos.");
     }
-
   } catch (error) {
-    console.error("Error en la exportación:", error);
-    Alert.alert("Error", "Hubo un fallo al generar el Excel.");
+    console.error("Error en exportación:", error);
+    Alert.alert("Error", "No se pudo generar el Excel.");
   }
 };

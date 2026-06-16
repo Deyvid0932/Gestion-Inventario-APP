@@ -68,7 +68,7 @@ const handleExport = () => {
     if (selectedBoxes.length === 1) {
         nombreArchivo = `Reporte_${selectedBoxes[0]}`
     } else {
-        nombreArchivo = `Reporte_${selectedBoxes}`
+        nombreArchivo = `Reporte_${selectedBoxes.length}`
     }
 
     const finalFileName = `${nombreArchivo}`
