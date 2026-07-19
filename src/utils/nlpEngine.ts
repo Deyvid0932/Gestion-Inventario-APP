@@ -61,24 +61,31 @@ export interface SearchResult {
 }
 
 export const rankResults = (results: SearchResult[], searchTerms: string[]): SearchResult[] => {
+  const fullSearchTerm = searchTerms.join(' ');
+
   const ranked = results.map(item => {
     let score = Number.MAX_SAFE_INTEGER;
     
-    // Comparar cada término de búsqueda con los campos relevantes
+    const opNorm = item.op ? normalizeText(item.op) : '';
+    const estiloNorm = item.estilo ? normalizeText(item.estilo) : '';
+    const colorNorm = item.color ? normalizeText(item.color) : '';
+
+    // 1. Exact match de toda la frase de búsqueda (Máxima Prioridad)
+    if (opNorm === fullSearchTerm || estiloNorm === fullSearchTerm || colorNorm === fullSearchTerm) {
+      return { ...item, score: -1 };
+    }
+
+    // 2. Comparar cada término individual
     for (const term of searchTerms) {
-      const opDist = item.op ? levenshteinDistance(term, normalizeText(item.op)) : Number.MAX_SAFE_INTEGER;
-      const estiloDist = item.estilo ? levenshteinDistance(term, normalizeText(item.estilo)) : Number.MAX_SAFE_INTEGER;
-      const colorDist = item.color ? levenshteinDistance(term, normalizeText(item.color)) : Number.MAX_SAFE_INTEGER;
+      const opDist = opNorm ? levenshteinDistance(term, opNorm) : Number.MAX_SAFE_INTEGER;
+      const estiloDist = estiloNorm ? levenshteinDistance(term, estiloNorm) : Number.MAX_SAFE_INTEGER;
+      const colorDist = colorNorm ? levenshteinDistance(term, colorNorm) : Number.MAX_SAFE_INTEGER;
       
-      // Exact match
-      if (normalizeText(item.op) === term) return { ...item, score: 0 };
-      if (normalizeText(item.estilo) === term) return { ...item, score: 0 };
-      if (normalizeText(item.color) === term) return { ...item, score: 0 };
+      // Exact match parcial
+      if (opNorm === term || estiloNorm === term || colorNorm === term) return { ...item, score: 0 };
       
       // Contains
-      if (normalizeText(item.op).includes(term)) return { ...item, score: 0.5 };
-      if (normalizeText(item.estilo).includes(term)) return { ...item, score: 0.5 };
-      if (normalizeText(item.color).includes(term)) return { ...item, score: 0.5 };
+      if (opNorm.includes(term) || estiloNorm.includes(term) || colorNorm.includes(term)) return { ...item, score: 0.5 };
       
       const minDist = Math.min(opDist, estiloDist, colorDist);
       if (minDist < score) score = minDist;
@@ -87,11 +94,15 @@ export const rankResults = (results: SearchResult[], searchTerms: string[]): Sea
     return { ...item, score };
   });
 
-  // 1. Filtrar los que tienen coincidencia exacta o "contains" muy cercana (score <= 0.5)
-  const exactMatches = ranked.filter(item => item.score! <= 0.5);
+  // 1. Filtrar coincidencias perfectas o exactas
+  const exactMatches = ranked.filter(item => item.score! <= 0);
   
   if (exactMatches.length > 0) {
-    return exactMatches.sort((a, b) => a.score! - b.score!); // Si hay exactos, devolver SOLO exactos
+    // Si hay una coincidencia perfecta (score -1) devuelve solo esa(s)
+    const perfectMatches = exactMatches.filter(item => item.score === -1);
+    if (perfectMatches.length > 0) return perfectMatches.slice(0, 1);
+    
+    return exactMatches.sort((a, b) => a.score! - b.score!);
   }
 
   // 2. Si no hay exactos, devolver los fuzzy cercanos (score <= 2)

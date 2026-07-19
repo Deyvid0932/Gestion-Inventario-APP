@@ -167,7 +167,7 @@ export const HistoryScreen = () => {
       <Navbar title="Historial" />
       
       <View style={[styles.segmentedWrapper, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
-        <Animated.View style={[styles.segmentIndicator, { backgroundColor: currentTheme.primary, width: (width - 50) / 2, transform: [{ translateX: tabTranslateX }] }]} />
+        <Animated.View style={[styles.segmentIndicator, { backgroundColor: "#E4E4E7", width: (width - 50) / 2, transform: [{ translateX: tabTranslateX }] }]} />
         <TouchableOpacity style={styles.segmentTab} onPress={() => toggleStatus('Activo')}>
           <Text style={[styles.segmentText, { color: status === 'Activo' ? '#2ecc71' : currentTheme.textSecondary, fontWeight: status === 'Activo' ? '800' : '600' }]}>Activos</Text>
         </TouchableOpacity>
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   timelineCol: { alignItems: 'center', width: 16 },
   timelineDot: { width: 8, height: 8, borderRadius: 4, marginTop: 24 },
   timelineLine: { flex: 1, width: 1.5, marginTop: -10, marginBottom: -20 },
-  card: { flex: 1, padding: 14, borderRadius: 15, borderWidth: 1, marginBottom: 15, elevation: 2 },
+  card: { flex: 1, padding: 14, borderRadius: 16, borderWidth: 1, marginBottom: 15, elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   badgeContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   compactBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },

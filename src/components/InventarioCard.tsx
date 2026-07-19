@@ -158,7 +158,7 @@ const InventarioCard = memo(({
 const styles = StyleSheet.create({
   card: {
     padding: 20,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     marginBottom: 16,
     elevation: 0,

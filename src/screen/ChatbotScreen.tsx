@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert, Platform, KeyboardAvoidingView, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useNavigation } from '@react-navigation/native';
@@ -20,7 +20,7 @@ interface ChatMessage {
 export const ChatbotScreen = () => {
   const db = useSQLiteContext();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
-  const { currentTheme } = useAppStore();
+  const { currentTheme, themeMode } = useAppStore();
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -28,16 +28,28 @@ export const ChatbotScreen = () => {
   const flatListRef = useRef<FlatList>(null);
   const lastNavTime = useRef(0);
 
-  // Mensaje de bienvenida inicial
+  // Cargar historial al inicio
   useEffect(() => {
-    if (messages.length === 0) {
-      setMessages([{
-        id: '1',
-        sender: 'bot',
-        text: '¡Hola! Soy tu asistente inteligente (Gemini NLP). Pregúntame dónde está alguna prenda.'
-      }]);
+    const loadHistory = async () => {
+      const history = await ChatbotService.getHistory(db);
+      if (history.length > 0) {
+        setMessages(history);
+      } else {
+        setMessages([{
+          id: '1',
+          sender: 'bot',
+          text: '¡Hola! Soy tu asistente inteligente. Pregúntame dónde está alguna prenda.'
+        }]);
+      }
+    };
+    loadHistory();
+  }, [db]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }
-  }, []);
+  }, [messages]);
 
   const navigateSafe = useCallback((routeName: keyof RootStackParamList, params?: any) => {
     const now = Date.now();
@@ -50,18 +62,21 @@ export const ChatbotScreen = () => {
     const userText = input.trim();
     if (!userText) return;
 
-    // 1. Agregar mensaje de usuario (usamos id basado en tiempo para que se ordene bien en un arreglo)
-    const newUserMsg: ChatMessage = { id: Date.now().toString(), sender: 'user', text: userText };
+    const userMsgId = Date.now().toString();
+    const newUserMsg: ChatMessage = { id: userMsgId, sender: 'user', text: userText };
     setMessages(prev => [newUserMsg, ...prev]);
     setInput('');
     setIsTyping(true);
 
+    // Guardar en BD
+    await ChatbotService.saveMessage(db, { id: userMsgId, sender: 'user', text: userText, timestamp: Date.now() });
+
     // 2. Procesar con Gemini y SQL
     const response = await ChatbotService.searchAndRespond(db, userText);
     
-    // 3. Agregar respuesta del bot
+    const botMsgId = (Date.now() + 1).toString();
     const botMsg: ChatMessage = { 
-      id: (Date.now() + 1).toString(), 
+      id: botMsgId, 
       sender: 'bot', 
       text: response.text, 
       matches: response.matches 
@@ -69,12 +84,16 @@ export const ChatbotScreen = () => {
     
     setMessages(prev => [botMsg, ...prev]);
     setIsTyping(false);
+
+    // Guardar en BD
+    await ChatbotService.saveMessage(db, { id: botMsgId, sender: 'bot', text: response.text, matches: response.matches, timestamp: Date.now() });
   };
 
   const handleClear = () => {
-    Alert.alert("Limpiar Chat", "¿Borrar toda la conversación?", [
+    Alert.alert("Limpiar Historial", "¿Borrar toda la conversación?", [
       { text: "Cancelar", style: "cancel" },
-      { text: "Borrar", style: "destructive", onPress: () => {
+      { text: "Borrar", style: "destructive", onPress: async () => {
+          await ChatbotService.clearHistory(db);
           setMessages([{
             id: Date.now().toString(),
             sender: 'bot',
@@ -86,12 +105,19 @@ export const ChatbotScreen = () => {
 
   const renderResultCard = (match: SearchResult) => (
     <Animated.View entering={FadeIn.delay(200)} key={match.id} style={[styles.resultCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+      <Text style={{ color: currentTheme.text, fontWeight: 'bold', fontSize: 16, marginBottom: 4 }}>
+        {match.estilo.toUpperCase()}
+      </Text>
+      
       <View style={styles.cardRow}>
         <Ionicons name="shirt" size={16} color={currentTheme.primary} style={{marginRight: 6}} />
         <Text style={[styles.cardTitle, { color: currentTheme.text }]}>OP: {match.op || 'Sin OP'}</Text>
       </View>
-      <Text style={[styles.cardSubtitle, { color: currentTheme.textSecondary }]}>Estilo: {match.estilo} | Color: {match.color}</Text>
-      <Text style={[styles.cardLocation, { color: currentTheme.primary }]}>📍 {match.cajaNombre} → {match.inventarioNombre}</Text>
+      
+      <Text style={[styles.cardSubtitle, { color: currentTheme.textSecondary, marginTop: 4 }]}>
+        Color: {match.color}
+      </Text>
+      <Text style={[styles.cardLocation, { color: currentTheme.primary, marginTop: 4 }]}>📍 {match.cajaNombre} → {match.inventarioNombre}</Text>
       
       <TouchableOpacity 
         style={[styles.redirectBtn, { backgroundColor: currentTheme.primary + '20' }]}
@@ -104,20 +130,37 @@ export const ChatbotScreen = () => {
   );
 
  return (
-  // CAMBIO 1: Eliminamos KeyboardAvoidingView y usamos un View normal con flex: 1
-  <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
+  <KeyboardAvoidingView 
+    behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+    style={[styles.container, { backgroundColor: currentTheme.background }]}
+  >
     
-    {/* Navbar (Mantiene tu diseño original) */}
-    <View style={[styles.navbar, { borderBottomColor: currentTheme.border }]}>
+    {/* Navbar (Clon exacto de Navbar.tsx) */}
+    <View style={[styles.navbar, { backgroundColor: currentTheme.card, borderBottomColor: currentTheme.border }]}>
+      <StatusBar 
+        barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} 
+        backgroundColor={currentTheme.card} 
+      />
       <View style={styles.navLeft}>
-        <View style={[styles.botAvatar, { backgroundColor: currentTheme.primary + '20' }]}>
-          <Ionicons name="sparkles" size={20} color={currentTheme.primary} />
-        </View>
-        <Text style={[styles.navTitle, { color: currentTheme.text }]}>Asistente</Text>
+        <Text style={[styles.navTitle, { color: currentTheme.text }]} numberOfLines={1}>Asistente</Text>
       </View>
-      <TouchableOpacity onPress={handleClear} style={styles.navRight}>
-        <Ionicons name="trash-outline" size={22} color={currentTheme.textSecondary} />
-      </TouchableOpacity>
+      <View style={[styles.navRight, { flexDirection: 'row', alignItems: 'center' }]}>
+        <TouchableOpacity 
+          onPress={handleClear} 
+          style={{ marginRight: 12, width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="trash-outline" size={22} color={currentTheme.text} />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          onPress={useAppStore.getState().toggleTheme}
+          style={{ width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name={themeMode === 'light' ? "moon-outline" : "sunny-outline"} size={22} color={currentTheme.text} />
+        </TouchableOpacity>
+      </View>
     </View>
 
     {/* Mensajes (Lista optimizada) */}
@@ -134,6 +177,7 @@ export const ChatbotScreen = () => {
       // CAMBIO 2: Desmontado nativo para evitar trabones de renderizado
       removeClippedSubviews={Platform.OS === 'android'}
       maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+      extraData={themeMode} // <-- Fuerza el re-render inmediato al cambiar el tema
       
       renderItem={({ item }) => (
         <Animated.View
@@ -141,11 +185,11 @@ export const ChatbotScreen = () => {
           style={[
             styles.messageBubble,
             item.sender === 'user'
-              ? [styles.userBubble, { backgroundColor: currentTheme.primary }]
+              ? [styles.userBubble, { backgroundColor: themeMode === 'light' ? '#E4E4E7' : '#3F3F46' }]
               : [styles.botBubble, { backgroundColor: currentTheme.card }],
           ]}
         >
-          <Text style={[styles.messageText, { color: item.sender === 'user' ? '#fff' : currentTheme.text }]}>
+          <Text style={[styles.messageText, { color: item.sender === 'user' ? (themeMode === 'light' ? '#121212' : '#FFFFFF') : currentTheme.text }]}>
             {item.text}
           </Text>
 
@@ -199,10 +243,10 @@ export const ChatbotScreen = () => {
         onPress={handleSend}
         disabled={!input.trim() || isTyping}
       >
-        <Ionicons name="send" size={18} color="#fff" />
+        <Ionicons name="send" size={18} color={currentTheme.primaryText || '#fff'} />
       </TouchableOpacity>
     </View>
-  </View>
+  </KeyboardAvoidingView>
 );
 };
 
@@ -211,17 +255,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   navbar: {
+    height: 100,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 15,
+    paddingTop: 45,
     borderBottomWidth: 1,
+    elevation: 2,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
   },
   navLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   botAvatar: {
     width: 36,
@@ -233,10 +284,12 @@ const styles = StyleSheet.create({
   },
   navTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
   navRight: {
-    padding: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   chatList: {
     padding: 16,

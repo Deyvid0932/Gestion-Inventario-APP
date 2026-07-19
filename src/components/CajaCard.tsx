@@ -92,8 +92,8 @@ const CajaCard = memo(({
           ]}
         >
           <View style={styles.cardMain}>
-            <View style={[styles.iconContainer, { backgroundColor: theme.background }]}>
-              <Ionicons name="archive" size={24} color={theme.text} />
+            <View style={[styles.iconContainer, { backgroundColor: theme.background === '#000000' ? '#27272A' : '#F4F4F5', borderColor: theme.border }]}>
+              <Ionicons name="archive" size={24} color={theme.primary} />
             </View>
 
             <View style={styles.textContainer}>
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     marginBottom: 12,
     elevation: 0,
@@ -142,12 +142,11 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 44,
     height: 44,
-    borderRadius: 10,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
   },
   textContainer: {
     flex: 1,

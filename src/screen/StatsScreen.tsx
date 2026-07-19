@@ -23,7 +23,7 @@ const STATS_CONFIG = [
 
 export const StatsScreen = () => {
   const db = useSQLiteContext();
-  const { currentTheme } = useAppStore();
+  const { currentTheme, themeMode } = useAppStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,6 +55,7 @@ export const StatsScreen = () => {
         <SkeletonLoader theme={currentTheme} />
       ) : (
         <ScrollView
+          key={themeMode} // <-- Fuerza el remount completo para evitar lag al recalcular colores en los SVGs
           contentContainerStyle={styles.scrollContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={currentTheme.primary} />}
         >
@@ -111,12 +112,21 @@ export const StatsScreen = () => {
                   backgroundColor: currentTheme.card,
                   backgroundGradientFrom: currentTheme.card,
                   backgroundGradientTo: currentTheme.card,
+                  fillShadowGradientOpacity: 1,
+                  fillShadowGradientFrom: '#0984E3', // Color empresarial principal
+                  fillShadowGradientTo: '#0984E3',
                   decimalPlaces: 0,
-                  color: (opacity = 1) => currentTheme.primary,
+                  color: (opacity = 1) => `rgba(108, 92, 231, ${opacity})`, // Lineas del grid discretas
                   labelColor: (opacity = 1) => currentTheme.textSecondary,
-                  barPercentage: 0.6,
+                  barPercentage: 0.7,
+                  propsForBackgroundLines: {
+                    strokeWidth: 1,
+                    stroke: currentTheme.border,
+                    strokeDasharray: '0', // Líneas sólidas tipo Power BI
+                  }
                 }}
                 style={styles.chartStyle}
+                showValuesOnTopOfBars={true} // Mostrar el valor arriba para más legibilidad
               />
             </Animated.View>
           )}
@@ -127,16 +137,16 @@ export const StatsScreen = () => {
               <Text style={[styles.chartTitle, { color: currentTheme.text }]}>Distribución de Estado</Text>
               <PieChart
                 data={[
-                  { name: 'Activas', population: stats.prendasActivas, color: '#00CEC9', legendFontColor: currentTheme.textSecondary, legendFontSize: 13 },
-                  { name: 'Inactivas', population: stats.prendasInactivas, color: '#E17055', legendFontColor: currentTheme.textSecondary, legendFontSize: 13 }
+                  { name: 'Activas', population: stats.prendasActivas, color: '#0984E3', legendFontColor: currentTheme.textSecondary, legendFontSize: 12 },
+                  { name: 'Inactivas', population: stats.prendasInactivas, color: '#D63031', legendFontColor: currentTheme.textSecondary, legendFontSize: 12 }
                 ]}
                 width={width - 64}
                 height={160}
                 chartConfig={{ color: () => currentTheme.text }}
                 accessor={"population"}
                 backgroundColor={"transparent"}
-                paddingLeft={"0"}
-                center={[10, 0]}
+                paddingLeft={"15"}
+                absolute // Muestra los valores reales en lugar de porcentajes
               />
             </Animated.View>
           )}

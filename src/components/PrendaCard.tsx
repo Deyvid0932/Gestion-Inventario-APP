@@ -149,7 +149,7 @@ export const PrendaCard = React.memo(({
             <View style={styles.itemContent}>
               <View style={styles.itemHeader}>
                 <View style={styles.titleRow}>
-                  <View style={[styles.compactBadge, { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border }]}>
+                  <View style={[styles.compactBadge, { backgroundColor: theme.background === '#000000' ? '#27272A' : '#F4F4F5', borderWidth: 1, borderColor: theme.border }]}>
                     <Text style={[styles.itemStyle, { color: theme.text, fontSize: historyMode ? 14 : 17 }]} numberOfLines={1}>
                       {item.estilo}
                     </Text>
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   shadowWrapper: {
     minHeight: 96,
     marginBottom: 12,
-    borderRadius: 12,
+    borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
   },
   innerCard: {
     flexDirection: 'row',
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
     flex: 1,
   },
