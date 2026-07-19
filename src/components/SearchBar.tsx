@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, TextInput, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { theme } from '../style/theme';
+import { useAppStore } from '../store/useAppStore';
 
 interface SearchBarProps {
   value: string;
@@ -10,7 +10,7 @@ interface SearchBarProps {
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({ value, onChangeText, placeholder = "Buscar..." }) => {
-  const currentTheme = theme.light;
+  const { currentTheme } = useAppStore();
 
   return (
     <View style={[styles.container, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>

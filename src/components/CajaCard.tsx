@@ -4,10 +4,11 @@ import {
   Text,
   StyleSheet,
   Animated,
+  TouchableOpacity
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScaleDecorator } from 'react-native-draggable-flatlist';
-import { Swipeable, RectButton, TouchableOpacity } from 'react-native-gesture-handler';
+import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import { CajaWithStats } from '../types';
 
 interface CajaCardProps {
@@ -43,7 +44,7 @@ const CajaCard = memo(({
       <View style={styles.swipeActionsContainer}>
         <Animated.View style={{ flex: 1, transform: [{ translateX: trans }] }}>
           <RectButton
-            style={[styles.actionButton, { backgroundColor: '#3498db' }]}
+            style={[styles.actionButton, { backgroundColor: '#f3dd12' }]}
             onPress={() => {
               swipeableRef.current?.close();
               onEdit(item.id, item.nombre);
@@ -85,14 +86,14 @@ const CajaCard = memo(({
           style={[
             styles.card,
             {
-              backgroundColor: isActive ? theme.primary + '20' : theme.card,
-              borderColor: isActive ? theme.primary : theme.border,
+              backgroundColor: isActive ? theme.card + '90' : theme.card,
+              borderColor: isActive ? theme.text : theme.border,
             }
           ]}
         >
           <View style={styles.cardMain}>
-            <View style={[styles.iconContainer, { backgroundColor: theme.primary + '15' }]}>
-              <Ionicons name="archive" size={26} color={theme.primary} />
+            <View style={[styles.iconContainer, { backgroundColor: theme.background }]}>
+              <Ionicons name="archive" size={24} color={theme.text} />
             </View>
 
             <View style={styles.textContainer}>
@@ -124,14 +125,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
     marginBottom: 12,
-    elevation: 4,
+    elevation: 0,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
   },
   cardMain: {
     flexDirection: 'row',
@@ -139,20 +140,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
   },
   textContainer: {
     flex: 1,
     justifyContent: 'center',
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.3,
     marginBottom: 4,
   },
   cardFooter: {
@@ -160,23 +164,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dateText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
   },
   dot: {
     marginHorizontal: 6,
-    fontSize: 12,
+    fontSize: 14,
   },
   swipeActionsContainer: {
     width: 160,
     flexDirection: 'row',
-    marginBottom: 12,
+    height: '100%',
+    paddingBottom: 12, // match card marginBottom
   },
   actionButton: {
     flex: 1,
+    height: '100%',
     justifyContent: 'center', 
     alignItems: 'center', 
-    borderRadius: 20, 
+    borderRadius: 12, 
     marginHorizontal: 4,
   },
 });

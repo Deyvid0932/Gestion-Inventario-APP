@@ -2,12 +2,13 @@
 const palette = {
   white: '#FFFFFF',
   black: '#000000',
-  grayLight: '#F2F2F7',
-  grayDark: '#1C1C1E',
-  greenPrimary: '#2e9acc',
-  textSecondary: '#8E8E93',
-  borderLight: '#E5E5EA',
-  borderDark: '#38383A',
+  grayLight: '#F4F4F5', // Zinc 100
+  grayDark: '#18181B', // Zinc 900
+  primaryLight: '#18181B', // Zinc 900 for elegant black primary
+  primaryDark: '#FAFAFA', // Zinc 50 for bright white primary in dark mode
+  textSecondary: '#71717A', // Zinc 500
+  borderLight: '#E4E4E7', // Zinc 200
+  borderDark: '#27272A', // Zinc 800
 };
 
 export const theme = {
@@ -17,7 +18,8 @@ export const theme = {
     text: palette.black,
     textSecondary: palette.textSecondary,
     border: palette.borderLight,
-    primary: palette.greenPrimary,
+    primary: palette.primaryLight,
+    primaryText: palette.white,
   },
   dark: {
     background: palette.black,
@@ -25,7 +27,8 @@ export const theme = {
     text: palette.white,
     textSecondary: palette.textSecondary,
     border: palette.borderDark,
-    primary: palette.greenPrimary,
+    primary: palette.primaryDark,
+    primaryText: palette.black,
   }
 };
 

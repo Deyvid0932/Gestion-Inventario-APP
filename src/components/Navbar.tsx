@@ -17,39 +17,39 @@ export const Navbar = ({ title, showBackButton, isLoading }: NavbarProps) => {
 
   const handleBack = () => {
     const now = Date.now();
-    if (now - lastBackPress.current < 400) return;
+    if (now - lastBackPress.current < 300) return;
     lastBackPress.current = now;
     navigation.goBack();
   };
 
   return (
-    <View style={[styles.header, { backgroundColor: currentTheme.primary }]}>
+    <View style={[styles.header, { backgroundColor: currentTheme.card, borderBottomColor: currentTheme.border }]}>
       <StatusBar 
-        barStyle={themeMode === 'light' ? 'light-content' : 'dark-content'} 
-        backgroundColor={currentTheme.primary} 
+        barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} 
+        backgroundColor={currentTheme.card} 
       />
       
       <View style={styles.left}>
         {showBackButton && (
           <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
-            <Ionicons name="arrow-back" size={30} color="#FFF" />
+            <Ionicons name="arrow-back" size={28} color={currentTheme.text} />
           </TouchableOpacity>
         )}
-        <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
+        <Text style={[styles.headerTitle, { color: currentTheme.text }]} numberOfLines={1}>{title}</Text>
         {isLoading && (
-          <ActivityIndicator size="small" color="#FFF" style={{ marginLeft: 10 }} />
+          <ActivityIndicator size="small" color={currentTheme.text} style={{ marginLeft: 10 }} />
         )}
       </View>
 
       <TouchableOpacity 
         onPress={toggleTheme} 
-        style={styles.themeToggle}
+        style={[styles.themeToggle, { backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }]}
         activeOpacity={0.7}
       >
         <Ionicons 
           name={themeMode === 'light' ? "moon-outline" : "sunny-outline"} 
-          size={24} 
-          color="#FFF" 
+          size={22} 
+          color={currentTheme.text} 
         />
       </TouchableOpacity>
     </View>
@@ -63,12 +63,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 40,
-    elevation: 4,
+    paddingTop: 45,
+    borderBottomWidth: 1,
+    elevation: 2,
+    zIndex: 10,
     shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
   },
   left: {
     flexDirection: 'row',
@@ -79,15 +81,14 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   headerTitle: {
-    color: '#FFF',
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
   themeToggle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   }

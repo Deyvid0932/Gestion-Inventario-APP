@@ -27,16 +27,19 @@ export const processOCRText = (rawText: string, cajaId: string) => {
             const colorMatch = restoDeLinea.trim().match(colorRegex);
             const colorFinal = colorMatch ? colorMatch[0].trim() : "S/C";
 
-            // Usamos un índice invertido para que lo de arriba de la foto tenga un ID mayor
-            // y aparezca primero al ordenar por id DESC
+            // Usamos un offset para que la primera línea tenga una fechaCreacion mayor
+            // y aparezca primero al ordenar por fechaCreacion DESC
             const invertedIndex = (lines.length - index).toString().padStart(3, '0');
+            const timeOffsetMs = lines.length - index;
+            const createdAt = new Date(now + timeOffsetMs).toISOString();
 
             return {
                 id: `${now}_${invertedIndex}_${Math.random().toString(36).substring(2, 5)}`,
                 estilo: estiloFinal,
                 color: colorFinal,
                 cajaId: cajaId,
-                estado: 1
+                estado: 1,
+                fechaCreacion: createdAt
             };
         }
 

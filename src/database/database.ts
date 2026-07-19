@@ -1,7 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
-  const DATABASE_VERSION = 5;
+  const DATABASE_VERSION = 7;
   
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -41,6 +41,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         op TEXT,
         estilo TEXT NOT NULL,
         color TEXT NOT NULL,
+        fotoUri TEXT,
         estado INTEGER NOT NULL DEFAULT 1,
         fechaCreacion TEXT NOT NULL,
         FOREIGN KEY (cajaId) REFERENCES cajas (id) ON DELETE CASCADE
@@ -96,6 +97,26 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 5);
       `);
       currentDbVersion = 5;
+    }
+
+    if (currentDbVersion === 5) {
+      await db.execAsync(`
+        ALTER TABLE prendas ADD COLUMN fotoUri TEXT;
+        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 6);
+      `);
+      currentDbVersion = 6;
+    }
+
+    if (currentDbVersion === 6) {
+      try {
+        await db.runAsync('ALTER TABLE prendas ADD COLUMN fotoUri TEXT;');
+      } catch (e) {
+        // Columna ya existe, ignorar error
+      }
+      await db.execAsync(`
+        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 7);
+      `);
+      currentDbVersion = 7;
     }
   }
 }

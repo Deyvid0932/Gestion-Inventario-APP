@@ -17,7 +17,7 @@ interface ExportModal {
 }
 
 export const ExportModal = ({ visible, onClose, data }: ExportModal) => {
-    const { currentTheme } = useAppStore();
+    const { currentTheme, themeMode } = useAppStore();
 
     const availableBoxes = useMemo(() => {
         return Array.from(new Set(data.map(item => item.cajaNombre)));
@@ -136,7 +136,7 @@ return (
                                     <Text style={[
                                         styles.chipText,
                                         { color: currentTheme.textSecondary },
-                                        selectedBoxes.includes(box) && { color: '#FFF' }
+                                        selectedBoxes.includes(box) && { color: themeMode === 'light' ? '#FFF' : '#000' }
                                     ]}>{box}</Text>
                                 </TouchableOpacity>
                             ))}
@@ -188,7 +188,7 @@ return (
                     style={[styles.exportBtn, { backgroundColor: currentTheme.primary }]}
                     onPress={handleExport}
                 >
-                    <Text style={styles.exportBtnText}>Generar Reporte Excel</Text>
+                    <Text style={[styles.exportBtnText, { color: themeMode === 'light' ? '#FFF' : '#000' }]}>Generar Reporte Excel</Text>
                 </TouchableOpacity>
             </View>
         </View>
@@ -200,7 +200,7 @@ return (
 
 const styles = StyleSheet.create({
       overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-      card: { width: width * 0.9, maxHeight: height * 0.8, borderRadius: 20, padding: 20, elevation: 5 },
+      card: { width: width * 0.9, maxHeight: height * 0.8, borderRadius: 12, padding: 20, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
       header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
       title: { fontSize: 18, fontWeight: '800' },
       section: { marginBottom: 20 },
@@ -211,8 +211,8 @@ const styles = StyleSheet.create({
       chipText: { fontSize: 12, fontWeight: '600' },
       checkRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
       checkLabel: { fontSize: 14, fontWeight: '500' },
-      switchRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 15 },
+      switchRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, paddingTop: 15 },
       exportBtn: { height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
-      exportBtnText: { color: '#FFF', fontWeight: '800', fontSize: 16 }
+      exportBtnText: { fontWeight: '800', fontSize: 16 }
  });
 

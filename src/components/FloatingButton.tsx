@@ -15,8 +15,8 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
   style 
 }) => {
 
-  //useAppStore es un hook que nos permite acceder al estado global de la aplicación, en este caso el tema actual siempre sera claro ligth
-  const { currentTheme } = useAppStore();
+  //useAppStore es un hook que nos permite acceder al estado global de la aplicación
+  const { currentTheme, themeMode } = useAppStore();
 
   // UseRef cambia el valor de scaleAnim sin causar un re-renderizado del componente
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -48,7 +48,7 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
           }
         ]}
       >
-        <Ionicons name={icon as any} size={30} color="#FFF" />
+        <Ionicons name={icon as any} size={28} color={themeMode === 'light' ? '#FFF' : '#000'} />
       </Animated.View>
     </TouchableOpacity>
   );
@@ -62,9 +62,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 6,
   },
 });

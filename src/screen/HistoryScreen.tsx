@@ -148,7 +148,7 @@ export const HistoryScreen = () => {
               </View>
               <View style={[styles.colorSwatch, { backgroundColor: colorHex, borderColor: currentTheme.border }]} />
             </View>
-            <Text style={[styles.locationText, { color: currentTheme.textSecondary }]}>
+            <Text style={[styles.locationText, { color: '#2ecc71' }]}>
               {item.inventarioNombre} • {item.cajaNombre} • {item.color}
             </Text>
           </TouchableOpacity>
@@ -169,17 +169,17 @@ export const HistoryScreen = () => {
       <View style={[styles.segmentedWrapper, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
         <Animated.View style={[styles.segmentIndicator, { backgroundColor: currentTheme.primary, width: (width - 50) / 2, transform: [{ translateX: tabTranslateX }] }]} />
         <TouchableOpacity style={styles.segmentTab} onPress={() => toggleStatus('Activo')}>
-          <Text style={[styles.segmentText, { color: status === 'Activo' ? '#FFF' : currentTheme.textSecondary }]}>Activos</Text>
+          <Text style={[styles.segmentText, { color: status === 'Activo' ? '#2ecc71' : currentTheme.textSecondary, fontWeight: status === 'Activo' ? '800' : '600' }]}>Activos</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.segmentTab} onPress={() => toggleStatus('Inactivo')}>
-          <Text style={[styles.segmentText, { color: status === 'Inactivo' ? '#FFF' : currentTheme.textSecondary }]}>Inactivos</Text>
+          <Text style={[styles.segmentText, { color: status === 'Inactivo' ? '#e74c3c' : currentTheme.textSecondary, fontWeight: status === 'Inactivo' ? '800' : '600' }]}>Inactivos</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.searchRow}>
         <View style={styles.searchBarWrapper}><SearchBar value={search} onChangeText={setSearch} placeholder="Buscar..." /></View>
         <TouchableOpacity style={[styles.exportBtn, { backgroundColor: currentTheme.primary }]} onPress={() => setShowExportModal(true)}>
-          <Ionicons name="document-text" size={22} color="#FFF" />
+          <Ionicons name="document-text" size={22} color={currentTheme.primaryText} />
         </TouchableOpacity>
       </View>
 
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   compactBadgeText: { fontSize: 12, fontWeight: '800' },
   opText: { fontSize: 12, fontWeight: '500' },
   colorSwatch: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5 },
-  locationText: { fontSize: 11, fontWeight: '500', fontStyle: 'italic' },
+  locationText: { fontSize: 14, fontWeight: '500', fontStyle: 'italic' },
   emptyContainer: { 
     flex: 1,
     alignItems: 'center', 

@@ -3,10 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
+  TouchableOpacity, Image,
   Animated as RNAnimated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Swipeable, RectButton, TouchableOpacity,} from 'react-native-gesture-handler';
+import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
   interpolateColor,
@@ -17,6 +18,7 @@ import Animated, {
 import { Prenda } from '../types';
 import { getColorHex } from '../utils/colorUtils';
 
+
 interface PrendaCardProps {
   item: Prenda & { cajaNombre?: string; inventarioNombre?: string };
   theme: any;
@@ -26,8 +28,10 @@ interface PrendaCardProps {
   onLongPress?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onMove?: () => void;
   onToggleStatus?: () => void;
   historyMode?: boolean;
+  onImagePress: (uri: string | null | undefined) => void;
 }
 
 export const PrendaCard = React.memo(({
@@ -37,9 +41,11 @@ export const PrendaCard = React.memo(({
   onPress,
   onLongPress,
   onDelete,
+  onMove,
   onToggleStatus,
   isHighlighted,
   historyMode = false,
+  onImagePress,
 }: PrendaCardProps) => {
   const swipeableRef = React.useRef<Swipeable>(null);
   const colorHex = getColorHex(item.color);
@@ -60,16 +66,25 @@ export const PrendaCard = React.memo(({
     const bgColor = interpolateColor(
       highlightOpacity.value,
       [0, 1],
-      [isSelected ? theme.primary + '15' : theme.card, theme.primary + '30']
+      [isSelected ? theme.background : theme.card, theme.primary + '15']
+    );
+
+    const animatedBorderColor = interpolateColor(
+      highlightOpacity.value,
+      [0, 1],
+      [isSelected ? theme.text : theme.border, theme.primary]
     );
 
     return {
       backgroundColor: withTiming(bgColor, { duration: 250 }),
-      elevation: withTiming(highlightOpacity.value > 0 ? 8 : 3),
+      elevation: 0,
+      borderColor: animatedBorderColor,
+      borderWidth: 1,
+      transform: [{ scale: 1 + (highlightOpacity.value * 0.02) }]
     };
   });
 
-  const containerWidth = 80;
+  const containerWidth = 160;
 
   const renderRightActions = (
     progress: RNAnimated.AnimatedInterpolation<number>
@@ -81,6 +96,19 @@ export const PrendaCard = React.memo(({
 
     return (
       <View style={[styles.swipeActionsContainer, { width: containerWidth }]}>
+        {onMove && (
+          <RNAnimated.View style={{ flex: 1, transform: [{ translateX: trans }] }}>
+            <RectButton
+              style={[styles.actionButton, { backgroundColor: '#f39c12' }]}
+              onPress={() => {
+                swipeableRef.current?.close();
+                onMove();
+              }}
+            >
+              <Ionicons name="arrow-redo-outline" size={24} color="#FFF" />
+            </RectButton>
+          </RNAnimated.View>
+        )}
         {onDelete && (
           <RNAnimated.View style={{ flex: 1, transform: [{ translateX: trans }] }}>
             <RectButton
@@ -102,8 +130,8 @@ export const PrendaCard = React.memo(({
     <Swipeable
       ref={swipeableRef}
       renderRightActions={renderRightActions}
-      friction={3}
-      rightThreshold={30}
+      friction={2.5}
+      rightThreshold={40}
     >
       <TouchableOpacity
         activeOpacity={1}
@@ -121,8 +149,8 @@ export const PrendaCard = React.memo(({
             <View style={styles.itemContent}>
               <View style={styles.itemHeader}>
                 <View style={styles.titleRow}>
-                  <View style={[styles.compactBadge, { backgroundColor: theme.primary + '15' }]}>
-                    <Text style={[styles.itemStyle, { color: theme.text, fontSize: historyMode ? 14 : 18 }]} numberOfLines={1}>
+                  <View style={[styles.compactBadge, { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border }]}>
+                    <Text style={[styles.itemStyle, { color: theme.text, fontSize: historyMode ? 14 : 17 }]} numberOfLines={1}>
                       {item.estilo}
                     </Text>
                   </View>
@@ -150,21 +178,37 @@ export const PrendaCard = React.memo(({
                   </Text>
                 ) : (
                   <>
-                    <View style={styles.infoGroup}>
-                      <Ionicons name="pricetag-outline" size={14} color={theme.textSecondary} />
-                      <Text style={[styles.infoText, { color: theme.textSecondary }]}>{item.op || 'Sin OP'}</Text>
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoGroup}>
+                        <Ionicons name="pricetag-outline" size={14} color={theme.textSecondary} />
+                        <Text style={[styles.infoText, { color: theme.textSecondary }]}>{item.op || 'Sin OP'}</Text>
+                      </View>
+                      <View style={styles.infoGroup}>
+                        <Ionicons name="color-palette-outline" size={14} color={theme.textSecondary} />
+                        <Text style={[styles.infoText, { color: theme.textSecondary }]}>{item.color}</Text>
+                      </View>
                     </View>
-                    <View style={styles.infoGroup}>
-                      <Ionicons name="color-palette-outline" size={14} color={theme.textSecondary} />
-                      <Text style={[styles.infoText, { color: theme.textSecondary }]}>{item.color}</Text>
-                    </View>
+
+                    {item.fotoUri && (
+                      <TouchableOpacity
+                        onPress={() => onImagePress(item.fotoUri)}
+                        activeOpacity={0.85}
+                        style={[styles.thumbnailContainer, { borderColor: theme.border }]}
+                      >
+                        <Image
+                          source={{ uri: item.fotoUri }}
+                          style={styles.thumbnail}
+                          resizeMode="cover"
+                        />
+                      </TouchableOpacity>
+                    )}
                   </>
                 )}
               </View>
             </View>
             {isSelected && (
-              <View style={[styles.selectionCheck, { backgroundColor: theme.primary }]}>
-                <Ionicons name="checkmark" size={14} color="#FFF" />
+              <View style={[styles.selectionCheck, { backgroundColor: theme.text }]}>
+                <Ionicons name="checkmark" size={14} color={theme.card} />
               </View>
             )}
           </View>
@@ -180,30 +224,30 @@ export const PrendaCard = React.memo(({
     prev.item.estilo === next.item.estilo &&
     prev.item.color === next.item.color &&
     prev.item.op === next.item.op &&
+    prev.item.fotoUri === next.item.fotoUri &&
     prev.theme === next.theme &&
-    prev.historyMode === next.historyMode &&
-    prev.onLongPress === next.onLongPress;
+    prev.historyMode === next.historyMode;
 });
 
 const styles = StyleSheet.create({
   shadowWrapper: {
-    height: 96,
+    minHeight: 96,
     marginBottom: 12,
-    borderRadius: 16,
+    borderRadius: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    borderWidth: 0,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    borderWidth: 1,
   },
   innerCard: {
     flexDirection: 'row',
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: 'hidden',
     flex: 1,
   },
-  colorBar: { 
-    width: 6, 
+  colorBar: {
+    width: 6,
     height: '100%',
   },
   historyCard: { marginBottom: 15 },
@@ -212,26 +256,40 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   compactBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   itemStyle: { fontWeight: '800' },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, gap: 5 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 5, marginRight: 8 },
   statusIndicator: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
+  statusText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   colorSwatch: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5 },
-  itemFooter: { flexDirection: 'row', gap: 15 },
+  itemFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 15 },
+  infoRow: { flexDirection: 'row', gap: 15, flex: 1 },
   infoGroup: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   infoText: { fontSize: 13, fontWeight: '600' },
   locationText: { fontSize: 11, fontWeight: '500', fontStyle: 'italic' },
   selectionCheck: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   swipeActionsContainer: {
-    width: 80,          
+    width: 80,
     flexDirection: 'row',
-    marginBottom: 12,
-    overflow: 'hidden',
-    borderRadius: 16, 
+    height: '100%',
+    paddingBottom: 12, // match card marginBottom
   },
   actionButton: {
     flex: 1,
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 12,
+    marginHorizontal: 4,
+  },
+  thumbnailContainer: {
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  thumbnail: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#eee',
   },
 });

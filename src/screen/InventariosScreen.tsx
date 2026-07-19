@@ -64,7 +64,7 @@ export const InventariosScreen = () => {
 
   const handleNavigateToCajas = (id: string, nombre: string) => {
     const now = Date.now();
-    if (now - lastNavTime.current < 400) return;
+    if (now - lastNavTime.current < 300) return;
     lastNavTime.current = now;
     
     setPrendas([]);

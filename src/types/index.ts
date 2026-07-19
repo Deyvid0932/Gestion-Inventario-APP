@@ -30,6 +30,7 @@ export interface Prenda {
   estilo: string;
   color: string;
   estado: 1 | 0 ; 
+  fotoUri?: string | null;
   fechaCreacion?: string;
 }
 

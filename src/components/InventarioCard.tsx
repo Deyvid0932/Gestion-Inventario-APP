@@ -51,7 +51,7 @@ const InventarioCard = memo(({
       <View style={styles.swipeActionsContainer}>
         <Animated.View style={{ flex: 1, transform: [{ translateX: trans }] }}>
           <RectButton
-            style={[styles.actionButton, { backgroundColor: '#3498db' }]}
+            style={[styles.actionButton, { backgroundColor: '#f3dd12' }]}
             onPress={() => {
               swipeableRef.current?.close();
               onEdit();
@@ -61,37 +61,37 @@ const InventarioCard = memo(({
           </RectButton>
         </Animated.View>
         <Animated.View style={{ flex: 1, transform: [{ translateX: trans }] }}>
-  <RectButton
-    style={[styles.actionButton, { backgroundColor: '#e74c3c' }]}
-    onPress={() => {
-      Alert.alert(
-        "Eliminar Lote",
-        `¿Estás seguro de que deseas eliminar el lote "${item.nombre}"? Esta acción borrará todas las cajas y prendas dentro de él.`,
-        [
-          { 
-            text: "Cancelar", 
-            style: "cancel", 
-            onPress: () => {
-            swipeableRef.current?.close();
-          }
-          },
-          { 
-            text: "Eliminar", 
-            style: "destructive", 
-            onPress: () => {
-              swipeableRef.current?.close();
-              setTimeout(() => {
-              onDelete();
-            }, 300);
-            }
-          }
-        ]
-      );
-    }}
-  >
-    <Ionicons name="trash-outline" size={24} color="#FFF" />
-  </RectButton>
-</Animated.View>
+          <RectButton
+            style={[styles.actionButton, { backgroundColor: '#e74c3c' }]}
+            onPress={() => {
+              Alert.alert(
+                "Eliminar Lote",
+                `¿Estás seguro de que deseas eliminar el lote "${item.nombre}"? Esta acción borrará todas las cajas y prendas dentro de él.`,
+                [
+                  { 
+                    text: "Cancelar", 
+                    style: "cancel", 
+                    onPress: () => {
+                      swipeableRef.current?.close();
+                    }
+                  },
+                  { 
+                    text: "Eliminar", 
+                    style: "destructive", 
+                    onPress: () => {
+                      swipeableRef.current?.close();
+                      setTimeout(() => {
+                        onDelete();
+                      }, 300);
+                    }
+                  }
+                ]
+              );
+            }}
+          >
+            <Ionicons name="trash-outline" size={24} color="#FFF" />
+          </RectButton>
+        </Animated.View>
       </View>
     );
   };
@@ -158,14 +158,14 @@ const InventarioCard = memo(({
 const styles = StyleSheet.create({
   card: {
     padding: 20,
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
     marginBottom: 16,
-    elevation: 4,
+    elevation: 0,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
   },
   cardMain: {
     flexDirection: 'row',
@@ -174,8 +174,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   cardTitle: {
-    fontSize: 22,
-    fontWeight: '900',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
     marginBottom: 4,
   },
   dateContainer: {
@@ -232,17 +233,17 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: 12,
     marginHorizontal: 4,
   },
   swipeActionsContainer: {
     width: 160,
     flexDirection: 'row',
-    marginBottom: 16,
-    overflow: 'hidden', // 👈 ¡ESTA ES LA MAGIA!
-    borderRadius: 20, // 👈 Agrégale esto para que el corte sea redondeado
+    height: '100%',
+    paddingBottom: 16, // match card marginBottom
   },
 });
 

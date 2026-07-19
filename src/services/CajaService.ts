@@ -20,6 +20,17 @@ export const CajaService = {
     return await db.getAllAsync<Caja>('SELECT * FROM cajas WHERE inventarioId = ? ORDER BY orden ASC, fechaCreacion DESC', [inventarioId]);
   },
 
+  getSiblingCajas: async (db: SQLiteDatabase, currentCajaId: string) => {
+    // Obtiene todas las cajas del mismo inventario excepto la caja actual
+    return await db.getAllAsync<Caja>(
+      `SELECT * FROM cajas 
+       WHERE inventarioId = (SELECT inventarioId FROM cajas WHERE id = ?) 
+       AND id != ? 
+       ORDER BY orden ASC, fechaCreacion DESC`,
+      [currentCajaId, currentCajaId]
+    );
+  },
+
   updateCajasOrder: async (db: SQLiteDatabase, orderings: { id: string; orden: number }[]) => {
     try {
       await db.withTransactionAsync(async () => {

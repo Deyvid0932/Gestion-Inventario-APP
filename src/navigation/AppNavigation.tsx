@@ -14,6 +14,8 @@ const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
 
 const MainStack = () => {
+  const { currentTheme } = useAppStore();
+
   return (
     <Stack.Navigator 
       initialRouteName="MainTabs"
@@ -21,6 +23,7 @@ const MainStack = () => {
         animation: 'fade_from_bottom',
         headerShown: false,
         gestureEnabled: true,
+        cardStyle: { backgroundColor: currentTheme.background },
         transitionSpec: {
           open: { animation: 'spring', config: { stiffness: 1000, damping: 500, mass: 3, overshootClamping: true, restDisplacementThreshold: 0.01, restSpeedThreshold: 0.01 } },
           close: { animation: 'spring', config: { stiffness: 1000, damping: 500, mass: 3, overshootClamping: true, restDisplacementThreshold: 0.01, restSpeedThreshold: 0.01 } },

@@ -10,14 +10,19 @@ import {
   Platform,
   Alert,
   Animated,
-  ActivityIndicator
+  ActivityIndicator,
+  Image
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { Navbar } from '../components/Navbar';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { useSQLiteContext } from 'expo-sqlite';
 import { generateId } from '../database/database';
 import { useAppStore } from '../store/useAppStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrendaService } from '../services/PrendaService';
 import { usePrenda } from '../hooks/usePrenda';
@@ -29,6 +34,7 @@ export const FormScreen = () => {
   const navigation = useNavigation();
   const db = useSQLiteContext();
   const { currentTheme } = useAppStore();
+  const insets = useSafeAreaInsets();
   const { addPrenda } = usePrenda();
   const lastSubmitTime = useRef(0);
  
@@ -40,6 +46,7 @@ export const FormScreen = () => {
   
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
+  const [imageUri, setImageUri] = useState<string | null>(initialData?.fotoUri || null);
 
   const triggerShake = useCallback(() => {
     Animated.sequence([
@@ -106,6 +113,7 @@ export const FormScreen = () => {
           op: formData.op || '',
           estilo: formData.estilo || '',
           color: formData.color || '',
+          fotoUri: imageUri || null,
           estado: 1
         } as any;
 
@@ -191,8 +199,13 @@ export const FormScreen = () => {
     <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
       <Navbar title={getTitle()} showBackButton />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          
+        <ScrollView 
+          contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom, 20) }]}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+          overScrollMode="never"
+          showsVerticalScrollIndicator={false}
+        >
           <Animated.View style={[
             styles.card, 
             { 
@@ -211,6 +224,65 @@ export const FormScreen = () => {
                 {renderInput('Estilo', 'estilo', 'Ej. Polo Slim')}
                 {renderInput('OP', 'op', 'Orden de Producción', true)}
                 {renderInput('Color', 'color', 'Ej. Rojo')}
+                
+                {/* Selector de imagen */}
+                <View style={styles.inputWrapper}>
+                  <View style={styles.labelRow}>
+                    <Text style={[styles.label, { color: currentTheme.textSecondary }]}>
+                      Foto <Text style={{ color: currentTheme.textSecondary, fontSize: 10, fontWeight: '400' }}>(opcional)</Text>
+                    </Text>
+                  </View>
+                  {imageUri ? (
+                    <View style={styles.imagePreviewContainer}>
+                      <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
+                      <TouchableOpacity
+                        style={styles.removeImageBtn}
+                        onPress={() => setImageUri(null)}
+                      >
+                        <Ionicons name="close-circle" size={28} color="#e74c3c" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.imagePickerRow}>
+                      <TouchableOpacity
+                        style={[styles.imagePickerBtn, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}
+                        onPress={async () => {
+                          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                          if (status !== 'granted') { Alert.alert('Permiso', 'Se necesita acceso a la cámara.'); return; }
+                          const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+                          if (!result.canceled && result.assets[0]) {
+                            const optimized = await manipulateAsync(result.assets[0].uri, [{ resize: { width: 600 } }], { compress: 0.8, format: SaveFormat.JPEG });
+                            const fileName = `prenda_${Date.now()}.jpg`;
+                            const destUri = `${FileSystem.documentDirectory}${fileName}`;
+                            await FileSystem.copyAsync({ from: optimized.uri, to: destUri });
+                            setImageUri(destUri);
+                          }
+                        }}
+                      >
+                        <Ionicons name="camera-outline" size={22} color={currentTheme.text} />
+                        <Text style={[styles.imagePickerText, { color: currentTheme.text }]}>Cámara</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.imagePickerBtn, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}
+                        onPress={async () => {
+                          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                          if (status !== 'granted') { Alert.alert('Permiso', 'Se necesita acceso a la galería.'); return; }
+                          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+                          if (!result.canceled && result.assets[0]) {
+                            const optimized = await manipulateAsync(result.assets[0].uri, [{ resize: { width: 600 } }], { compress: 0.8, format: SaveFormat.JPEG });
+                            const fileName = `prenda_${Date.now()}.jpg`;
+                            const destUri = `${FileSystem.documentDirectory}${fileName}`;
+                            await FileSystem.copyAsync({ from: optimized.uri, to: destUri });
+                            setImageUri(destUri);
+                          }
+                        }}
+                      >
+                        <Ionicons name="images-outline" size={22} color={currentTheme.text} />
+                        <Text style={[styles.imagePickerText, { color: currentTheme.text }]}>Galería</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               </>
             )}
 
@@ -231,9 +303,9 @@ export const FormScreen = () => {
                 }
               ]}>
                 {loading ? (
-                  <ActivityIndicator color="#FFF" />
+                  <ActivityIndicator color={currentTheme.primaryText} />
                 ) : (
-                  <Text style={styles.saveText}>{initialData?.id ? 'Actualizar' : 'Guardar Registro'}</Text>
+                  <Text style={[styles.saveText, { color: currentTheme.primaryText }]}>{initialData?.id ? 'Actualizar' : 'Guardar Registro'}</Text>
                 )}
               </Animated.View>
             </TouchableOpacity>
@@ -246,38 +318,38 @@ export const FormScreen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scroll: { padding: 20 },
+  scroll: { paddingHorizontal: 20, paddingTop: 20 },
   card: { 
-    padding: 22, 
-    borderRadius: 24, 
+    padding: 18, 
+    borderRadius: 22, 
     borderWidth: 1, 
-    elevation: 10,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
   },
-  inputWrapper: { marginBottom: 20 },
-  labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, justifyContent: 'space-between' },
-  label: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  inputWrapper: { marginBottom: 16 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, justifyContent: 'space-between' },
+  label: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   colorDot: { width: 14, height: 14, borderRadius: 7 },
   inputContainer: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    borderRadius: 14, 
-    paddingHorizontal: 16,
-    height: 58,
+    borderRadius: 12, 
+    paddingHorizontal: 15,
+    height: 52,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 5,
   },
-  input: { flex: 1, fontSize: 16, height: '100%', paddingVertical: 0 },
+  input: { flex: 1, fontSize: 15, height: '100%', paddingVertical: 0 },
   checkIcon: { marginLeft: 10 },
   saveBtn: { 
-    height: 58, 
-    borderRadius: 16, 
+    height: 54, 
+    borderRadius: 14, 
     justifyContent: 'center', 
     alignItems: 'center',
     elevation: 5,
@@ -286,5 +358,41 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
-  saveText: { color: '#FFF', fontSize: 18, fontWeight: '800' }
+  saveText: { color: '#FFF', fontSize: 18, fontWeight: '800' },
+  imagePickerRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  imagePickerBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  imagePickerText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    alignSelf: 'center',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    width: 140,
+    height: 140,
+    borderRadius: 12,
+  },
+  removeImageBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 14,
+  },
 });

@@ -22,13 +22,14 @@ export const PrendaService = {
       }
 
       await db.runAsync(
-        'INSERT INTO prendas (id, cajaId, op , estilo, color, fechaCreacion) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fechaCreacion) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [
           prenda.id, 
           prenda.cajaId, 
           prenda.op || '', 
           prenda.estilo, 
           prenda.color, 
+          prenda.fotoUri || null,
           prenda.fechaCreacion || new Date().toISOString()
         ]
       );
@@ -58,8 +59,8 @@ export const PrendaService = {
       }
 
       await db.runAsync(
-        'UPDATE prendas SET op = ?, estilo = ?, color = ? WHERE id = ?',
-        [prenda.op || '', prenda.estilo, prenda.color, prenda.id]
+        'UPDATE prendas SET op = ?, estilo = ?, color = ?, fotoUri = ? WHERE id = ?',
+        [prenda.op || '', prenda.estilo, prenda.color, prenda.fotoUri || null, prenda.id]
       );
       return { success: true };
     } catch (e) {
@@ -75,6 +76,20 @@ export const PrendaService = {
     } catch (error) {
       console.error('Error al actualizar estado:', error);
       return { success: false, error: 'Error al actualizar el estado en la base de datos.' };
+    }
+  },
+
+  movePrenda: async (db: SQLiteDatabase, prendaId: string, newCajaId: string) => {
+    try {
+      // Opcional: Podrías verificar si ya existe un OP duplicado en la nueva caja,
+      // pero para mantenerlo simple, solo hacemos el UPDATE.
+      // Actualizamos también fechaCreacion para que aparezca arriba en la nueva caja
+      const now = new Date().toISOString();
+      await db.runAsync('UPDATE prendas SET cajaId = ?, fechaCreacion = ? WHERE id = ?', [newCajaId, now, prendaId]);
+      return { success: true };
+    } catch (error) {
+      console.error('Error al mover prenda:', error);
+      return { success: false, error: 'Error al mover la prenda a la nueva caja.' };
     }
   },
 
@@ -114,13 +129,14 @@ export const PrendaService = {
       await db.withTransactionAsync(async () => {
         for (const prenda of prendas) {
           await db.runAsync(
-            'INSERT INTO prendas (id, cajaId, op, estilo, color, fechaCreacion) VALUES (?, ?, ?, ?, ?, ?)',
+            'INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fechaCreacion) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [
               prenda.id, 
               prenda.cajaId, 
               prenda.op || '', 
               prenda.estilo, 
               prenda.color, 
+              prenda.fotoUri || null,
               prenda.fechaCreacion || new Date().toISOString()
             ]
           );

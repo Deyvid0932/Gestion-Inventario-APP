@@ -15,14 +15,8 @@ export const useOCRManager = () => {
       
       if (!result.text || result.text.trim() === "") return [];
 
-      // Ordenamos los bloques por su posición vertical (top) para asegurar que se procesen de arriba a abajo
-      // independientemente del orden en que ML Kit los detecte.
-      const sortedText = result.blocks
-        .sort((a, b) => (a.frame?.top || 0) - (b.frame?.top || 0))
-        .map(block => block.text)
-        .join('\n');
-
-      const structuredData = processOCRText(sortedText, cajaId);
+      // ML Kit ya nos devuelve result.text con el orden natural de lectura de la imagen
+      const structuredData = processOCRText(result.text, cajaId);
 
       return structuredData; 
     } catch (e) {

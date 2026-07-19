@@ -1,12 +1,14 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { 
-  View, 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
-  Alert, 
-  RefreshControl, 
-  Animated, 
+import {
+  View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Alert,
+  RefreshControl,
+  Animated,
+  Modal,
+  Image
 } from 'react-native';
 import { RouteProp, useRoute, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -16,13 +18,15 @@ import { Navbar } from '../components/Navbar';
 import { useAppStore } from '../store/useAppStore';
 import { usePrenda } from '../hooks/usePrenda';
 import { PrendaService } from '../services/PrendaService';
+import { generateId } from '../database/database';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { GestureHandlerRootView, FlatList  } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, FlatList } from 'react-native-gesture-handler';
 import { useOCRManager } from '../hooks/useOCRManager';
 import { PrendaCard } from '../components/PrendaCard';
 import { SearchBar } from '../components/SearchBar';
 import { SkeletonLoader } from '../components/SkeletonLoader';
+import { MovePrendaModal } from '../components/MovePrendaModal';
 
 type ExcelGridRouteProp = RouteProp<RootStackParamList, 'ExcelGrid'>;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -35,15 +39,15 @@ const CajaContentsScreen = () => {
   const { processImage, loading: ocrLoading } = useOCRManager();
 
   const [search, setSearch] = useState('');
-  const [localPrendas, setLocalPrendas] = useState<Prenda[]>([]); 
+  const [localPrendas, setLocalPrendas] = useState<Prenda[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const lastNavTime = useRef(0);
-  const searchCounter = useRef(0); 
+  const searchCounter = useRef(0);
 
   const { toggleStatus: togglePrendaStatus } = usePrenda();
-  
+
   const setPrendasGlobal = useAppStore(state => state.setPrendas);
   const currentTheme = useAppStore(state => state.currentTheme);
   const selectedPrendas = useAppStore(state => state.selectedPrendas);
@@ -51,8 +55,13 @@ const CajaContentsScreen = () => {
   const clearSelectedPrendas = useAppStore(state => state.clearSelectedPrendas);
 
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [currentImage, setCurrentImage] = useState<string | null>(null);
+  const [moveModalVisible, setMoveModalVisible] = useState(false);
+  const [prendaToMove, setPrendaToMove] = useState<string | null>(null);
 
-  const fetchPrendas = useCallback(async (showLoading = false, currentSearch = search) => {
+  const fetchPrendas = useCallback(async (showLoading = false) => {
+    if (!db) return;
     const queryId = ++searchCounter.current;
 
     if (showLoading) {
@@ -61,16 +70,16 @@ const CajaContentsScreen = () => {
     }
 
     try {
-      const result = await PrendaService.getAllPrendasByCaja(db, cajaId, currentSearch);
-      
+      const result = await PrendaService.getAllPrendasByCaja(db, cajaId, search);
+
       if (queryId === searchCounter.current) {
         setLocalPrendas(result);
 
-        if (currentSearch === '') {
-          setPrendasGlobal(result); 
+        if (search === '') {
+          setPrendasGlobal(result);
         }
 
-        if (showLoading || currentSearch === '') {
+        if (showLoading || search === '') {
           Animated.timing(fadeAnim, {
             toValue: 1,
             duration: 300,
@@ -88,17 +97,15 @@ const CajaContentsScreen = () => {
         setLoading(false);
       }
     }
-  }, [db, cajaId, setPrendasGlobal, fadeAnim]);
-
-  useEffect(() => {
-    fetchPrendas(false, search);
-  }, [search, fetchPrendas]);
+  }, [db, cajaId, setPrendasGlobal, fadeAnim, search]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchPrendas(localPrendas.length === 0);
+      if (db) {
+        fetchPrendas(localPrendas.length === 0);
+      }
       return () => clearSelectedPrendas();
-    }, [cajaId, clearSelectedPrendas, localPrendas.length, fetchPrendas])
+    }, [db, fetchPrendas, clearSelectedPrendas])
   );
 
   const flatListRef = useRef<FlatList>(null);
@@ -124,7 +131,7 @@ const CajaContentsScreen = () => {
 
   const navigateSafe = useCallback((routeName: keyof RootStackParamList, params?: any) => {
     const now = Date.now();
-    if (now - lastNavTime.current < 350) return;
+    if (now - lastNavTime.current < 400) return;
     lastNavTime.current = now;
     navigation.navigate(routeName as any, params);
   }, [navigation]);
@@ -147,9 +154,9 @@ const CajaContentsScreen = () => {
       `¿Deseas eliminar las ${selectedPrendas.length} prendas seleccionadas?`,
       [
         { text: "Cancelar", style: "cancel" },
-        { 
-          text: "Eliminar", 
-          style: "destructive", 
+        {
+          text: "Eliminar",
+          style: "destructive",
           onPress: async () => {
             try {
               for (const id of selectedPrendas) {
@@ -207,44 +214,47 @@ const CajaContentsScreen = () => {
     ]);
   }, [db, fetchPrendas]);
 
-  const ITEM_HEIGHT = 108; 
 
-  const getItemLayout = useCallback((data: any, index: number) => ({
-    length: ITEM_HEIGHT,
-    offset: ITEM_HEIGHT * index,
-    index,
-  }), []);
-
-  const renderItem = useCallback(({item}: { item: Prenda }) => (
-      <PrendaCard
-        item={item}
-        theme={currentTheme}
-        isSelected={selectedPrendas.includes(item.id)}
-        isHighlighted={item.id === highlightedId}
-        onPress={() => handleItemPress(item)}
-        onLongPress={() => toggleSelectPrenda(item.id)}
-        onDelete={() => deletePrenda(item.id)}
-        onToggleStatus={() => {
-          const nextStatusLabel = item.estado === 1 ? 'Inactivo' : 'Activo';
-          Alert.alert("Estado", `¿Marcar como ${nextStatusLabel}?`, [
-            { text: "Cancelar", style: "cancel" },
-            {
-              text: "Confirmar",
-              onPress: async () => {
-                await togglePrendaStatus(item.id);
-                fetchPrendas(false);
-              }
+  const renderItem = useCallback(({ item }: { item: Prenda }) => (
+    <PrendaCard
+      item={item}
+      theme={currentTheme}
+      isSelected={selectedPrendas.includes(item.id)}
+      isHighlighted={item.id === highlightedId}
+      onPress={() => handleItemPress(item)}
+      onLongPress={() => toggleSelectPrenda(item.id)}
+      onDelete={() => deletePrenda(item.id)}
+      onToggleStatus={() => {
+        const nextStatusLabel = item.estado === 1 ? 'Inactivo' : 'Activo';
+        Alert.alert("Estado", `¿Marcar como ${nextStatusLabel}?`, [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Confirmar",
+            onPress: async () => {
+              await togglePrendaStatus(item.id);
+              fetchPrendas(false);
             }
-          ]);
-        }}
-      />
+          }
+        ]);
+      }}
+      onMove={() => {
+        setPrendaToMove(item.id);
+        setMoveModalVisible(true);
+      }}
+      onImagePress={(uri) => {
+        if (uri) {
+          setModalVisible(true);
+          setCurrentImage(uri);
+        }
+      }}
+    />
   ), [currentTheme, selectedPrendas, highlightedId, handleItemPress, toggleSelectPrenda, deletePrenda, togglePrendaStatus, fetchPrendas]);
 
-  const showSkeleton = loading && localPrendas.length === 0;
+  const showSkeleton = !db || (loading && localPrendas.length === 0);
 
   return (
     <GestureHandlerRootView style={[styles.container, { backgroundColor: currentTheme.background }]}>
-      <Navbar title={nombreCaja} showBackButton/>
+      <Navbar title={nombreCaja} showBackButton />
 
       <View style={styles.headerActions}>
         {selectedPrendas.length > 0 ? (
@@ -253,7 +263,7 @@ const CajaContentsScreen = () => {
             style={[styles.bulkDeleteButton, { backgroundColor: '#e74c3c' }]}
           >
             <Ionicons name="trash" size={24} color="#FFF" />
-            <Text style={styles.bulkDeleteText}>Eliminar Prendas ({selectedPrendas.length})</Text>
+            <Text style={[styles.bulkDeleteText, { color: '#FFF' }]}>Eliminar Prendas ({selectedPrendas.length})</Text>
             <TouchableOpacity onPress={clearSelectedPrendas} style={styles.clearSelectionSmall}>
               <Ionicons name="close-circle" size={24} color="#FFF" />
             </TouchableOpacity>
@@ -273,8 +283,8 @@ const CajaContentsScreen = () => {
               style={[styles.glassButton, { backgroundColor: currentTheme.primary }]}
               onPress={handleCameraScan}
             >
-              <Ionicons name="camera" size={22} color="#FFF" />
-              <Text style={styles.glassButtonText}>OCR</Text>
+              <Ionicons name="camera" size={22} color={currentTheme.primaryText} />
+              <Text style={[styles.glassButtonText, { color: currentTheme.primaryText }]}>OCR</Text>
             </TouchableOpacity>
           </>
         )}
@@ -295,11 +305,11 @@ const CajaContentsScreen = () => {
               renderItem={renderItem}
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContent}
-              getItemLayout={getItemLayout} 
-              initialNumToRender={10}
-              maxToRenderPerBatch={10}
+              initialNumToRender={8}
+              maxToRenderPerBatch={8}
               windowSize={5}
               removeClippedSubviews={true}
+              updateCellsBatchingPeriod={50}
               onScrollToIndexFailed={(info) => {
                 const offset = info.averageItemLength * info.index;
                 flatListRef.current?.scrollToOffset({ offset, animated: true });
@@ -311,7 +321,7 @@ const CajaContentsScreen = () => {
                       viewPosition: 0.5
                     });
                   }
-                }, 300); 
+                }, 300);
               }}
               refreshControl={
                 <RefreshControl
@@ -336,7 +346,47 @@ const CajaContentsScreen = () => {
           </Animated.View>
         )}
       </View>
+
+      <MovePrendaModal
+        isVisible={moveModalVisible}
+        onClose={() => setMoveModalVisible(false)}
+        currentCajaId={cajaId}
+        onSelectCaja={async (newCajaId) => {
+          if (prendaToMove && db) {
+            setMoveModalVisible(false);
+            const result = await PrendaService.movePrenda(db, prendaToMove, newCajaId);
+            if (result.success) {
+              fetchPrendas(false);
+            } else {
+              Alert.alert("Error", result.error || "No se pudo mover la prenda");
+            }
+          }
+        }}
+      />
+
+      <Modal 
+  visible={isModalVisible} 
+  transparent={true} 
+  animationType="fade"
+>
+  <View style={styles.modalOverlay}>
+    <TouchableOpacity 
+      style={styles.closeButton} 
+      onPress={() => setModalVisible(false)} // Cierra el modal
+    >
+      <Ionicons name="close" size={30} color="white" />
+    </TouchableOpacity>
+    
+    <Image 
+      source={{ uri: currentImage || '' }} 
+      style={styles.modalImage} 
+      resizeMode="contain" 
+    />
+  </View>
+</Modal>
     </GestureHandlerRootView>
+
+    
   );
 };
 
@@ -345,14 +395,14 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', padding: 18, gap: 12 },
   glassButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 52, borderRadius: 14, gap: 8, elevation: 4 },
   glassButtonText: { fontSize: 15, fontWeight: '700' },
-  bulkDeleteButton: { 
-    flex: 1, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    height: 52, 
-    borderRadius: 14, 
-    gap: 12, 
+  bulkDeleteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: 14,
+    gap: 12,
     elevation: 8,
     paddingHorizontal: 20,
   },
@@ -379,6 +429,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     marginTop: 5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalImage: {
+    width: '100%',
+    height: '80%',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1,
+    padding: 10,
   },
 });
 

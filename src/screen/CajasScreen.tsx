@@ -15,7 +15,7 @@ import { FloatingButton } from '../components/FloatingButton';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '../store/useAppStore';
 import { SkeletonLoader } from '../components/SkeletonLoader';
-import DraggableFlatList, {RenderItemParams} from 'react-native-draggable-flatlist';
+import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CajaService } from '../services/CajaService';
 import CajaCard from '../components/CajaCard';
@@ -38,6 +38,7 @@ const CajasScreen = () => {
   const lastNavTime = React.useRef(0);
 
   const fetchCajas = useCallback(async (showLoading = true) => {
+    if (!db) return;
     if (showLoading) setLoading(true);
     try {
       const result = await db.getAllAsync<CajaWithStats>(
@@ -64,7 +65,9 @@ const CajasScreen = () => {
 
   useFocusEffect(
     useCallback(() => {
-      fetchCajas(true); // Restauramos que siempre muestre el "carga" al entrar
+      if (db) {
+        fetchCajas(true); // Restauramos que siempre muestre el "carga" al entrar
+      }
     }, [fetchCajas])
   );
 
@@ -77,7 +80,7 @@ const CajasScreen = () => {
 
   const handleNavigateToPrendas = useCallback((cajaId: string, nombreCaja: string) => {
     const now = Date.now();
-    if (now - lastNavTime.current < 400) return;
+    if (now - lastNavTime.current < 300) return;
     lastNavTime.current = now;
 
     useAppStore.getState().setPrendas([]);
@@ -141,7 +144,7 @@ const CajasScreen = () => {
     </View>
   ), [currentTheme, navigateSafe, deleteCaja, handleNavigateToPrendas]);
 
-  const showSkeleton = loading && cajas.length === 0;
+  const showSkeleton = !db || (loading && cajas.length === 0);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: currentTheme.background }}>
@@ -180,9 +183,9 @@ const CajasScreen = () => {
         )}
       </View>
 
-      <FloatingButton 
-        onPress={() => navigateSafe('Form', { mode: 'NAME_ONLY', entityType: 'caja', parentId: inventarioId })} 
-        style={styles.floatingButton} 
+      <FloatingButton
+        onPress={() => navigateSafe('Form', { mode: 'NAME_ONLY', entityType: 'caja', parentId: inventarioId })}
+        style={styles.floatingButton}
       />
 
     </GestureHandlerRootView>
