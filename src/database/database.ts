@@ -1,7 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
-  const DATABASE_VERSION = 7;
+  const DATABASE_VERSION = 8;
   
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -53,6 +53,14 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       CREATE INDEX IF NOT EXISTS idx_prendas_estado ON prendas(estado);
       CREATE INDEX IF NOT EXISTS idx_prendas_fecha ON prendas(fechaCreacion);
       CREATE INDEX IF NOT EXISTS idx_cajas_orden ON cajas(orden);
+
+      CREATE TABLE IF NOT EXISTS chat_history (
+        id TEXT PRIMARY KEY NOT NULL,
+        sender TEXT NOT NULL,
+        text TEXT NOT NULL,
+        matches_json TEXT,
+        timestamp INTEGER NOT NULL
+      );
 
       INSERT OR REPLACE INTO user_version (id, version) VALUES (1, ${DATABASE_VERSION});
     `);
@@ -117,8 +125,21 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 7);
       `);
       currentDbVersion = 7;
+    if (currentDbVersion === 7) {
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS chat_history (
+          id TEXT PRIMARY KEY NOT NULL,
+          sender TEXT NOT NULL,
+          text TEXT NOT NULL,
+          matches_json TEXT,
+          timestamp INTEGER NOT NULL
+        );
+        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 8);
+      `);
+      currentDbVersion = 8;
     }
   }
+}
 }
 
 export const generateId = () => {

@@ -53,6 +53,8 @@ export type RootStackParamList = {
 
 export type BottomTabParamList = {
   Inventarios: undefined;
+  Stats: undefined;
+  Chatbot: undefined;
   History: undefined;
   GarmentDetails: { cajaId: string; nombreCaja: string };
 };

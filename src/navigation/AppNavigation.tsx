@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { InventariosScreen } from '../screen/InventariosScreen';
 import CajaContentsScreen from '../screen/CajaContentsScreen';
 import { HistoryScreen } from '../screen/HistoryScreen';
+import { StatsScreen } from '../screen/StatsScreen';
+import { ChatbotScreen } from '../screen/ChatbotScreen';
 import { RootStackParamList, BottomTabParamList } from '../types';
 import { useAppStore } from '../store/useAppStore';
 import CajasScreen from '../screen/CajasScreen';
@@ -65,6 +67,10 @@ const TabNavigator = () => {
 
           if (route.name === 'Inventarios') {
             iconName = focused ? 'file-tray-stacked' : 'file-tray-stacked-outline';
+          } else if (route.name === 'Stats') {
+            iconName = focused ? 'stats-chart' : 'stats-chart-outline';
+          } else if (route.name === 'Chatbot') {
+            iconName = focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline';
           } else if (route.name === 'History') {
             iconName = focused ? 'time' : 'time-outline';
           } else {
@@ -82,6 +88,8 @@ const TabNavigator = () => {
       })}
     >
       <Tab.Screen name="Inventarios" component={InventariosScreen} options={{ title: 'Lotes' }} />
+      <Tab.Screen name="Stats" component={StatsScreen} options={{ title: 'Estadísticas' }} />
+      <Tab.Screen name="Chatbot" component={ChatbotScreen} options={{ title: 'Asistente' }} />
       <Tab.Screen name="History" component={HistoryScreen} options={{ title: 'Historial' }} />
     </Tab.Navigator>
   );
