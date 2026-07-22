@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import { InventarioStats } from '../types';
+import { clayStyles } from '../style/theme';
 
 interface InventarioCardProps {
   item: InventarioStats;
@@ -104,10 +105,18 @@ const InventarioCard = memo(({
       rightThreshold={30}
     >
       <TouchableOpacity
-        activeOpacity={0.7}
+        activeOpacity={0.8}
         delayPressIn={0}
         pressRetentionOffset={{ top: 20, left: 20, right: 20, bottom: 20 }}
-        style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
+        style={[
+          styles.card,
+          clayStyles,
+          { 
+            backgroundColor: theme.card, 
+            borderColor: theme.border, 
+            shadowColor: theme.borderShadow || '#000' 
+          }
+        ]}
         onPress={onPress}
       >
         <View style={styles.cardMain}>
@@ -157,15 +166,9 @@ const InventarioCard = memo(({
 
 const styles = StyleSheet.create({
   card: {
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 16,
-    elevation: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 2,
+    padding: 24,
+    marginBottom: 20,
+    // Claymorphism properties applied via spread from clayStyles
   },
   cardMain: {
     flexDirection: 'row',

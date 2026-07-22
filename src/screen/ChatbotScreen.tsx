@@ -1,49 +1,70 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert, Platform, KeyboardAvoidingView, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { clayStyles } from '../style/theme';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import Animated, { FadeIn, FadeInRight, FadeInLeft } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInRight, FadeInLeft, SlideInLeft, SlideOutLeft, FadeOut } from 'react-native-reanimated';
 import { useAppStore } from '../store/useAppStore';
 import { ChatbotService } from '../services/ChatbotService';
 import { SearchResult } from '../utils/nlpEngine';
-import { RootStackParamList } from '../types';
+import { RootStackParamList, ChatSession } from '../types';
 
 interface ChatMessage {
   id: string;
   sender: 'bot' | 'user';
   text: string;
   matches?: SearchResult[];
+  engineUsed?: 'ia' | 'local';
 }
 
 export const ChatbotScreen = () => {
   const db = useSQLiteContext();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const { currentTheme, themeMode } = useAppStore();
-  
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const lastNavTime = useRef(0);
 
-  // Cargar historial al inicio
+  // Cargar sesiones iniciales
+  useEffect(() => {
+    const loadSessions = async () => {
+      const allSessions = await ChatbotService.getSessions(db);
+      setSessions(allSessions);
+      if (allSessions.length > 0) {
+        setCurrentSessionId(allSessions[0].id);
+      } else {
+        const newSessionId = await ChatbotService.createSession(db, 'Nueva sesión');
+        setCurrentSessionId(newSessionId);
+        setSessions(await ChatbotService.getSessions(db));
+      }
+    };
+    loadSessions();
+  }, [db]);
+
   useEffect(() => {
     const loadHistory = async () => {
-      const history = await ChatbotService.getHistory(db);
+      if (!currentSessionId) return;
+      const history = await ChatbotService.getHistoryBySession(db, currentSessionId);
       if (history.length > 0) {
         setMessages(history);
       } else {
         setMessages([{
           id: '1',
           sender: 'bot',
-          text: '¡Hola! Soy tu asistente inteligente. Pregúntame dónde está alguna prenda.'
+          text: '¡Hola! Soy Gemini NLP, tu Copiloto inteligente. ¿En qué te puedo ayudar hoy con tu inventario?'
         }]);
       }
     };
     loadHistory();
-  }, [db]);
+  }, [db, currentSessionId]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -60,7 +81,12 @@ export const ChatbotScreen = () => {
 
   const handleSend = async () => {
     const userText = input.trim();
-    if (!userText) return;
+    if (!userText || !currentSessionId) return;
+
+    if (messages.length <= 1) {
+      await ChatbotService.updateSessionTitle(db, currentSessionId, userText.substring(0, 30));
+      setSessions(await ChatbotService.getSessions(db));
+    }
 
     const userMsgId = Date.now().toString();
     const newUserMsg: ChatMessage = { id: userMsgId, sender: 'user', text: userText };
@@ -68,58 +94,79 @@ export const ChatbotScreen = () => {
     setInput('');
     setIsTyping(true);
 
-    // Guardar en BD
-    await ChatbotService.saveMessage(db, { id: userMsgId, sender: 'user', text: userText, timestamp: Date.now() });
+    await ChatbotService.saveMessage(db, { id: userMsgId, sender: 'user', text: userText, timestamp: Date.now() }, currentSessionId);
 
-    // 2. Procesar con Gemini y SQL
-    const response = await ChatbotService.searchAndRespond(db, userText);
-    
+    const response = await ChatbotService.searchAndRespond(db, userText, currentSessionId);
+
     const botMsgId = (Date.now() + 1).toString();
-    const botMsg: ChatMessage = { 
-      id: botMsgId, 
-      sender: 'bot', 
-      text: response.text, 
-      matches: response.matches 
+    const botMsg: ChatMessage = {
+      id: botMsgId,
+      sender: 'bot',
+      text: response.text,
+      matches: response.matches,
+      engineUsed: response.engineUsed
     };
-    
+
     setMessages(prev => [botMsg, ...prev]);
     setIsTyping(false);
 
-    // Guardar en BD
-    await ChatbotService.saveMessage(db, { id: botMsgId, sender: 'bot', text: response.text, matches: response.matches, timestamp: Date.now() });
+    await ChatbotService.saveMessage(db, { id: botMsgId, sender: 'bot', text: response.text, matches: response.matches, engineUsed: response.engineUsed, timestamp: Date.now() }, currentSessionId);
   };
 
-  const handleClear = () => {
-    Alert.alert("Limpiar Historial", "¿Borrar toda la conversación?", [
+  const handleNewSession = async () => {
+    setIsSidebarOpen(false);
+    const newSessionId = await ChatbotService.createSession(db, 'Nueva sesión');
+    setCurrentSessionId(newSessionId);
+    setSessions(await ChatbotService.getSessions(db));
+    setMessages([{
+      id: '1',
+      sender: 'bot',
+      text: '¡Hola! Soy North Mini Code ✨, tu asistente inteligente del inventario. ¿En qué puedo ayudarte hoy?'
+    }]);
+  };
+
+  const handleDeleteSession = (id: string) => {
+    Alert.alert("Borrar Chat", "¿Estás seguro de borrar esta conversación?", [
       { text: "Cancelar", style: "cancel" },
-      { text: "Borrar", style: "destructive", onPress: async () => {
-          await ChatbotService.clearHistory(db);
-          setMessages([{
-            id: Date.now().toString(),
-            sender: 'bot',
-            text: 'Conversación borrada. ¿En qué te ayudo?'
-          }]);
-      }}
+      {
+        text: "Borrar", style: "destructive", onPress: async () => {
+          await ChatbotService.deleteSession(db, id);
+          const updatedSessions = await ChatbotService.getSessions(db);
+          setSessions(updatedSessions);
+          if (currentSessionId === id) {
+            if (updatedSessions.length > 0) {
+              setCurrentSessionId(updatedSessions[0].id);
+            } else {
+              handleNewSession();
+            }
+          }
+        }
+      }
     ]);
   };
 
+  const handleClear = () => {
+    if (!currentSessionId) return;
+    handleDeleteSession(currentSessionId);
+  };
+
   const renderResultCard = (match: SearchResult) => (
-    <Animated.View entering={FadeIn.delay(200)} key={match.id} style={[styles.resultCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+    <Animated.View entering={FadeIn.delay(200)} key={match.id} style={[styles.resultCard, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
       <Text style={{ color: currentTheme.text, fontWeight: 'bold', fontSize: 16, marginBottom: 4 }}>
-        {match.estilo.toUpperCase()}
+        {(match.estilo || 'Sin Estilo').toUpperCase()}
       </Text>
-      
+
       <View style={styles.cardRow}>
-        <Ionicons name="shirt" size={16} color={currentTheme.primary} style={{marginRight: 6}} />
+        <Ionicons name="shirt" size={16} color={currentTheme.primary} style={{ marginRight: 6 }} />
         <Text style={[styles.cardTitle, { color: currentTheme.text }]}>OP: {match.op || 'Sin OP'}</Text>
       </View>
-      
+
       <Text style={[styles.cardSubtitle, { color: currentTheme.textSecondary, marginTop: 4 }]}>
-        Color: {match.color}
+        Color: {match.color || 'No especificado'}
       </Text>
-      <Text style={[styles.cardLocation, { color: currentTheme.primary, marginTop: 4 }]}>📍 {match.cajaNombre} → {match.inventarioNombre}</Text>
-      
-      <TouchableOpacity 
+      <Text style={[styles.cardLocation, { color: currentTheme.primary, marginTop: 4 }]}>📍 {match.cajaNombre || 'Sin Caja'} → {match.inventarioNombre || 'General'}</Text>
+
+      <TouchableOpacity
         style={[styles.redirectBtn, { backgroundColor: currentTheme.primary + '20' }]}
         onPress={() => navigateSafe('ExcelGrid', { cajaId: match.cajaId, nombreCaja: match.cajaNombre, targetPrendaId: match.id })}
       >
@@ -129,125 +176,198 @@ export const ChatbotScreen = () => {
     </Animated.View>
   );
 
- return (
-  <KeyboardAvoidingView 
-    behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-    style={[styles.container, { backgroundColor: currentTheme.background }]}
-  >
-    
-    {/* Navbar (Clon exacto de Navbar.tsx) */}
-    <View style={[styles.navbar, { backgroundColor: currentTheme.card, borderBottomColor: currentTheme.border }]}>
-      <StatusBar 
-        barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} 
-        backgroundColor={currentTheme.card} 
-      />
-      <View style={styles.navLeft}>
-        <Text style={[styles.navTitle, { color: currentTheme.text }]} numberOfLines={1}>Asistente</Text>
-      </View>
-      <View style={[styles.navRight, { flexDirection: 'row', alignItems: 'center' }]}>
-        <TouchableOpacity 
-          onPress={handleClear} 
-          style={{ marginRight: 12, width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="trash-outline" size={22} color={currentTheme.text} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          onPress={useAppStore.getState().toggleTheme}
-          style={{ width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name={themeMode === 'light' ? "moon-outline" : "sunny-outline"} size={22} color={currentTheme.text} />
-        </TouchableOpacity>
-      </View>
-    </View>
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={[styles.container, { backgroundColor: currentTheme.background }]}
+    >
 
-    {/* Mensajes (Lista optimizada) */}
-    <FlatList
-      ref={flatListRef}
-      style={styles.messageList}
-      data={messages}
-      keyExtractor={item => item.id}
-      inverted
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-      contentContainerStyle={styles.chatList}
-      
-      // CAMBIO 2: Desmontado nativo para evitar trabones de renderizado
-      removeClippedSubviews={Platform.OS === 'android'}
-      maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-      extraData={themeMode} // <-- Fuerza el re-render inmediato al cambiar el tema
-      
-      renderItem={({ item }) => (
-        <Animated.View
-          entering={item.sender === 'user' ? FadeInRight.duration(200) : FadeInLeft.duration(200)}
-          style={[
-            styles.messageBubble,
-            item.sender === 'user'
-              ? [styles.userBubble, { backgroundColor: themeMode === 'light' ? '#E4E4E7' : '#3F3F46' }]
-              : [styles.botBubble, { backgroundColor: currentTheme.card }],
-          ]}
-        >
-          <Text style={[styles.messageText, { color: item.sender === 'user' ? (themeMode === 'light' ? '#121212' : '#FFFFFF') : currentTheme.text }]}>
-            {item.text}
-          </Text>
+      {/* Navbar (Clon exacto de Navbar.tsx) */}
+      <View style={[styles.navbar, { backgroundColor: currentTheme.card, borderBottomColor: currentTheme.border }]}>
+        <StatusBar
+          barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'}
+          backgroundColor={currentTheme.card}
+        />
+        <View style={styles.navLeft}>
+          <TouchableOpacity onPress={() => setIsSidebarOpen(true)} style={{ marginRight: 12 }}>
+            <Ionicons name="menu" size={28} color={currentTheme.text} />
+          </TouchableOpacity>
+          <Text style={[styles.navTitle, { color: currentTheme.text }]} numberOfLines={1}>Groq IA</Text>
+        </View>
+        <View style={[styles.navRight, { flexDirection: 'row', alignItems: 'center' }]}>
+          <TouchableOpacity
+            onPress={handleClear}
+            style={{ marginRight: 12, width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="trash-outline" size={22} color={currentTheme.text} />
+          </TouchableOpacity>
 
-          {item.matches && item.matches.length > 0 && (
-            <View style={styles.matchesContainer}>
-              {item.matches.map(renderResultCard)}
+          <TouchableOpacity
+            onPress={useAppStore.getState().toggleTheme}
+            style={{ width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name={themeMode === 'light' ? "moon-outline" : "sunny-outline"} size={22} color={currentTheme.text} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Mensajes (Lista optimizada) */}
+      <FlatList
+        ref={flatListRef}
+        style={styles.messageList}
+        data={messages}
+        keyExtractor={item => item.id}
+        inverted
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        contentContainerStyle={styles.chatList}
+
+        // CAMBIO 2: Desmontado nativo para evitar trabones de renderizado
+        removeClippedSubviews={Platform.OS === 'android'}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        extraData={themeMode} // <-- Fuerza el re-render inmediato al cambiar el tema
+
+        renderItem={({ item }) => (
+          <Animated.View
+            entering={item.sender === 'user' ? FadeInRight.duration(200) : FadeInLeft.duration(200)}
+            style={[
+              styles.messageBubble,
+              item.sender === 'user'
+                ? [styles.userBubble, { backgroundColor: themeMode === 'light' ? '#E4E4E7' : '#3F3F46' }]
+                : [styles.botBubble, { backgroundColor: currentTheme.card }],
+            ]}
+          >
+            <Text style={[styles.messageText, { color: item.sender === 'user' ? (themeMode === 'light' ? '#121212' : '#FFFFFF') : currentTheme.text }]}>
+              {item.text}
+            </Text>
+
+            {item.sender === 'bot' && item.engineUsed && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, alignSelf: 'flex-end', opacity: 0.8 }}>
+                <Ionicons
+                  name={item.engineUsed === 'ia' ? "globe-outline" : "flash-outline"}
+                  size={11}
+                  color={item.engineUsed === 'ia' ? '#3B82F6' : '#EAB308'}
+                  style={{ marginRight: 3 }}
+                />
+                <Text style={{ fontSize: 10, fontWeight: '600', color: item.engineUsed === 'ia' ? '#3B82F6' : '#EAB308' }}>
+                  {item.engineUsed === 'ia' ? 'North Mini Code' : 'Motor Local'}
+                </Text>
+              </View>
+            )}
+
+            {item.matches && item.matches.length > 0 && (
+              <View style={styles.matchesContainer}>
+                {item.matches.map(renderResultCard)}
+              </View>
+            )}
+          </Animated.View>
+        )}
+        ListHeaderComponent={
+          isTyping ? (
+            <View style={[styles.messageBubble, styles.botBubble, { backgroundColor: currentTheme.card, alignSelf: 'flex-start', width: 60 }]}>
+              <Ionicons name="ellipsis-horizontal" size={24} color={currentTheme.textSecondary} />
             </View>
-          )}
+          ) : null
+        }
+      />
+
+      {/* Entrada (Alineada para que no flote erráticamente) */}
+      <View style={[styles.inputArea, { backgroundColor: currentTheme.card, borderTopColor: currentTheme.border }]}>
+        <TextInput
+          style={[
+            styles.input,
+            {
+              color: currentTheme.text,
+              backgroundColor: currentTheme.background,
+              borderColor: currentTheme.border,
+            },
+          ]}
+          placeholder="Ej: ¿Dónde está la OP 123?"
+          placeholderTextColor={currentTheme.textSecondary}
+          value={input}
+          onChangeText={setInput}
+          multiline
+          editable={!isTyping}
+          returnKeyType="send"
+          blurOnSubmit={false}
+          numberOfLines={1} // CAMBIO 3: Estabiliza el cálculo inicial de altura en Android
+          textAlignVertical="center" // CAMBIO 4: Clave para que el input no desplace su texto hacia arriba
+        />
+
+        <TouchableOpacity
+          style={[
+            styles.sendBtn,
+            {
+              backgroundColor: currentTheme.primary,
+              opacity: !input.trim() || isTyping ? 0.5 : 1,
+            },
+          ]}
+          onPress={handleSend}
+          disabled={!input.trim() || isTyping}
+        >
+          <Ionicons name="send" size={18} color={currentTheme.primaryText || '#fff'} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Sidebar Overlay and Drawer */}
+      {isSidebarOpen && (
+        <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { zIndex: 99, backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setIsSidebarOpen(false)} />
         </Animated.View>
       )}
-      ListHeaderComponent={
-        isTyping ? (
-          <View style={[styles.messageBubble, styles.botBubble, { backgroundColor: currentTheme.card, alignSelf: 'flex-start', width: 60 }]}>
-            <Ionicons name="ellipsis-horizontal" size={24} color={currentTheme.textSecondary} />
+      {isSidebarOpen && (
+        <Animated.View
+          entering={SlideInLeft.duration(300)}
+          exiting={SlideOutLeft.duration(300)}
+          style={[styles.sidebar, { backgroundColor: currentTheme.card, borderRightColor: currentTheme.border }]}
+        >
+          <View style={styles.sidebarHeader}>
+            <Text style={[styles.sidebarTitle, { color: currentTheme.text }]}>Historial de Chats</Text>
+            <TouchableOpacity onPress={() => setIsSidebarOpen(false)} style={{ padding: 4 }}>
+              <Ionicons name="close" size={24} color={currentTheme.text} />
+            </TouchableOpacity>
           </View>
-        ) : null
-      }
-    />
 
-    {/* Entrada (Alineada para que no flote erráticamente) */}
-    <View style={[styles.inputArea, { backgroundColor: currentTheme.card, borderTopColor: currentTheme.border }]}>
-      <TextInput
-        style={[
-          styles.input,
-          {
-            color: currentTheme.text,
-            backgroundColor: currentTheme.background,
-            borderColor: currentTheme.border,
-          },
-        ]}
-        placeholder="Ej: ¿Dónde está la OP 123?"
-        placeholderTextColor={currentTheme.textSecondary}
-        value={input}
-        onChangeText={setInput}
-        multiline
-        editable={!isTyping}
-        returnKeyType="send"
-        blurOnSubmit={false}
-        numberOfLines={1} // CAMBIO 3: Estabiliza el cálculo inicial de altura en Android
-        textAlignVertical="center" // CAMBIO 4: Clave para que el input no desplace su texto hacia arriba
-      />
+          <TouchableOpacity
+            style={[styles.newSessionBtn, { backgroundColor: currentTheme.primary }]}
+            onPress={handleNewSession}
+          >
+            <Ionicons name="add" size={20} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Nuevo Chat</Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[
-          styles.sendBtn,
-          {
-            backgroundColor: currentTheme.primary,
-            opacity: !input.trim() || isTyping ? 0.5 : 1,
-          },
-        ]}
-        onPress={handleSend}
-        disabled={!input.trim() || isTyping}
-      >
-        <Ionicons name="send" size={18} color={currentTheme.primaryText || '#fff'} />
-      </TouchableOpacity>
-    </View>
-  </KeyboardAvoidingView>
-);
+          <FlatList
+            data={sessions}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  styles.sessionItem,
+                  currentSessionId === item.id && { backgroundColor: themeMode === 'light' ? '#E4E4E7' : '#3F3F46' }
+                ]}
+                onPress={() => {
+                  setCurrentSessionId(item.id);
+                  setIsSidebarOpen(false);
+                }}
+              >
+                <Ionicons name="chatbubble-outline" size={20} color={currentTheme.text} style={{ marginRight: 12 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: currentTheme.text, fontWeight: currentSessionId === item.id ? 'bold' : 'normal' }} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => handleDeleteSession(item.id)} style={{ padding: 4 }}>
+                  <Ionicons name="trash-outline" size={18} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            )}
+          />
+        </Animated.View>
+      )}
+    </KeyboardAvoidingView>
+  );
 };
 
 const styles = StyleSheet.create({
@@ -317,10 +437,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   resultCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
+    padding: 16,
     marginTop: 8,
+    // clayStyles applied via spread
   },
   cardRow: {
     flexDirection: 'row',
@@ -356,14 +475,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 12,
     paddingTop: 8,
-    paddingBottom: Platform.OS === 'android' ? 12 : 24, 
+    paddingBottom: Platform.OS === 'android' ? 12 : 24,
     borderTopWidth: 1,
-    alignItems: 'flex-end', 
+    alignItems: 'flex-end',
   },
   input: {
     flex: 1,
-    borderWidth: 1,
-    borderRadius: 20,
+    borderWidth: clayStyles.borderWidth,
+    borderRadius: clayStyles.borderRadius,
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === 'android' ? 8 : 12, // Relleno equilibrado
     fontSize: 15,
@@ -379,7 +498,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   messageList: {
-  flex: 1,
-}
-  
+    flex: 1,
+  },
+  sidebar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 280,
+    borderRightWidth: 1,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    elevation: 5,
+    zIndex: 100,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+  },
+  sidebarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150,150,150,0.2)',
+  },
+  sidebarTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  newSessionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    margin: 16,
+    borderRadius: 12,
+  },
+  sessionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150,150,150,0.1)',
+  }
 });

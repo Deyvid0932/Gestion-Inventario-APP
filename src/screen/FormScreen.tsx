@@ -27,13 +27,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PrendaService } from '../services/PrendaService';
 import { usePrenda } from '../hooks/usePrenda';
 import { Ionicons } from '@expo/vector-icons';
+import { clayStyles } from '../style/theme';
 import { getColorHex } from '../utils/colorUtils';
 
 export const FormScreen = () => {
   const route = useRoute<RouteProp<RootStackParamList, 'Form'>>();
   const navigation = useNavigation();
   const db = useSQLiteContext();
-  const { currentTheme } = useAppStore();
+  const { currentTheme, themeMode } = useAppStore();
   const insets = useSafeAreaInsets();
   const { addPrenda } = usePrenda();
   const lastSubmitTime = useRef(0);
@@ -47,6 +48,7 @@ export const FormScreen = () => {
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
   const [imageUri, setImageUri] = useState<string | null>(initialData?.fotoUri || null);
+  const [imageUri2, setImageUri2] = useState<string | null>(initialData?.fotoUri2 || null);
 
   const triggerShake = useCallback(() => {
     Animated.sequence([
@@ -56,6 +58,68 @@ export const FormScreen = () => {
       Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
     ]).start();
   }, [shakeAnim]);
+
+  const pickImage = async (slot: 1 | 2, source: 'camera' | 'library') => {
+    try {
+      let status;
+      if (source === 'camera') {
+        const res = await ImagePicker.requestCameraPermissionsAsync();
+        status = res.status;
+      } else {
+        const res = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        status = res.status;
+      }
+
+      if (status !== 'granted') {
+        Alert.alert('Permiso', `Se necesita acceso a la ${source === 'camera' ? 'cámara' : 'galería'}.`);
+        return;
+      }
+
+      const options = {
+        mediaTypes: ['images'] as any,
+        allowsEditing: true,
+        aspect: [1, 1] as [number, number],
+        quality: 0.8
+      };
+
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+
+      if (!result.canceled && result.assets[0]) {
+        const optimized = await manipulateAsync(
+          result.assets[0].uri,
+          [{ resize: { width: 600 } }],
+          { compress: 0.8, format: SaveFormat.JPEG }
+        );
+        const fileName = `prenda_${Date.now()}_slot${slot}.jpg`;
+        const destUri = `${FileSystem.documentDirectory}${fileName}`;
+        await FileSystem.copyAsync({ from: optimized.uri, to: destUri });
+        if (slot === 1) {
+          setImageUri(destUri);
+        } else {
+          setImageUri2(destUri);
+        }
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+    }
+  };
+
+  // handleAddSecondPhoto eliminada para evitar la advertencia del diálogo de alerta.
+
+  const removeImage = (slot: 1 | 2) => {
+    if (slot === 1) {
+      if (imageUri2) {
+        setImageUri(imageUri2);
+        setImageUri2(null);
+      } else {
+        setImageUri(null);
+      }
+    } else {
+      setImageUri2(null);
+    }
+  };
 
   const onPressIn = () => {
     Animated.spring(buttonScale, { toValue: 0.96, useNativeDriver: true, tension: 100 }).start();
@@ -109,11 +173,12 @@ export const FormScreen = () => {
       else if (entityType === 'prenda') {
         const prendaData = {
           id,
-          cajaId: parentId!,
+          cajaId: parentId || initialData?.cajaId,
           op: formData.op || '',
           estilo: formData.estilo || '',
           color: formData.color || '',
           fotoUri: imageUri || null,
+          fotoUri2: imageUri2 || null,
           estado: 1
         } as any;
 
@@ -171,11 +236,12 @@ export const FormScreen = () => {
           )}
         </View>
         <View style={[
-          styles.inputContainer, 
+          styles.inputContainer,
           { 
+            borderRadius: clayStyles.borderRadius - 4, // Ligeramente menor que el card para armonía
             backgroundColor: currentTheme.card, 
             borderColor: isFocused ? currentTheme.primary : (formData[field] && !isValid && !optional ? '#FF3B30' : currentTheme.border),
-            borderWidth: isFocused ? 2 : 1,
+            borderWidth: isFocused ? 2 : clayStyles.borderWidth,
           }
         ]}>
           <TextInput
@@ -207,10 +273,12 @@ export const FormScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <Animated.View style={[
-            styles.card, 
+            styles.card,
+            clayStyles, 
             { 
               backgroundColor: currentTheme.card, 
               borderColor: currentTheme.border,
+              shadowColor: currentTheme.borderShadow || '#000',
               transform: [{ translateX: shakeAnim }]
             }
           ]}>
@@ -225,61 +293,101 @@ export const FormScreen = () => {
                 {renderInput('OP', 'op', 'Orden de Producción', true)}
                 {renderInput('Color', 'color', 'Ej. Rojo')}
                 
-                {/* Selector de imagen */}
+                {/* Selector de imagen dinámico */}
                 <View style={styles.inputWrapper}>
                   <View style={styles.labelRow}>
                     <Text style={[styles.label, { color: currentTheme.textSecondary }]}>
-                      Foto <Text style={{ color: currentTheme.textSecondary, fontSize: 10, fontWeight: '400' }}>(opcional)</Text>
+                      Fotos <Text style={{ color: currentTheme.textSecondary, fontSize: 10, fontWeight: '400' }}>(Máx. 2 fotos, opcional)</Text>
                     </Text>
                   </View>
-                  {imageUri ? (
-                    <View style={styles.imagePreviewContainer}>
-                      <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
-                      <TouchableOpacity
-                        style={styles.removeImageBtn}
-                        onPress={() => setImageUri(null)}
-                      >
-                        <Ionicons name="close-circle" size={28} color="#e74c3c" />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
+                  
+                  {!imageUri && !imageUri2 ? (
                     <View style={styles.imagePickerRow}>
                       <TouchableOpacity
                         style={[styles.imagePickerBtn, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}
-                        onPress={async () => {
-                          const { status } = await ImagePicker.requestCameraPermissionsAsync();
-                          if (status !== 'granted') { Alert.alert('Permiso', 'Se necesita acceso a la cámara.'); return; }
-                          const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
-                          if (!result.canceled && result.assets[0]) {
-                            const optimized = await manipulateAsync(result.assets[0].uri, [{ resize: { width: 600 } }], { compress: 0.8, format: SaveFormat.JPEG });
-                            const fileName = `prenda_${Date.now()}.jpg`;
-                            const destUri = `${FileSystem.documentDirectory}${fileName}`;
-                            await FileSystem.copyAsync({ from: optimized.uri, to: destUri });
-                            setImageUri(destUri);
-                          }
-                        }}
+                        onPress={() => pickImage(1, 'camera')}
                       >
                         <Ionicons name="camera-outline" size={22} color={currentTheme.text} />
                         <Text style={[styles.imagePickerText, { color: currentTheme.text }]}>Cámara</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.imagePickerBtn, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}
-                        onPress={async () => {
-                          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                          if (status !== 'granted') { Alert.alert('Permiso', 'Se necesita acceso a la galería.'); return; }
-                          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
-                          if (!result.canceled && result.assets[0]) {
-                            const optimized = await manipulateAsync(result.assets[0].uri, [{ resize: { width: 600 } }], { compress: 0.8, format: SaveFormat.JPEG });
-                            const fileName = `prenda_${Date.now()}.jpg`;
-                            const destUri = `${FileSystem.documentDirectory}${fileName}`;
-                            await FileSystem.copyAsync({ from: optimized.uri, to: destUri });
-                            setImageUri(destUri);
-                          }
-                        }}
+                        onPress={() => pickImage(1, 'library')}
                       >
                         <Ionicons name="images-outline" size={22} color={currentTheme.text} />
                         <Text style={[styles.imagePickerText, { color: currentTheme.text }]}>Galería</Text>
                       </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={{ flexDirection: 'row', gap: 12, width: '100%', height: 120 }}>
+                      {imageUri && (
+                        <View style={[styles.imagePreviewContainer, { flex: 1, height: '100%' }]}>
+                          <Image source={{ uri: imageUri }} style={{ width: '100%', height: '100%', borderRadius: 12 }} resizeMode="cover" />
+                          <TouchableOpacity
+                            style={styles.removeImageBtn}
+                            onPress={() => removeImage(1)}
+                          >
+                            <Ionicons name="close-circle" size={22} color="#e74c3c" />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      {imageUri2 ? (
+                        <View style={[styles.imagePreviewContainer, { flex: 1, height: '100%' }]}>
+                          <Image source={{ uri: imageUri2 }} style={{ width: '100%', height: '100%', borderRadius: 12 }} resizeMode="cover" />
+                          <TouchableOpacity
+                            style={styles.removeImageBtn}
+                            onPress={() => removeImage(2)}
+                          >
+                            <Ionicons name="close-circle" size={22} color="#e74c3c" />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        imageUri && (
+                          <View style={{ flex: 1, height: '100%', gap: 8, justifyContent: 'space-between' }}>
+                            <TouchableOpacity
+                              style={[
+                                styles.imagePickerBtnCompact, 
+                                { 
+                                  flex: 1,
+                                  borderRadius: 12, 
+                                  borderWidth: 1, 
+                                  borderColor: currentTheme.border, 
+                                  backgroundColor: currentTheme.card,
+                                  justifyContent: 'center',
+                                  alignItems: 'center',
+                                  flexDirection: 'row',
+                                  gap: 6
+                                }
+                              ]}
+                              onPress={() => pickImage(2, 'camera')}
+                            >
+                              <Ionicons name="camera-outline" size={16} color={currentTheme.text} />
+                              <Text style={{ fontSize: 11, color: currentTheme.text, fontWeight: '600' }}>Cámara</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[
+                                styles.imagePickerBtnCompact, 
+                                { 
+                                  flex: 1,
+                                  borderRadius: 12, 
+                                  borderWidth: 1, 
+                                  borderColor: currentTheme.border, 
+                                  backgroundColor: currentTheme.card,
+                                  justifyContent: 'center',
+                                  alignItems: 'center',
+                                  flexDirection: 'row',
+                                  gap: 6
+                                }
+                              ]}
+                              onPress={() => pickImage(2, 'library')}
+                            >
+                              <Ionicons name="images-outline" size={16} color={currentTheme.text} />
+                              <Text style={{ fontSize: 11, color: currentTheme.text, fontWeight: '600' }}>Galería</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )
+                      )}
                     </View>
                   )}
                 </View>
@@ -295,9 +403,17 @@ export const FormScreen = () => {
               style={{ marginTop: 15 }}
             >
               <Animated.View style={[
-                styles.saveBtn, 
+                styles.saveBtn,
                 { 
+                  borderRadius: clayStyles.borderRadius - 8,
                   backgroundColor: currentTheme.primary,
+                  borderColor: currentTheme.border,
+                  borderWidth: clayStyles.borderWidth,
+                  shadowColor: currentTheme.primary,
+                  shadowOpacity: 0.3,
+                  shadowOffset: { width: 0, height: 6 },
+                  shadowRadius: 10,
+                  elevation: 5,
                   transform: [{ scale: buttonScale }],
                   opacity: loading ? 0.7 : 1
                 }
@@ -336,9 +452,10 @@ const styles = StyleSheet.create({
   inputContainer: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    borderRadius: 12, 
+    borderRadius: 20, 
     paddingHorizontal: 15,
-    height: 52,
+    height: 58,
+    borderWidth: 1,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -348,15 +465,10 @@ const styles = StyleSheet.create({
   input: { flex: 1, fontSize: 15, height: '100%', paddingVertical: 0 },
   checkIcon: { marginLeft: 10 },
   saveBtn: { 
-    height: 54, 
-    borderRadius: 14, 
+    height: 60, 
     justifyContent: 'center', 
     alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    // clayStyles applied via spread
   },
   saveText: { color: '#FFF', fontSize: 18, fontWeight: '800' },
   imagePickerRow: {
@@ -373,8 +485,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
+  imagePickerBtnCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
   imagePickerText: {
     fontSize: 13,
+    fontWeight: '600',
+  },
+  imagePickerTextCompact: {
+    fontSize: 11,
     fontWeight: '600',
   },
   imagePreviewContainer: {
@@ -390,9 +515,9 @@ const styles = StyleSheet.create({
   },
   removeImageBtn: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 6,
+    right: 6,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 14,
+    borderRadius: 12,
   },
 });

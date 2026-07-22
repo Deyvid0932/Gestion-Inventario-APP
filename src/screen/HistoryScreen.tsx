@@ -14,6 +14,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, HistoryItem } from '../types';
 import { Navbar } from '../components/Navbar';
+import { clayStyles } from '../style/theme';
 import { SearchBar } from '../components/SearchBar';
 import { useAppStore } from '../store/useAppStore';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,7 +43,7 @@ const getRelativeDateLabel = (dateString: string) => {
 export const HistoryScreen = () => {
   const db = useSQLiteContext();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
-  const { currentTheme } = useAppStore();
+  const { currentTheme, themeMode } = useAppStore();
   const [showExportModal, setShowExportModal] = useState(false);
 
   const [search, setSearch] = useState('');
@@ -136,7 +137,7 @@ export const HistoryScreen = () => {
           
           <TouchableOpacity 
             activeOpacity={0.8}
-            style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}
+            style={[styles.card, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000' }]}
             onPress={() => navigation.navigate('ExcelGrid', { cajaId: item.cajaId, nombreCaja: item.cajaNombre, targetPrendaId: item.id })}
           >
             <View style={styles.cardHeader}>
@@ -186,6 +187,8 @@ export const HistoryScreen = () => {
       {loading ? <SkeletonLoader theme={currentTheme} /> : (
         <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
           <FlatList
+            key={`history-${themeMode}`}
+            extraData={themeMode}
             style={{ flex: 1 }}
             data={results}
             renderItem={renderItem}
@@ -232,7 +235,7 @@ const styles = StyleSheet.create({
   timelineCol: { alignItems: 'center', width: 16 },
   timelineDot: { width: 8, height: 8, borderRadius: 4, marginTop: 24 },
   timelineLine: { flex: 1, width: 1.5, marginTop: -10, marginBottom: -20 },
-  card: { flex: 1, padding: 14, borderRadius: 16, borderWidth: 1, marginBottom: 15, elevation: 2 },
+  card: { flex: 1, padding: 18, marginBottom: 20 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   badgeContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   compactBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },

@@ -22,7 +22,7 @@ type NavigationProp = StackNavigationProp<RootStackParamList>;
 export const InventariosScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const db = useSQLiteContext();
-  const { currentTheme, setPrendas } = useAppStore();
+  const { currentTheme, setPrendas, themeMode } = useAppStore();
   const [inventarios, setInventarios] = useState<InventarioStats[]>([]);
   const [loading, setLoading] = useState(true);
   const lastNavTime = React.useRef(0);
@@ -93,6 +93,8 @@ export const InventariosScreen = () => {
         ) : (
           <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
             <Reanimated.FlatList
+              key={themeMode}
+              extraData={themeMode}
               data={inventarios}
               itemLayoutAnimation={LinearTransition.springify()}
               renderItem={({ item }) => (

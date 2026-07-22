@@ -50,6 +50,7 @@ const CajaContentsScreen = () => {
 
   const setPrendasGlobal = useAppStore(state => state.setPrendas);
   const currentTheme = useAppStore(state => state.currentTheme);
+  const themeMode = useAppStore(state => state.themeMode);
   const selectedPrendas = useAppStore(state => state.selectedPrendas);
   const toggleSelectPrenda = useAppStore(state => state.toggleSelectPrenda);
   const clearSelectedPrendas = useAppStore(state => state.clearSelectedPrendas);
@@ -300,6 +301,8 @@ const CajaContentsScreen = () => {
         ) : (
           <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
             <FlatList
+              key={`prendas-${themeMode}`}
+              extraData={themeMode}
               ref={flatListRef}
               data={localPrendas}
               renderItem={renderItem}

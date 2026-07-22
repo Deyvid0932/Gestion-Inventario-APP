@@ -29,7 +29,7 @@ const CajasScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const { inventarioId, nombreInventario } = route.params;
   const db = useSQLiteContext();
-  const { currentTheme } = useAppStore();
+  const { currentTheme, themeMode } = useAppStore();
 
   const [cajas, setCajas] = useState<CajaWithStats[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,6 +155,8 @@ const CajasScreen = () => {
           <SkeletonLoader theme={currentTheme} />
         ) : (
           <DraggableFlatList
+            key={`cajas-${themeMode}`}
+            extraData={themeMode}
             data={cajas}
             renderItem={renderItem}
             keyExtractor={item => item.id}

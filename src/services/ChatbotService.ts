@@ -1,5 +1,6 @@
 import { SQLiteDatabase } from 'expo-sqlite';
-import { SearchResult, extractSearchTerms, rankResults } from '../utils/nlpEngine';
+import { SearchResult } from '../utils/nlpEngine';
+import { ChatSession } from '../types';
 
 export interface ChatMessage {
   id: string;
@@ -7,15 +8,344 @@ export interface ChatMessage {
   text: string;
   matches?: SearchResult[];
   timestamp: number;
+  engineUsed?: 'ia' | 'local';
 }
 
+const BASE_QUERY = `
+  SELECT p.id, p.op, p.estilo, p.color, p.estado, p.fotoUri, p.cajaId,
+  c.nombre as cajaNombre, i.nombre as inventarioNombre, i.id as inventarioId
+  FROM prendas p
+  JOIN cajas c ON p.cajaId = c.id
+  JOIN inventarios i ON c.inventarioId = i.id
+`;
+
+const extractOP = (text: string): string | null => {
+  const cleaned = text.toUpperCase().trim();
+  const opMatch = cleaned.match(/^OP\s*(\d+)$/i);
+  if (opMatch) return opMatch[1];
+  if (/^\d{3,}$/.test(cleaned)) return cleaned;
+  return null;
+};
+
+const COLORES_CONOCIDOS = [
+  'ROJO', 'AZUL', 'VERDE', 'AMARILLO', 'NEGRO', 'BLANCO', 'GRIS', 'NARANJA',
+  'MORADO', 'ROSA', 'CELESTE', 'TURQUESA', 'BEIGE', 'CREMA', 'MARRON',
+  'CAFE', 'CORAL', 'SALMON', 'LILA', 'FUCSIA', 'DORADO', 'PLATEADO',
+  'BURGUNDY', 'VINO', 'OLIVO', 'AQUA', 'NAVY', 'RED', 'BLUE', 'GREEN',
+  'BLACK', 'WHITE', 'PINK', 'PURPLE', 'ORANGE', 'YELLOW', 'BROWN', 'GREY'
+];
+
+const extractColor = (text: string): string | null => {
+  const cleaned = text.toUpperCase().replace(/[^A-Z0-9\s]/g, '').trim();
+  const colorMatch = cleaned.match(/COLOR\s+(\w+)/);
+  if (colorMatch) return colorMatch[1];
+  if (COLORES_CONOCIDOS.includes(cleaned)) return cleaned;
+  const words = cleaned.split(/\s+/);
+  for (const word of words) {
+    if (COLORES_CONOCIDOS.includes(word)) return word;
+  }
+  return null;
+};
+
+const searchLocal = async (
+  db: SQLiteDatabase,
+  message: string
+): Promise<{ text: string; matches: SearchResult[] }> => {
+  const input = message.trim();
+  if (!input) {
+    return { text: '¿Qué estilo, OP o color deseas buscar?', matches: [] };
+  }
+
+  // 1. OP (única)
+  const op = extractOP(input);
+  if (op) {
+    const results = await db.getAllAsync<SearchResult>(
+      `${BASE_QUERY} WHERE UPPER(trim(p.op)) = ?`, [op]
+    );
+    if (results.length > 0) {
+      return { text: `✅ Se encontró la prenda con OP ${op}:`, matches: results };
+    }
+    return { text: `❌ No se encontró ninguna prenda con OP "${op}".`, matches: [] };
+  }
+
+  // 2. Color (máx 5)
+  const color = extractColor(input);
+  if (color) {
+    const results = await db.getAllAsync<SearchResult>(
+      `${BASE_QUERY} WHERE UPPER(trim(p.color)) LIKE ? LIMIT 5`, [`%${color}%`]
+    );
+    if (results.length > 0) {
+      return { text: `🎨 Encontré ${results.length} prenda(s) de color "${color}" (máx. 5):`, matches: results };
+    }
+    return { text: `❌ No se encontraron prendas de color "${color}".`, matches: [] };
+  }
+
+  const estilo = input.toUpperCase().trim();
+  const exactResults = await db.getAllAsync<SearchResult>(
+    `${BASE_QUERY} WHERE UPPER(trim(p.estilo)) = ?`, [estilo]
+  );
+  if (exactResults.length > 0) {
+    return { text: `✅ Se encontraron ${exactResults.length} prenda(s) con estilo "${estilo}":`, matches: exactResults };
+  }
+
+  const partialResults = await db.getAllAsync<SearchResult>(
+    `${BASE_QUERY} WHERE UPPER(p.estilo) LIKE ? LIMIT 15`, [`%${estilo}%`]
+  );
+  if (partialResults.length > 0) {
+    return { text: `🔍 No encontré coincidencia exacta para "${estilo}", pero encontré ${partialResults.length} resultado(s) similares:`, matches: partialResults };
+  }
+
+  const generalResults = await db.getAllAsync<SearchResult>(
+    `${BASE_QUERY} WHERE UPPER(p.estilo) LIKE ? OR UPPER(p.op) LIKE ? OR UPPER(p.color) LIKE ? LIMIT 10`,
+    [`%${estilo}%`, `%${estilo}%`, `%${estilo}%`]
+  );
+  if (generalResults.length > 0) {
+    return { text: `🔍 Resultados relacionados con "${input}":`, matches: generalResults };
+  }
+
+  return { text: `❌ No se encontró nada para "${input}". Intenta con otro estilo, OP o color.`, matches: [] };
+};
+
+const executeSearch = async (
+  db: SQLiteDatabase,
+  tipo: string,
+  valor: string
+): Promise<{ text: string; matches: SearchResult[] }> => {
+  const term = valor.toUpperCase().trim();
+
+  if (tipo === 'OP') {
+    const results = await db.getAllAsync<SearchResult>(
+      `${BASE_QUERY} WHERE UPPER(trim(p.op)) = ?`, [term]
+    );
+    if (results.length > 0) return { text: `✅ Se encontró la prenda con OP ${term}:`, matches: results };
+    return { text: `❌ No se encontró ninguna prenda con OP "${term}".`, matches: [] };
+  }
+
+  if (tipo === 'COLOR') {
+    const results = await db.getAllAsync<SearchResult>(
+      `${BASE_QUERY} WHERE UPPER(trim(p.color)) LIKE ? LIMIT 5`, [`%${term}%`]
+    );
+    if (results.length > 0) return { text: `🎨 Encontré ${results.length} prenda(s) de color "${term}" (máx. 5):`, matches: results };
+    return { text: `❌ No se encontraron prendas de color "${term}".`, matches: [] };
+  }
+
+  if (tipo === 'ESTILO') {
+    const exact = await db.getAllAsync<SearchResult>(
+      `${BASE_QUERY} WHERE UPPER(trim(p.estilo)) = ?`, [term]
+    );
+    if (exact.length > 0) return { text: `✅ Se encontraron ${exact.length} prenda(s) con estilo "${term}":`, matches: exact };
+
+    const partial = await db.getAllAsync<SearchResult>(
+      `${BASE_QUERY} WHERE UPPER(p.estilo) LIKE ? LIMIT 15`, [`%${term}%`]
+    );
+    if (partial.length > 0) return { text: `🔍 Resultados similares a "${term}":`, matches: partial };
+    return { text: `❌ No se encontró ninguna prenda con estilo "${term}".`, matches: [] };
+  }
+
+  if (tipo === 'CAJA') {
+    const result = await db.getFirstAsync<{ total: number }>(
+      `SELECT count(*) as total FROM prendas p JOIN cajas c ON p.cajaId = c.id WHERE UPPER(trim(c.nombre)) LIKE ?`,
+      [`%${term}%`]
+    );
+    return { text: `📦 La ${valor} actualmente tiene ${result?.total || 0} prendas.`, matches: [] };
+  }
+
+  if (tipo === 'INVENTARIO') {
+    const totalCajas = await db.getFirstAsync<{ total: number }>(`SELECT count(*) as total FROM cajas`);
+    const detalle = await db.getAllAsync<{ nombre: string, cantidad: number }>(
+      `SELECT c.nombre, count(p.id) as cantidad FROM cajas c LEFT JOIN prendas p ON p.cajaId = c.id GROUP BY c.id ORDER BY c.nombre`
+    );
+    const lista = detalle.map(c => `• ${c.nombre}: ${c.cantidad} prendas`).join('\n');
+    return { text: `📊 Resumen del inventario:\n\nTotal de cajas: ${totalCajas?.total || 0}\n\n${lista}`, matches: [] };
+  }
+  return executeSearch(db, 'ESTILO', valor);
+};
+
+
+// Contador diario de tokens/requests para no exceder free tier
+const groqQuota = {
+  requestsUsed: 0,
+  tokensUsed: 0,
+  date: new Date().toDateString(),
+  resetIfNewDay() {
+    const today = new Date().toDateString();
+    if (this.date !== today) {
+      this.requestsUsed = 0;
+      this.tokensUsed = 0;
+      this.date = today;
+    }
+  },
+  canMakeRequest() {
+    this.resetIfNewDay();
+    return this.requestsUsed < 1000 && this.tokensUsed < 100000;
+  },
+  logUsage(requests: number, tokens: number) {
+    this.requestsUsed += requests || 1;
+    this.tokensUsed += tokens || 0;
+  }
+};
+
+const askGroqToClassify = async (
+  message: string,
+  history: ChatMessage[]
+): Promise<{ tipo: string; valor: string } | null> => {
+  const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY;
+  if (!apiKey) {
+    console.warn('[Groq] Falta EXPO_PUBLIC_GROQ_API_KEY. Se usará el motor local.');
+    return null;
+  }
+
+  if (!groqQuota.canMakeRequest()) {
+    console.warn('[Groq] Cuota diaria agotada. Se usará el motor local.');
+    return null;
+  }
+
+  try {
+    const conversationContext = history
+      .slice(-4)
+      .reverse()
+      .map(item => `${item.sender === 'user' ? 'Usuario' : 'Asistente'}: ${item.text}`)
+      .join('\n');
+
+    const prompt = `Contexto reciente de la conversación:
+${conversationContext || '(No hay mensajes anteriores)'}
+
+Analiza la siguiente frase nueva de un usuario de una app de inventario de ropa: "${message}"
+
+Clasifícala en uno de estos tipos:
+- OP: el usuario menciona un número de OP o código.
+- COLOR: el usuario busca por un color específico.
+- ESTILO: el usuario busca por nombre/código de estilo de prenda.
+- CAJA: el usuario pregunta cuántas prendas hay en una caja específica.
+- INVENTARIO: el usuario pide un resumen general del inventario.
+- SALUDO: el usuario solo saluda (hola, buenos días, etc).
+- LIBRE: cualquier otra cosa que NO sea una búsqueda en la base de datos: preguntas generales, charla casual, dudas sobre cómo usar la app, sugerencias, quejas, agradecimientos, preguntas sobre ti mismo, etc.
+
+Si el tipo es LIBRE, responde directamente la conversación en el campo "valor" (breve, directo, en español). Si es cualquier otro tipo, en "valor" pon el término extraído para buscar en la base de datos.
+
+Responde ÚNICAMENTE con un objeto JSON con este formato exacto, sin explicaciones ni bloques de código markdown. Ejemplos:
+{"tipo": "ESTILO", "valor": "CAMISA001"}
+{"tipo": "LIBRE", "valor": "¡De nada! Si necesitas algo más, aquí estoy."}`;
+
+    console.log('[Groq] Enviando solicitud al modelo llama-3.3-70b-versatile.');
+    const response = await fetch(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.2,
+          max_tokens: 600
+        })
+      }
+    );
+
+    const responseText = await response.text();
+    let data: any;
+
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      console.error('[Groq] La respuesta no es JSON:', responseText);
+      return null;
+    }
+
+    if (!response.ok || data.error) {
+      console.error('[Groq] Error de API:', JSON.stringify({
+        status: response.status,
+        statusText: response.statusText,
+        error: data.error || data
+      }, null, 2));
+      return null;
+    }
+
+    const usage = data.usage || {};
+    groqQuota.logUsage(1, usage.total_tokens || 0);
+
+    const remainingReq = response.headers.get('x-ratelimit-remaining-requests');
+    const remainingTok = response.headers.get('x-ratelimit-remaining-tokens');
+    console.log('[Groq] Consumo:', {
+      gastados: `${usage.total_tokens || 0} tokens`,
+      hoy: `${groqQuota.requestsUsed}/1000 req, ${groqQuota.tokensUsed}/100000 tok`,
+      restantes: remainingReq ? `${remainingReq} req, ${remainingTok} tok` : 'N/A'
+    });
+
+    const rawText = data.choices?.[0]?.message?.content || '';
+
+    if (!rawText.trim()) {
+      return { tipo: 'LIBRE', valor: 'No pude interpretar tu mensaje. ¿Puedes reformularlo?' };
+    }
+
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return null;
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      tipo: (parsed.tipo || 'LIBRE').toUpperCase(),
+      valor: String(parsed.valor || message)
+    };
+
+  } catch (e) {
+    console.error('❌ ERROR CRÍTICO DE PARSEO:', (e as Error).message);
+    return null;
+  }
+};
+
+
 export const ChatbotService = {
-  getHistory: async (db: SQLiteDatabase): Promise<ChatMessage[]> => {
+  getSessions: async (db: SQLiteDatabase): Promise<ChatSession[]> => {
+    try {
+      return await db.getAllAsync<ChatSession>('SELECT * FROM chat_sessions ORDER BY updatedAt DESC');
+    } catch (e) {
+      console.error('Error fetching chat sessions', e);
+      return [];
+    }
+  },
+
+  createSession: async (db: SQLiteDatabase, title: string = 'Nueva sesión'): Promise<string> => {
+    try {
+      const id = Date.now().toString();
+      await db.runAsync(
+        'INSERT INTO chat_sessions (id, title, createdAt, updatedAt) VALUES (?, ?, ?, ?)',
+        [id, title, Date.now(), Date.now()]
+      );
+      return id;
+    } catch (e) {
+      console.error('Error creating chat session', e);
+      return Date.now().toString();
+    }
+  },
+
+  deleteSession: async (db: SQLiteDatabase, sessionId: string): Promise<void> => {
+    try {
+      await db.runAsync('DELETE FROM chat_history WHERE sessionId = ?', [sessionId]);
+      await db.runAsync('DELETE FROM chat_sessions WHERE id = ?', [sessionId]);
+    } catch (e) {
+      console.error('Error deleting chat session', e);
+    }
+  },
+
+  updateSessionTitle: async (db: SQLiteDatabase, sessionId: string, title: string): Promise<void> => {
+    try {
+      await db.runAsync('UPDATE chat_sessions SET title = ?, updatedAt = ? WHERE id = ?', [title, Date.now(), sessionId]);
+    } catch (e) {
+      console.error('Error updating session title', e);
+    }
+  },
+
+  getHistoryBySession: async (db: SQLiteDatabase, sessionId: string): Promise<ChatMessage[]> => {
     try {
       const history = await db.getAllAsync<{ id: string, sender: string, text: string, matches_json: string, timestamp: number }>(
-        'SELECT * FROM chat_history ORDER BY timestamp DESC LIMIT 50'
+        'SELECT * FROM chat_history WHERE sessionId = ? ORDER BY timestamp DESC LIMIT 50',
+        [sessionId]
       );
-      
       return history.map(row => ({
         id: row.id,
         sender: row.sender as 'user' | 'bot',
@@ -24,121 +354,48 @@ export const ChatbotService = {
         timestamp: row.timestamp
       }));
     } catch (e) {
-      console.error('Error fetching chat history', e);
+      console.error('Error fetching chat history by session', e);
       return [];
     }
   },
 
-  clearHistory: async (db: SQLiteDatabase): Promise<void> => {
-    await db.runAsync('DELETE FROM chat_history');
-  },
-
-  saveMessage: async (db: SQLiteDatabase, msg: ChatMessage): Promise<void> => {
+  saveMessage: async (db: SQLiteDatabase, msg: ChatMessage, sessionId: string): Promise<void> => {
     try {
       const matchesStr = msg.matches ? JSON.stringify(msg.matches) : null;
       await db.runAsync(
-        'INSERT INTO chat_history (id, sender, text, matches_json, timestamp) VALUES (?, ?, ?, ?, ?)',
-        [msg.id, msg.sender, msg.text, matchesStr, msg.timestamp]
+        'INSERT INTO chat_history (id, sender, text, matches_json, timestamp, sessionId) VALUES (?, ?, ?, ?, ?, ?)',
+        [msg.id, msg.sender, msg.text, matchesStr, msg.timestamp, sessionId]
       );
+      await db.runAsync('UPDATE chat_sessions SET updatedAt = ? WHERE id = ?', [Date.now(), sessionId]);
     } catch (e) {
       console.error('Error saving chat message', e);
     }
   },
 
-  searchAndRespond: async (db: SQLiteDatabase, message: string): Promise<{ text: string, matches: SearchResult[] }> => {
-    
-    // 1. Manejo de saludos o mensajes cortos
-    const lowerMessage = message.toLowerCase().trim();
-    if (['hola', 'hey', 'buenas', 'saludos'].includes(lowerMessage)) {
-      return {
-        text: "¡Hola! Soy tu asistente de inventario. Dime qué prenda buscas (ej. 'dónde está la estilo KHM ...').",
-        matches: []
-      };
+  clearHistory: async (db: SQLiteDatabase): Promise<void> => {
+    await db.runAsync('DELETE FROM chat_history');
+    await db.runAsync('DELETE FROM chat_sessions');
+  },
+
+
+  searchAndRespond: async (db: SQLiteDatabase, message: string, sessionId: string): Promise<{ text: string, matches: SearchResult[], engineUsed: 'ia' | 'local' }> => {
+    const history = await ChatbotService.getHistoryBySession(db, sessionId);
+    const classification = await askGroqToClassify(message, history.slice(0, 10));
+
+    if (classification) {
+      if (classification.tipo === 'SALUDO') {
+        return { text: '¡Hola! 👋 Soy tu asistente de inventario. Puedes buscar por estilo, OP o color. ¿Qué necesitas?', matches: [], engineUsed: 'ia' };
+      }
+
+      if (classification.tipo === 'LIBRE' || classification.tipo === 'CONVERSACION') {
+        return { text: classification.valor, matches: [], engineUsed: 'ia' };
+      }
+
+      const searchRes = await executeSearch(db, classification.tipo, classification.valor);
+      return { ...searchRes, engineUsed: 'ia' };
     }
 
-    // 2. Extraer keywords
-    const terms = extractSearchTerms(message);
-    if (terms.length === 0) {
-      return { 
-        text: "No entendí muy bien qué buscas. Intenta decirme el OP, estilo o color.",
-        matches: []
-      };
-    }
-
-    // 3. Buscar todo y aplicar Levenshtein
-    const candidates = await db.getAllAsync<SearchResult>(`
-      SELECT 
-        p.id, p.op, p.estilo, p.color, p.estado, p.fotoUri, p.cajaId,
-        c.nombre as cajaNombre,
-        i.nombre as inventarioNombre,
-        i.id as inventarioId
-      FROM prendas p
-      JOIN cajas c ON p.cajaId = c.id
-      JOIN inventarios i ON c.inventarioId = i.id
-    `);
-
-    const topMatches = rankResults(candidates, terms);
-
-    if (topMatches.length === 0) {
-      return {
-        text: "Mmm... no encontré ninguna coincidencia en la base de datos para tu búsqueda.",
-        matches: []
-      };
-    }
-
-    // 4. Llamada a Gemini usando Fetch (seguro para React Native)
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-    if (!apiKey) {
-      return {
-        text: "¡Encontré estas prendas! (Gemini API Key no detectada)",
-        matches: topMatches
-      };
-    }
-
-    try {
-      const contextData = topMatches.map((m, i) => 
-        `[#${i+1}] OP: ${m.op || 'Sin OP'}, Estilo: ${m.estilo}, Color: ${m.color}, Ubicación: Caja '${m.cajaNombre}' en Lote '${m.inventarioNombre}'`
-      ).join('\n');
-
-      const prompt = `
-Eres un asistente de inventario amable.
-Pregunta del usuario: "${message}"
-
-Hemos encontrado estas prendas en la base de datos (Top 5 más cercanas):
-${contextData}
-
-Responde de forma MUY breve (1-2 frases). 
-- Si hay una sola prenda en la lista, di que encontraste la coincidencia exacta y dónde está.
-- Si hay varias prendas, di que no encontraste una coincidencia exacta pero que estas son las opciones más similares o cercanas.
-- No listes las prendas con viñetas, yo mostraré tarjetas interactivas debajo de tu respuesta.
-`;
-
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 150
-          }
-        })
-      });
-
-      const data = await response.json();
-      const botText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      return {
-        text: botText || "¡Encontré estas prendas!",
-        matches: topMatches
-      };
-
-    } catch (e) {
-      console.error("Gemini API Error:", e);
-      return {
-        text: "¡Aquí están las coincidencias! (Hubo un problema de conexión con el bot)",
-        matches: topMatches
-      };
-    }
+    const localRes = await searchLocal(db, message);
+    return { ...localRes, engineUsed: 'local' };
   }
 };

@@ -1,7 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
-  const DATABASE_VERSION = 9;
+  const DATABASE_VERSION = 11;
   
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -42,6 +42,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         estilo TEXT NOT NULL,
         color TEXT NOT NULL,
         fotoUri TEXT,
+        fotoUri2 TEXT,
         estado INTEGER NOT NULL DEFAULT 1,
         fechaCreacion TEXT NOT NULL,
         FOREIGN KEY (cajaId) REFERENCES cajas (id) ON DELETE CASCADE
@@ -154,6 +155,53 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 9);
       `);
       currentDbVersion = 9;
+    }
+
+    if (currentDbVersion === 9) {
+      try {
+        await db.runAsync('ALTER TABLE prendas ADD COLUMN fotoUri2 TEXT;');
+      } catch (e) {
+        // Columna ya existe, ignorar error
+      }
+      await db.execAsync(`
+        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 10);
+      `);
+      currentDbVersion = 10;
+    }
+
+    if (currentDbVersion === 10) {
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+          id TEXT PRIMARY KEY NOT NULL,
+          title TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          updatedAt INTEGER NOT NULL
+        );
+      `);
+      
+      try {
+        await db.runAsync('ALTER TABLE chat_history ADD COLUMN sessionId TEXT;');
+      } catch (e) {
+        // Columna ya existe
+      }
+      
+      // Assign all existing messages to a default session if they don't have one
+      const historyCountResult = await db.getFirstAsync<{count: number}>('SELECT COUNT(*) as count FROM chat_history WHERE sessionId IS NULL');
+      if (historyCountResult && historyCountResult.count > 0) {
+        const defaultSessionId = Date.now().toString();
+        await db.runAsync('INSERT INTO chat_sessions (id, title, createdAt, updatedAt) VALUES (?, ?, ?, ?)', [
+          defaultSessionId,
+          'Sesión anterior',
+          Date.now(),
+          Date.now()
+        ]);
+        await db.runAsync('UPDATE chat_history SET sessionId = ? WHERE sessionId IS NULL', [defaultSessionId]);
+      }
+
+      await db.execAsync(`
+        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 11);
+      `);
+      currentDbVersion = 11;
     }
   }
 }

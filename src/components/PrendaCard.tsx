@@ -17,6 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Prenda } from '../types';
 import { getColorHex } from '../utils/colorUtils';
+import { clayStyles } from '../style/theme';
 
 
 interface PrendaCardProps {
@@ -77,9 +78,14 @@ export const PrendaCard = React.memo(({
 
     return {
       backgroundColor: withTiming(bgColor, { duration: 250 }),
-      elevation: 0,
+      elevation: clayStyles.elevation,
       borderColor: animatedBorderColor,
-      borderWidth: 1,
+      borderWidth: clayStyles.borderWidth,
+      shadowColor: theme.borderShadow || '#000',
+      shadowOpacity: clayStyles.shadowOpacity,
+      shadowRadius: clayStyles.shadowRadius,
+      shadowOffset: clayStyles.shadowOffset,
+      borderRadius: clayStyles.borderRadius,
       transform: [{ scale: 1 + (highlightOpacity.value * 0.02) }]
     };
   });
@@ -149,7 +155,7 @@ export const PrendaCard = React.memo(({
             <View style={styles.itemContent}>
               <View style={styles.itemHeader}>
                 <View style={styles.titleRow}>
-                  <View style={[styles.compactBadge, { backgroundColor: theme.background === '#000000' ? '#27272A' : '#F4F4F5', borderWidth: 1, borderColor: theme.border }]}>
+                  <View style={[styles.compactBadge, { borderWidth: 1, borderColor: theme.border }]}>
                     <Text style={[styles.itemStyle, { color: theme.text, fontSize: historyMode ? 14 : 17 }]} numberOfLines={1}>
                       {item.estilo}
                     </Text>
@@ -189,19 +195,34 @@ export const PrendaCard = React.memo(({
                       </View>
                     </View>
 
-                    {item.fotoUri && (
-                      <TouchableOpacity
-                        onPress={() => onImagePress(item.fotoUri)}
-                        activeOpacity={0.85}
-                        style={[styles.thumbnailContainer, { borderColor: theme.border }]}
-                      >
-                        <Image
-                          source={{ uri: item.fotoUri }}
-                          style={styles.thumbnail}
-                          resizeMode="cover"
-                        />
-                      </TouchableOpacity>
-                    )}
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      {item.fotoUri && (
+                        <TouchableOpacity
+                          onPress={() => onImagePress(item.fotoUri)}
+                          activeOpacity={0.85}
+                          style={[styles.thumbnailContainer, { borderColor: theme.border }]}
+                        >
+                          <Image
+                            source={{ uri: item.fotoUri }}
+                            style={styles.thumbnail}
+                            resizeMode="cover"
+                          />
+                        </TouchableOpacity>
+                      )}
+                      {item.fotoUri2 && (
+                        <TouchableOpacity
+                          onPress={() => onImagePress(item.fotoUri2)}
+                          activeOpacity={0.85}
+                          style={[styles.thumbnailContainer, { borderColor: theme.border }]}
+                        >
+                          <Image
+                            source={{ uri: item.fotoUri2 }}
+                            style={styles.thumbnail}
+                            resizeMode="cover"
+                          />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </>
                 )}
               </View>
@@ -225,24 +246,20 @@ export const PrendaCard = React.memo(({
     prev.item.color === next.item.color &&
     prev.item.op === next.item.op &&
     prev.item.fotoUri === next.item.fotoUri &&
+    prev.item.fotoUri2 === next.item.fotoUri2 &&
     prev.theme === next.theme &&
     prev.historyMode === next.historyMode;
 });
 
 const styles = StyleSheet.create({
   shadowWrapper: {
-    minHeight: 96,
-    marginBottom: 12,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 2,
-    borderWidth: 1,
+    minHeight: 104,
+    marginBottom: 16,
+    // Estilos manejados por animatedStyle
   },
   innerCard: {
     flexDirection: 'row',
-    borderRadius: 16,
+    borderRadius: 26, // Ligeramente menor que el padre
     overflow: 'hidden',
     flex: 1,
   },

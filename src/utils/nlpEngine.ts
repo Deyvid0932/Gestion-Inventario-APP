@@ -10,11 +10,14 @@ export const normalizeText = (text: string): string => {
 
 export const extractSearchTerms = (text: string): string[] => {
   const normalized = normalizeText(text);
-  const stopWords = ['donde', 'esta', 'la', 'el', 'los', 'las', 'un', 'una', 'busca', 'encuentra', 'en', 'de', 'para', 'por', 'con'];
+  const stopWords = [
+    'donde', 'esta', 'la', 'el', 'los', 'las', 'un', 'una', 'busca', 'encuentra', 'en', 'de', 'para', 'por', 'con',
+    'op', 'color', 'estilo', 'lote', 'lotes', 'caja', 'cajas', 'prenda', 'prendas'
+  ];
   
   return normalized
     .split(' ')
-    .filter(word => !stopWords.includes(word) && word.length > 1);
+    .filter(word => !stopWords.includes(word) && word.length >= 1); // Permitir términos cortos como "1" o "a" si no son stopWords
 };
 
 export const levenshteinDistance = (a: string, b: string): number => {
@@ -60,54 +63,128 @@ export interface SearchResult {
   score?: number; 
 }
 
-export const rankResults = (results: SearchResult[], searchTerms: string[]): SearchResult[] => {
-  const fullSearchTerm = searchTerms.join(' ');
+export const rankResults = (results: SearchResult[], searchTerms: string[], originalQuery?: string): SearchResult[] => {
+  const queryNorm = originalQuery ? normalizeText(originalQuery) : '';
+  
+  // Detectar si el usuario busca específicamente por un campo usando prefijos
+  const hasOpKeyword = /\bop\b/.test(queryNorm);
+  const hasCajaKeyword = /\bcaja\b/.test(queryNorm);
+  const hasLoteKeyword = /\blote\b/.test(queryNorm);
+  const hasColorKeyword = /\bcolor\b/.test(queryNorm);
+  const hasEstiloKeyword = /\bestilo\b/.test(queryNorm);
 
   const ranked = results.map(item => {
-    let score = Number.MAX_SAFE_INTEGER;
+    let matchScore = 0;
+    let levenshteinPenalty = 0;
     
     const opNorm = item.op ? normalizeText(item.op) : '';
     const estiloNorm = item.estilo ? normalizeText(item.estilo) : '';
     const colorNorm = item.color ? normalizeText(item.color) : '';
+    const cajaNorm = item.cajaNombre ? normalizeText(item.cajaNombre) : '';
+    const invNorm = item.inventarioNombre ? normalizeText(item.inventarioNombre) : '';
 
-    // 1. Exact match de toda la frase de búsqueda (Máxima Prioridad)
-    if (opNorm === fullSearchTerm || estiloNorm === fullSearchTerm || colorNorm === fullSearchTerm) {
-      return { ...item, score: -1 };
-    }
-
-    // 2. Comparar cada término individual
     for (const term of searchTerms) {
-      const opDist = opNorm ? levenshteinDistance(term, opNorm) : Number.MAX_SAFE_INTEGER;
-      const estiloDist = estiloNorm ? levenshteinDistance(term, estiloNorm) : Number.MAX_SAFE_INTEGER;
-      const colorDist = colorNorm ? levenshteinDistance(term, colorNorm) : Number.MAX_SAFE_INTEGER;
+      let termMatched = false;
       
-      // Exact match parcial
-      if (opNorm === term || estiloNorm === term || colorNorm === term) return { ...item, score: 0 };
+      // 1. Si el usuario especificó un prefijo de búsqueda, priorizar ese campo
+      if (hasOpKeyword) {
+        if (opNorm === term) {
+          matchScore += 100; // Boost masivo
+          termMatched = true;
+        } else if (opNorm.includes(term)) {
+          matchScore += 40;
+          termMatched = true;
+        }
+      }
       
-      // Contains
-      if (opNorm.includes(term) || estiloNorm.includes(term) || colorNorm.includes(term)) return { ...item, score: 0.5 };
-      
-      const minDist = Math.min(opDist, estiloDist, colorDist);
-      if (minDist < score) score = minDist;
+      if (hasCajaKeyword) {
+        if (cajaNorm === term || cajaNorm.includes(term)) {
+          matchScore += 100;
+          termMatched = true;
+        }
+      }
+
+      if (hasLoteKeyword) {
+        if (invNorm === term || invNorm.includes(term)) {
+          matchScore += 100;
+          termMatched = true;
+        }
+      }
+
+      if (hasColorKeyword) {
+        if (colorNorm === term || colorNorm.includes(term)) {
+          matchScore += 100;
+          termMatched = true;
+        }
+      }
+
+      if (hasEstiloKeyword) {
+        if (estiloNorm === term || estiloNorm.includes(term)) {
+          matchScore += 100;
+          termMatched = true;
+        }
+      }
+
+      // 2. Si no fue capturado por un filtro específico, buscar de manera general
+      if (!termMatched) {
+        const properties = [opNorm, estiloNorm, colorNorm, cajaNorm, invNorm];
+        for (const prop of properties) {
+          if (!prop) continue;
+          if (prop === term) {
+            matchScore += 10;
+            termMatched = true;
+          } else if (prop.includes(term)) {
+            matchScore += 4;
+            termMatched = true;
+          }
+        }
+      }
+
+      // 3. Evaluar distancia de Levenshtein (fuzzy matching para términos largos)
+      if (!termMatched && term.length >= 3) {
+        const properties = [opNorm, estiloNorm, colorNorm, cajaNorm, invNorm];
+        let minPropDist = Number.MAX_SAFE_INTEGER;
+        for (const prop of properties) {
+          if (!prop) continue;
+          const words = prop.split(' ');
+          for (const word of words) {
+            const dist = levenshteinDistance(term, word);
+            if (dist < minPropDist) minPropDist = dist;
+          }
+        }
+        
+        if (minPropDist <= 2) {
+          matchScore += (3 - minPropDist);
+          levenshteinPenalty += minPropDist;
+        } else {
+          levenshteinPenalty += 5;
+        }
+      } else if (!termMatched) {
+        levenshteinPenalty += 1;
+      }
     }
-    
-    return { ...item, score };
+
+    const finalScore = -matchScore + (levenshteinPenalty * 0.1);
+    return { ...item, score: finalScore };
   });
 
-  // 1. Filtrar coincidencias perfectas o exactas
-  const exactMatches = ranked.filter(item => item.score! <= 0);
-  
-  if (exactMatches.length > 0) {
-    // Si hay una coincidencia perfecta (score -1) devuelve solo esa(s)
-    const perfectMatches = exactMatches.filter(item => item.score === -1);
-    if (perfectMatches.length > 0) return perfectMatches.slice(0, 1);
-    
-    return exactMatches.sort((a, b) => a.score! - b.score!);
+  const sorted = ranked
+    .filter(item => item.score! < 0)
+    .sort((a, b) => a.score! - b.score!);
+
+  if (sorted.length === 0) {
+    return [];
   }
 
-  // 2. Si no hay exactos, devolver los fuzzy cercanos (score <= 2)
-  return ranked
-    .filter(item => item.score! <= 2)
-    .sort((a, b) => a.score! - b.score!)
-    .slice(0, 5); // TOP 5
+  const bestScore = sorted[0].score!;
+
+  // 1. Si la mejor coincidencia es exacta (boost dirigido <= -40 o exact match general <= -10)
+  if (bestScore <= -10) {
+    // Retornar solo las coincidencias de nivel exacto, descartando las parciales/fuzzy
+    // Damos un margen de +3 por pequeñas penalizaciones de levenshtein en otros términos de la frase
+    return sorted.filter(item => item.score! <= bestScore + 3);
+  }
+
+  // 2. Si no hay exactos, retornar los cercanos/parciales (fuzzy) ordenados
+  return sorted.slice(0, 30);
 };

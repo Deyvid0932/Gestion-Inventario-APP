@@ -22,7 +22,7 @@ export const PrendaService = {
       }
 
       await db.runAsync(
-        'INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fechaCreacion) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, fechaCreacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [
           prenda.id, 
           prenda.cajaId, 
@@ -30,6 +30,7 @@ export const PrendaService = {
           prenda.estilo, 
           prenda.color, 
           prenda.fotoUri || null,
+          prenda.fotoUri2 || null,
           prenda.fechaCreacion || new Date().toISOString()
         ]
       );
@@ -59,8 +60,8 @@ export const PrendaService = {
       }
 
       await db.runAsync(
-        'UPDATE prendas SET op = ?, estilo = ?, color = ?, fotoUri = ? WHERE id = ?',
-        [prenda.op || '', prenda.estilo, prenda.color, prenda.fotoUri || null, prenda.id]
+        'UPDATE prendas SET op = ?, estilo = ?, color = ?, fotoUri = ?, fotoUri2 = ? WHERE id = ?',
+        [prenda.op || '', prenda.estilo, prenda.color, prenda.fotoUri || null, prenda.fotoUri2 || null, prenda.id]
       );
       return { success: true };
     } catch (e) {
@@ -81,9 +82,6 @@ export const PrendaService = {
 
   movePrenda: async (db: SQLiteDatabase, prendaId: string, newCajaId: string) => {
     try {
-      // Opcional: Podrías verificar si ya existe un OP duplicado en la nueva caja,
-      // pero para mantenerlo simple, solo hacemos el UPDATE.
-      // Actualizamos también fechaCreacion para que aparezca arriba en la nueva caja
       const now = new Date().toISOString();
       await db.runAsync('UPDATE prendas SET cajaId = ?, fechaCreacion = ? WHERE id = ?', [newCajaId, now, prendaId]);
       return { success: true };
@@ -129,7 +127,7 @@ export const PrendaService = {
       await db.withTransactionAsync(async () => {
         for (const prenda of prendas) {
           await db.runAsync(
-            'INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fechaCreacion) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, fechaCreacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [
               prenda.id, 
               prenda.cajaId, 
@@ -137,6 +135,7 @@ export const PrendaService = {
               prenda.estilo, 
               prenda.color, 
               prenda.fotoUri || null,
+              prenda.fotoUri2 || null,
               prenda.fechaCreacion || new Date().toISOString()
             ]
           );

@@ -31,6 +31,7 @@ export interface Prenda {
   color: string;
   estado: 1 | 0 ; 
   fotoUri?: string | null;
+  fotoUri2?: string | null;
   fechaCreacion?: string;
 }
 
@@ -58,3 +59,10 @@ export type BottomTabParamList = {
   History: undefined;
   GarmentDetails: { cajaId: string; nombreCaja: string };
 };
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+}

@@ -9,6 +9,7 @@ import { Navbar } from '../components/Navbar';
 import { useAppStore } from '../store/useAppStore';
 import { StatsService, DashboardStats } from '../services/StatsService';
 import { SkeletonLoader } from '../components/SkeletonLoader';
+import { clayStyles } from '../style/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -64,7 +65,7 @@ export const StatsScreen = () => {
               <Animated.View 
                 entering={FadeInUp.delay(index * 100).springify()}
                 key={config.key} 
-                style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}
+                style={[styles.card, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000' }]}
               >
                 <View style={[styles.iconBox, { backgroundColor: config.color + '20' }]}>
                   <Ionicons name={config.icon as any} size={28} color={config.color} />
@@ -80,7 +81,7 @@ export const StatsScreen = () => {
           {/* Caja con más prendas (Full Width) */}
           <Animated.View 
             entering={FadeInUp.delay(STATS_CONFIG.length * 100).springify()}
-            style={[styles.fullCard, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}
+            style={[styles.fullCard, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000' }]}
           >
             <View style={styles.fullCardHeader}>
               <View style={[styles.iconBox, { backgroundColor: '#E8439320' }]}>
@@ -96,7 +97,7 @@ export const StatsScreen = () => {
           
           {/* Gráfico de Barras: Top 5 Cajas */}
           {stats.top5Cajas && stats.top5Cajas.length > 0 && (
-            <Animated.View entering={FadeInUp.delay((STATS_CONFIG.length + 1) * 100).springify()} style={[styles.chartCard, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+            <Animated.View entering={FadeInUp.delay((STATS_CONFIG.length + 1) * 100).springify()} style={[styles.chartCard, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000' }]}>
               <Text style={[styles.chartTitle, { color: currentTheme.text }]}>Top 5 Cajas (Prendas)</Text>
               <BarChart
                 data={{
@@ -133,7 +134,7 @@ export const StatsScreen = () => {
 
           {/* Gráfico Circular: Estado de Prendas */}
           {(stats.prendasActivas > 0 || stats.prendasInactivas > 0) && (
-            <Animated.View entering={FadeInUp.delay((STATS_CONFIG.length + 2) * 100).springify()} style={[styles.chartCard, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+            <Animated.View entering={FadeInUp.delay((STATS_CONFIG.length + 2) * 100).springify()} style={[styles.chartCard, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000' }]}>
               <Text style={[styles.chartTitle, { color: currentTheme.text }]}>Distribución de Estado</Text>
               <PieChart
                 data={[
@@ -173,10 +174,9 @@ const styles = StyleSheet.create({
   card: {
     width: (width - 48) / 2, // 2 columns with 16 padding on edges and between
     padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
     marginBottom: 16,
     alignItems: 'flex-start',
+    // clayStyles applied via spread
   },
   iconBox: {
     width: 48,
@@ -198,8 +198,8 @@ const styles = StyleSheet.create({
   fullCard: {
     width: '100%',
     padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
+    marginBottom: 16,
+    // clayStyles applied via spread
   },
   fullCardHeader: {
     flexDirection: 'row',
@@ -220,10 +220,10 @@ const styles = StyleSheet.create({
   chartCard: {
     width: '100%',
     padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
     marginTop: 16,
+    marginBottom: 4,
     alignItems: 'center',
+    // clayStyles applied via spread
   },
   chartTitle: {
     fontSize: 16,

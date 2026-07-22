@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { TouchableOpacity, StyleSheet, ViewStyle, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '../store/useAppStore';
+import { clayStyles } from '../style/theme';
 
 interface FloatingButtonProps {
   onPress: () => void;
@@ -44,6 +45,12 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
           styles.button, 
           { 
             backgroundColor: currentTheme.primary,
+            borderColor: currentTheme.border,
+            borderWidth: clayStyles.borderWidth,
+            shadowColor: currentTheme.borderShadow, 
+            shadowOpacity: 0.4,
+            shadowOffset: { width: 0, height: 8 },
+            shadowRadius: 12,
             transform: [{ scale: scaleAnim }]
           }
         ]}

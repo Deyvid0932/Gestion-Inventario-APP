@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator 
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '../store/useAppStore';
+import { clayStyles } from '../style/theme';
 
 interface NavbarProps {
   title: string;
@@ -43,7 +44,19 @@ export const Navbar = ({ title, showBackButton, isLoading }: NavbarProps) => {
 
       <TouchableOpacity 
         onPress={toggleTheme} 
-        style={[styles.themeToggle, { backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }]}
+        style={[
+          styles.themeToggle, 
+          { 
+            backgroundColor: currentTheme.card,
+            borderColor: currentTheme.border,
+            borderWidth: clayStyles.borderWidth,
+            shadowColor: currentTheme.borderShadow || '#000',
+            shadowOpacity: 0.1,
+            shadowOffset: { width: 0, height: 4 },
+            shadowRadius: 5,
+            elevation: 4
+          }
+        ]}
         activeOpacity={0.7}
       >
         <Ionicons 
@@ -65,12 +78,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 45,
     borderBottomWidth: 1,
-    elevation: 2,
+    elevation: 4,
     zIndex: 10,
     shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
   left: {
     flexDirection: 'row',

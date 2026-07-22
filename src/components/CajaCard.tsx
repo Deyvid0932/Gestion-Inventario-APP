@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import { CajaWithStats } from '../types';
+import { clayStyles } from '../style/theme';
 
 interface CajaCardProps {
   item: CajaWithStats;
@@ -85,9 +86,11 @@ const CajaCard = memo(({
           activeOpacity={0.9}
           style={[
             styles.card,
+            clayStyles,
             {
               backgroundColor: isActive ? theme.card + '90' : theme.card,
               borderColor: isActive ? theme.text : theme.border,
+              shadowColor: theme.borderShadow || '#000',
             }
           ]}
         >
@@ -124,15 +127,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 12,
-    elevation: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 2,
+    padding: 20,
+    marginBottom: 16,
+    // Claymorphism properties applied via spread from clayStyles
   },
   cardMain: {
     flexDirection: 'row',
