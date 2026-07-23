@@ -51,20 +51,20 @@ export const StatsScreen = () => {
   return (
     <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <Navbar title="Estadísticas" />
-      
+
       {loading || !stats ? (
         <SkeletonLoader theme={currentTheme} />
       ) : (
         <ScrollView
-          key={themeMode} // <-- Fuerza el remount completo para evitar lag al recalcular colores en los SVGs
+          key={themeMode}
           contentContainerStyle={styles.scrollContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={currentTheme.primary} />}
         >
           <View style={styles.grid}>
             {STATS_CONFIG.map((config, index) => (
-              <Animated.View 
+              <Animated.View
                 entering={FadeInUp.delay(index * 100).springify()}
-                key={config.key} 
+                key={config.key}
                 style={[styles.card, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000' }]}
               >
                 <View style={[styles.iconBox, { backgroundColor: config.color + '20' }]}>
@@ -78,8 +78,7 @@ export const StatsScreen = () => {
             ))}
           </View>
 
-          {/* Caja con más prendas (Full Width) */}
-          <Animated.View 
+          <Animated.View
             entering={FadeInUp.delay(STATS_CONFIG.length * 100).springify()}
             style={[styles.fullCard, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000' }]}
           >
@@ -94,8 +93,7 @@ export const StatsScreen = () => {
               </View>
             </View>
           </Animated.View>
-          
-          {/* Gráfico de Barras: Top 5 Cajas */}
+
           {stats.top5Cajas && stats.top5Cajas.length > 0 && (
             <Animated.View entering={FadeInUp.delay((STATS_CONFIG.length + 1) * 100).springify()} style={[styles.chartCard, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000' }]}>
               <Text style={[styles.chartTitle, { color: currentTheme.text }]}>Top 5 Cajas (Prendas)</Text>
@@ -114,25 +112,24 @@ export const StatsScreen = () => {
                   backgroundGradientFrom: currentTheme.card,
                   backgroundGradientTo: currentTheme.card,
                   fillShadowGradientOpacity: 1,
-                  fillShadowGradientFrom: '#0984E3', // Color empresarial principal
+                  fillShadowGradientFrom: '#0984E3',
                   fillShadowGradientTo: '#0984E3',
                   decimalPlaces: 0,
-                  color: (opacity = 1) => `rgba(108, 92, 231, ${opacity})`, // Lineas del grid discretas
+                  color: (opacity = 1) => `rgba(108, 92, 231, ${opacity})`,
                   labelColor: (opacity = 1) => currentTheme.textSecondary,
                   barPercentage: 0.7,
                   propsForBackgroundLines: {
                     strokeWidth: 1,
                     stroke: currentTheme.border,
-                    strokeDasharray: '0', // Líneas sólidas tipo Power BI
+                    strokeDasharray: '0',
                   }
                 }}
                 style={styles.chartStyle}
-                showValuesOnTopOfBars={true} // Mostrar el valor arriba para más legibilidad
+                showValuesOnTopOfBars={true}
               />
             </Animated.View>
           )}
 
-          {/* Gráfico Circular: Estado de Prendas */}
           {(stats.prendasActivas > 0 || stats.prendasInactivas > 0) && (
             <Animated.View entering={FadeInUp.delay((STATS_CONFIG.length + 2) * 100).springify()} style={[styles.chartCard, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000' }]}>
               <Text style={[styles.chartTitle, { color: currentTheme.text }]}>Distribución de Estado</Text>
@@ -147,11 +144,11 @@ export const StatsScreen = () => {
                 accessor={"population"}
                 backgroundColor={"transparent"}
                 paddingLeft={"15"}
-                absolute // Muestra los valores reales en lugar de porcentajes
+                absolute
               />
             </Animated.View>
           )}
-          
+
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
@@ -172,11 +169,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   card: {
-    width: (width - 48) / 2, // 2 columns with 16 padding on edges and between
+    width: (width - 48) / 2,
     padding: 16,
     marginBottom: 16,
     alignItems: 'flex-start',
-    // clayStyles applied via spread
   },
   iconBox: {
     width: 48,
@@ -199,7 +195,6 @@ const styles = StyleSheet.create({
     width: '100%',
     padding: 16,
     marginBottom: 16,
-    // clayStyles applied via spread
   },
   fullCardHeader: {
     flexDirection: 'row',
@@ -223,7 +218,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 4,
     alignItems: 'center',
-    // clayStyles applied via spread
   },
   chartTitle: {
     fontSize: 16,

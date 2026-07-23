@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator 
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '../store/useAppStore';
-import { clayStyles } from '../style/theme';
+import { SCHEME_COLORS, ColorSchemeType, clayStyles } from '../style/theme';
 
 interface NavbarProps {
   title: string;
@@ -13,7 +13,7 @@ interface NavbarProps {
 
 export const Navbar = ({ title, showBackButton, isLoading }: NavbarProps) => {
   const navigation = useNavigation();
-  const { currentTheme, toggleTheme, themeMode } = useAppStore();
+  const { currentTheme, toggleTheme, themeMode, colorScheme, setColorScheme } = useAppStore();
   const lastBackPress = React.useRef(0);
 
   const handleBack = () => {
@@ -25,11 +25,11 @@ export const Navbar = ({ title, showBackButton, isLoading }: NavbarProps) => {
 
   return (
     <View style={[styles.header, { backgroundColor: currentTheme.card, borderBottomColor: currentTheme.border }]}>
-      <StatusBar 
-        barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} 
-        backgroundColor={currentTheme.card} 
+      <StatusBar
+        barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'}
+        backgroundColor={currentTheme.card}
       />
-      
+
       <View style={styles.left}>
         {showBackButton && (
           <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
@@ -42,29 +42,50 @@ export const Navbar = ({ title, showBackButton, isLoading }: NavbarProps) => {
         )}
       </View>
 
-      <TouchableOpacity 
-        onPress={toggleTheme} 
-        style={[
-          styles.themeToggle, 
-          { 
-            backgroundColor: currentTheme.card,
-            borderColor: currentTheme.border,
-            borderWidth: clayStyles.borderWidth,
-            shadowColor: currentTheme.borderShadow || '#000',
-            shadowOpacity: 0.1,
-            shadowOffset: { width: 0, height: 4 },
-            shadowRadius: 5,
-            elevation: 4
-          }
-        ]}
-        activeOpacity={0.7}
-      >
-        <Ionicons 
-          name={themeMode === 'light' ? "moon-outline" : "sunny-outline"} 
-          size={22} 
-          color={currentTheme.text} 
-        />
-      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
+          {(['morado', 'dorado', 'celeste'] as ColorSchemeType[]).map((schemeKey) => (
+            <TouchableOpacity
+              key={schemeKey}
+              onPress={() => setColorScheme(schemeKey)}
+              activeOpacity={0.7}
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 11,
+                marginHorizontal: 3,
+                backgroundColor: SCHEME_COLORS[schemeKey],
+                borderWidth: colorScheme === schemeKey ? 2 : 0,
+                borderColor: themeMode === 'light' ? '#000000' : '#FFFFFF',
+              }}
+            />
+          ))}
+        </View>
+
+        <TouchableOpacity
+          onPress={toggleTheme}
+          style={[
+            styles.themeToggle,
+            {
+              backgroundColor: currentTheme.card,
+              borderColor: currentTheme.border,
+              borderWidth: clayStyles.borderWidth,
+              shadowColor: currentTheme.borderShadow || '#000',
+              shadowOpacity: 0.1,
+              shadowOffset: { width: 0, height: 4 },
+              shadowRadius: 5,
+              elevation: 4
+            }
+          ]}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={themeMode === 'light' ? "moon-outline" : "sunny-outline"}
+            size={22}
+            color={currentTheme.text}
+          />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };

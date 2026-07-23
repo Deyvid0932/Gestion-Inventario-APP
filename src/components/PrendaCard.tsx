@@ -226,6 +226,15 @@ export const PrendaCard = React.memo(({
                   </>
                 )}
               </View>
+
+              {item.alarmaFechaHora && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAB30815', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 6, alignSelf: 'flex-start' }}>
+                  <Ionicons name="time-outline" size={12} color="#EAB308" style={{ marginRight: 4 }} />
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#EAB308' }}>
+                    Alarma: {new Date(item.alarmaFechaHora).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} {new Date(item.alarmaFechaHora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </View>
+              )}
             </View>
             {isSelected && (
               <View style={[styles.selectionCheck, { backgroundColor: theme.text }]}>
@@ -247,6 +256,7 @@ export const PrendaCard = React.memo(({
     prev.item.op === next.item.op &&
     prev.item.fotoUri === next.item.fotoUri &&
     prev.item.fotoUri2 === next.item.fotoUri2 &&
+    prev.item.alarmaFechaHora === next.item.alarmaFechaHora &&
     prev.theme === next.theme &&
     prev.historyMode === next.historyMode;
 });

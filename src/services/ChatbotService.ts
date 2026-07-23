@@ -162,29 +162,6 @@ const executeSearch = async (
 };
 
 
-// Contador diario de tokens/requests para no exceder free tier
-const groqQuota = {
-  requestsUsed: 0,
-  tokensUsed: 0,
-  date: new Date().toDateString(),
-  resetIfNewDay() {
-    const today = new Date().toDateString();
-    if (this.date !== today) {
-      this.requestsUsed = 0;
-      this.tokensUsed = 0;
-      this.date = today;
-    }
-  },
-  canMakeRequest() {
-    this.resetIfNewDay();
-    return this.requestsUsed < 1000 && this.tokensUsed < 100000;
-  },
-  logUsage(requests: number, tokens: number) {
-    this.requestsUsed += requests || 1;
-    this.tokensUsed += tokens || 0;
-  }
-};
-
 const askGroqToClassify = async (
   message: string,
   history: ChatMessage[]
@@ -195,14 +172,9 @@ const askGroqToClassify = async (
     return null;
   }
 
-  if (!groqQuota.canMakeRequest()) {
-    console.warn('[Groq] Cuota diaria agotada. Se usará el motor local.');
-    return null;
-  }
-
   try {
     const conversationContext = history
-      .slice(-4)
+      .slice()
       .reverse()
       .map(item => `${item.sender === 'user' ? 'Usuario' : 'Asistente'}: ${item.text}`)
       .join('\n');
@@ -245,8 +217,12 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto, sin explicacion
       }
     );
 
+
+
     const responseText = await response.text();
     let data: any;
+
+
 
     try {
       data = JSON.parse(responseText);
@@ -264,18 +240,8 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto, sin explicacion
       return null;
     }
 
-    const usage = data.usage || {};
-    groqQuota.logUsage(1, usage.total_tokens || 0);
-
-    const remainingReq = response.headers.get('x-ratelimit-remaining-requests');
-    const remainingTok = response.headers.get('x-ratelimit-remaining-tokens');
-    console.log('[Groq] Consumo:', {
-      gastados: `${usage.total_tokens || 0} tokens`,
-      hoy: `${groqQuota.requestsUsed}/1000 req, ${groqQuota.tokensUsed}/100000 tok`,
-      restantes: remainingReq ? `${remainingReq} req, ${remainingTok} tok` : 'N/A'
-    });
-
     const rawText = data.choices?.[0]?.message?.content || '';
+    console.log("📥 Texto crudo recibido de Groq:", rawText);
 
     if (!rawText.trim()) {
       return { tipo: 'LIBRE', valor: 'No pude interpretar tu mensaje. ¿Puedes reformularlo?' };

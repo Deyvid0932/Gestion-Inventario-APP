@@ -1,10 +1,10 @@
 export const normalizeText = (text: string): string => {
   return text
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // Quitar acentos
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/[^\w\s]/gi, '') // Quitar signos de puntuación
-    .replace(/\s+/g, ' ') // Quitar espacios dobles
+    .replace(/[^\w\s]/gi, '')
+    .replace(/\s+/g, ' ')
     .trim();
 };
 
@@ -14,10 +14,10 @@ export const extractSearchTerms = (text: string): string[] => {
     'donde', 'esta', 'la', 'el', 'los', 'las', 'un', 'una', 'busca', 'encuentra', 'en', 'de', 'para', 'por', 'con',
     'op', 'color', 'estilo', 'lote', 'lotes', 'caja', 'cajas', 'prenda', 'prendas'
   ];
-  
+
   return normalized
     .split(' ')
-    .filter(word => !stopWords.includes(word) && word.length >= 1); // Permitir términos cortos como "1" o "a" si no son stopWords
+    .filter(word => !stopWords.includes(word) && word.length >= 1);
 };
 
 export const levenshteinDistance = (a: string, b: string): number => {
@@ -36,10 +36,10 @@ export const levenshteinDistance = (a: string, b: string): number => {
         matrix[i][j] = matrix[i - 1][j - 1];
       } else {
         matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i - 1][j - 1] + 1,
           Math.min(
-            matrix[i][j - 1] + 1, // insertion
-            matrix[i - 1][j] + 1 // deletion
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
           )
         );
       }
@@ -60,13 +60,13 @@ export interface SearchResult {
   cajaNombre: string;
   inventarioNombre: string;
   inventarioId: string;
-  score?: number; 
+  alarmaFechaHora?: string | null;
+  score?: number;
 }
 
 export const rankResults = (results: SearchResult[], searchTerms: string[], originalQuery?: string): SearchResult[] => {
   const queryNorm = originalQuery ? normalizeText(originalQuery) : '';
-  
-  // Detectar si el usuario busca específicamente por un campo usando prefijos
+
   const hasOpKeyword = /\bop\b/.test(queryNorm);
   const hasCajaKeyword = /\bcaja\b/.test(queryNorm);
   const hasLoteKeyword = /\blote\b/.test(queryNorm);
@@ -76,7 +76,7 @@ export const rankResults = (results: SearchResult[], searchTerms: string[], orig
   const ranked = results.map(item => {
     let matchScore = 0;
     let levenshteinPenalty = 0;
-    
+
     const opNorm = item.op ? normalizeText(item.op) : '';
     const estiloNorm = item.estilo ? normalizeText(item.estilo) : '';
     const colorNorm = item.color ? normalizeText(item.color) : '';
@@ -85,18 +85,17 @@ export const rankResults = (results: SearchResult[], searchTerms: string[], orig
 
     for (const term of searchTerms) {
       let termMatched = false;
-      
-      // 1. Si el usuario especificó un prefijo de búsqueda, priorizar ese campo
+
       if (hasOpKeyword) {
         if (opNorm === term) {
-          matchScore += 100; // Boost masivo
+          matchScore += 100;
           termMatched = true;
         } else if (opNorm.includes(term)) {
           matchScore += 40;
           termMatched = true;
         }
       }
-      
+
       if (hasCajaKeyword) {
         if (cajaNorm === term || cajaNorm.includes(term)) {
           matchScore += 100;
@@ -125,7 +124,6 @@ export const rankResults = (results: SearchResult[], searchTerms: string[], orig
         }
       }
 
-      // 2. Si no fue capturado por un filtro específico, buscar de manera general
       if (!termMatched) {
         const properties = [opNorm, estiloNorm, colorNorm, cajaNorm, invNorm];
         for (const prop of properties) {
@@ -140,7 +138,6 @@ export const rankResults = (results: SearchResult[], searchTerms: string[], orig
         }
       }
 
-      // 3. Evaluar distancia de Levenshtein (fuzzy matching para términos largos)
       if (!termMatched && term.length >= 3) {
         const properties = [opNorm, estiloNorm, colorNorm, cajaNorm, invNorm];
         let minPropDist = Number.MAX_SAFE_INTEGER;
@@ -152,7 +149,7 @@ export const rankResults = (results: SearchResult[], searchTerms: string[], orig
             if (dist < minPropDist) minPropDist = dist;
           }
         }
-        
+
         if (minPropDist <= 2) {
           matchScore += (3 - minPropDist);
           levenshteinPenalty += minPropDist;
@@ -178,13 +175,9 @@ export const rankResults = (results: SearchResult[], searchTerms: string[], orig
 
   const bestScore = sorted[0].score!;
 
-  // 1. Si la mejor coincidencia es exacta (boost dirigido <= -40 o exact match general <= -10)
   if (bestScore <= -10) {
-    // Retornar solo las coincidencias de nivel exacto, descartando las parciales/fuzzy
-    // Damos un margen de +3 por pequeñas penalizaciones de levenshtein en otros términos de la frase
     return sorted.filter(item => item.score! <= bestScore + 3);
   }
 
-  // 2. Si no hay exactos, retornar los cercanos/parciales (fuzzy) ordenados
   return sorted.slice(0, 30);
 };

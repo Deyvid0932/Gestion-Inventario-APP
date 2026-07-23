@@ -1,8 +1,8 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
-  const DATABASE_VERSION = 11;
-  
+  const DATABASE_VERSION = 12;
+
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
@@ -45,6 +45,8 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         fotoUri2 TEXT,
         estado INTEGER NOT NULL DEFAULT 1,
         fechaCreacion TEXT NOT NULL,
+        alarmaFechaHora TEXT,
+        alarmaNotificationId TEXT,
         FOREIGN KEY (cajaId) REFERENCES cajas (id) ON DELETE CASCADE
       );
 
@@ -120,7 +122,6 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       try {
         await db.runAsync('ALTER TABLE prendas ADD COLUMN fotoUri TEXT;');
       } catch (e) {
-        // Columna ya existe, ignorar error
       }
       await db.execAsync(`
         INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 7);
@@ -143,7 +144,6 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     }
 
     if (currentDbVersion === 8) {
-      // Forzamos la creación por si hubo un error en la migración a la v8
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS chat_history (
           id TEXT PRIMARY KEY NOT NULL,
@@ -161,7 +161,6 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       try {
         await db.runAsync('ALTER TABLE prendas ADD COLUMN fotoUri2 TEXT;');
       } catch (e) {
-        // Columna ya existe, ignorar error
       }
       await db.execAsync(`
         INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 10);
@@ -178,15 +177,13 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
           updatedAt INTEGER NOT NULL
         );
       `);
-      
+
       try {
         await db.runAsync('ALTER TABLE chat_history ADD COLUMN sessionId TEXT;');
       } catch (e) {
-        // Columna ya existe
       }
-      
-      // Assign all existing messages to a default session if they don't have one
-      const historyCountResult = await db.getFirstAsync<{count: number}>('SELECT COUNT(*) as count FROM chat_history WHERE sessionId IS NULL');
+
+      const historyCountResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM chat_history WHERE sessionId IS NULL');
       if (historyCountResult && historyCountResult.count > 0) {
         const defaultSessionId = Date.now().toString();
         await db.runAsync('INSERT INTO chat_sessions (id, title, createdAt, updatedAt) VALUES (?, ?, ?, ?)', [
@@ -202,6 +199,15 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 11);
       `);
       currentDbVersion = 11;
+    }
+
+    if (currentDbVersion === 11) {
+      await db.execAsync(`
+        ALTER TABLE prendas ADD COLUMN alarmaFechaHora TEXT;
+        ALTER TABLE prendas ADD COLUMN alarmaNotificationId TEXT;
+        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 12);
+      `);
+      currentDbVersion = 12;
     }
   }
 }

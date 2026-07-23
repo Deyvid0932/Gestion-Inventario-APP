@@ -1,15 +1,10 @@
 export const processOCRText = (rawText: string, cajaId: string) => {
-    // Reemplazamos ruidos comunes antes de procesar
-    const normalizedText = rawText.replace(/[|\\/]/g, ' '); 
+    const normalizedText = rawText.replace(/[|\\/]/g, ' ');
     const lines = normalizedText.split('\n');
     const now = Date.now();
 
     return lines.map((line, index) => {
         const cleanLine = line.trim().toUpperCase();
-
-        // REPRO MEJORADO: 
-        // 1. Buscamos KH seguido de letras opcionales
-        // 2. Para los números, permitimos (O, Q) como 0 y (I, L) como 1 temporalmente
         const estiloRegex = /(KH[A-Z]*)\s*([0-9OQ]{3})\s*([0-9OQ]{2,3})/i;
 
         const match = cleanLine.match(estiloRegex);
@@ -17,7 +12,7 @@ export const processOCRText = (rawText: string, cajaId: string) => {
         if (match) {
             let [fullMatch, prefix, part1, part2] = match;
 
-            const normalizeNumbers = (text: string) => 
+            const normalizeNumbers = (text: string) =>
                 text.replace(/[OQ]/g, '0').replace(/[IL]/g, '1');
 
             const estiloFinal = `${prefix} ${normalizeNumbers(part1)} ${normalizeNumbers(part2)}`.trim();
@@ -26,9 +21,6 @@ export const processOCRText = (rawText: string, cajaId: string) => {
             const restoDeLinea = cleanLine.substring(cleanLine.indexOf(fullMatch) + fullMatch.length);
             const colorMatch = restoDeLinea.trim().match(colorRegex);
             const colorFinal = colorMatch ? colorMatch[0].trim() : "S/C";
-
-            // Usamos un offset para que la primera línea tenga una fechaCreacion mayor
-            // y aparezca primero al ordenar por fechaCreacion DESC
             const invertedIndex = (lines.length - index).toString().padStart(3, '0');
             const timeOffsetMs = lines.length - index;
             const createdAt = new Date(now + timeOffsetMs).toISOString();
@@ -44,5 +36,5 @@ export const processOCRText = (rawText: string, cajaId: string) => {
         }
 
         return null;
-    }).filter(item => item !== null); 
+    }).filter(item => item !== null);
 };

@@ -5,11 +5,11 @@ import { Prenda } from "../types";
 
 export const usePrenda = () => {
     const db = useSQLiteContext();
-    const { 
-        prendas, 
-        addPrendaToState, 
-        updatePrendaInState, 
-        setPrendas 
+    const {
+        prendas,
+        addPrendaToState,
+        updatePrendaInState,
+        setPrendas
     } = useAppStore();
 
     const fetchPrendas = async (cajaId: string) => {
@@ -30,23 +30,21 @@ export const usePrenda = () => {
         if (!target) return;
 
         const newStatus = target.estado === 1 ? 0 : 1;
-        
-        // Optimistic update
+
         const previousStatus = target.estado;
         updatePrendaInState(id, { estado: newStatus as 1 | 0 });
 
         const result = await PrendaService.updatePrendaStatus(db, id, newStatus);
-        
+
         if (!result.success) {
-            // Rollback on failure
             updatePrendaInState(id, { estado: previousStatus as 1 | 0 });
         }
     };
 
-    return { 
-        prendas, 
-        fetchPrendas, 
-        addPrenda, 
-        toggleStatus 
+    return {
+        prendas,
+        fetchPrendas,
+        addPrenda,
+        toggleStatus
     };
 }

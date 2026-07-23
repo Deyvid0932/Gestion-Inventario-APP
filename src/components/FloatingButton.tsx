@@ -10,44 +10,40 @@ interface FloatingButtonProps {
   style?: ViewStyle;
 }
 
-export const FloatingButton: React.FC<FloatingButtonProps> = ({ 
-  onPress, 
-  icon = "add", 
-  style 
+export const FloatingButton: React.FC<FloatingButtonProps> = ({
+  onPress,
+  icon = "add",
+  style
 }) => {
 
-  //useAppStore es un hook que nos permite acceder al estado global de la aplicación
   const { currentTheme, themeMode } = useAppStore();
 
-  // UseRef cambia el valor de scaleAnim sin causar un re-renderizado del componente
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  //animación al presionar el boton de + lo encoge
   const onPressIn = () => {
     Animated.spring(scaleAnim, { toValue: 0.88, useNativeDriver: true }).start();
   };
 
-  //animación al soltar el boton de + lo deja en su tamaño original
   const onPressOut = () => {
     Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
   };
 
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       activeOpacity={1}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
       onPress={onPress}
       style={[{ position: 'absolute', bottom: 30, right: 30, zIndex: 999 }, style]}
     >
-      <Animated.View 
+      <Animated.View
         style={[
-          styles.button, 
-          { 
+          styles.button,
+          {
             backgroundColor: currentTheme.primary,
             borderColor: currentTheme.border,
             borderWidth: clayStyles.borderWidth,
-            shadowColor: currentTheme.borderShadow, 
+            shadowColor: currentTheme.borderShadow,
             shadowOpacity: 0.4,
             shadowOffset: { width: 0, height: 8 },
             shadowRadius: 12,

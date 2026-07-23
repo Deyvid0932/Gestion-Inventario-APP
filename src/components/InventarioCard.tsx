@@ -28,16 +28,16 @@ const InventarioCard = memo(({
   theme
 }: InventarioCardProps) => {
   const swipeableRef = useRef<Swipeable>(null);
-  
+
   const total = item.totalPrendas || 0;
   const escaneadas = item.prendasEscaneadas || 0;
   const progressPercent = total > 0 ? (escaneadas / total) * 100 : 0;
 
   const getProgressColor = () => {
-    if (progressPercent === 100) return '#2ecc71'; // Verde éxito
-    if (progressPercent > 50) return theme.primary; // Color primario
-    if (progressPercent > 20) return '#f39c12'; // Naranja
-    return '#e74c3c'; // Rojo
+    if (progressPercent === 100) return '#2ecc71';
+    if (progressPercent > 50) return theme.primary;
+    if (progressPercent > 20) return '#f39c12';
+    return '#e74c3c';
   };
 
   const progressColor = getProgressColor();
@@ -69,16 +69,16 @@ const InventarioCard = memo(({
                 "Eliminar Lote",
                 `¿Estás seguro de que deseas eliminar el lote "${item.nombre}"? Esta acción borrará todas las cajas y prendas dentro de él.`,
                 [
-                  { 
-                    text: "Cancelar", 
-                    style: "cancel", 
+                  {
+                    text: "Cancelar",
+                    style: "cancel",
                     onPress: () => {
                       swipeableRef.current?.close();
                     }
                   },
-                  { 
-                    text: "Eliminar", 
-                    style: "destructive", 
+                  {
+                    text: "Eliminar",
+                    style: "destructive",
                     onPress: () => {
                       swipeableRef.current?.close();
                       setTimeout(() => {
@@ -111,10 +111,10 @@ const InventarioCard = memo(({
         style={[
           styles.card,
           clayStyles,
-          { 
-            backgroundColor: theme.card, 
-            borderColor: theme.border, 
-            shadowColor: theme.borderShadow || '#000' 
+          {
+            backgroundColor: theme.card,
+            borderColor: theme.border,
+            shadowColor: theme.borderShadow || '#000'
           }
         ]}
         onPress={onPress}
@@ -148,14 +148,14 @@ const InventarioCard = memo(({
             </Text>
           </View>
           <View style={[styles.progressBarBg, { backgroundColor: theme.border }]}>
-            <View 
+            <View
               style={[
-                styles.progressBarFill, 
-                { 
-                  backgroundColor: progressColor, 
-                  width: `${progressPercent}%` 
+                styles.progressBarFill,
+                {
+                  backgroundColor: progressColor,
+                  width: `${progressPercent}%`
                 }
-              ]} 
+              ]}
             />
           </View>
         </View>

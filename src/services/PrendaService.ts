@@ -4,7 +4,6 @@ import { Prenda } from '../types';
 export const PrendaService = {
   addPrenda: async (db: SQLiteDatabase, prenda: Prenda) => {
     try {
-      // Solo validamos duplicados si el OP no está vacío
       if (prenda.op && prenda.op.trim() !== '') {
         const existing = await db.getFirstAsync<{ id: string; op: string; }>(
           'SELECT op FROM prendas WHERE op = ? AND cajaId = ?',
@@ -22,16 +21,18 @@ export const PrendaService = {
       }
 
       await db.runAsync(
-        'INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, fechaCreacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, fechaCreacion, alarmaFechaHora, alarmaNotificationId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
-          prenda.id, 
-          prenda.cajaId, 
-          prenda.op || '', 
-          prenda.estilo, 
-          prenda.color, 
+          prenda.id,
+          prenda.cajaId,
+          prenda.op || '',
+          prenda.estilo,
+          prenda.color,
           prenda.fotoUri || null,
           prenda.fotoUri2 || null,
-          prenda.fechaCreacion || new Date().toISOString()
+          prenda.fechaCreacion || new Date().toISOString(),
+          prenda.alarmaFechaHora || null,
+          prenda.alarmaNotificationId || null
         ]
       );
 
@@ -45,7 +46,6 @@ export const PrendaService = {
   updatePrenda: async (db: SQLiteDatabase, prenda: Prenda) => {
     try {
       if (prenda.op && prenda.op.trim() !== '') {
-        // Verificar si la OP ya existe en otra prenda dentro de la MISMA CAJA
         const existing = await db.getFirstAsync<{ id: string }>(
           'SELECT id FROM prendas WHERE op = ? AND cajaId = ? AND id != ?',
           [prenda.op, prenda.cajaId, prenda.id]
@@ -60,8 +60,17 @@ export const PrendaService = {
       }
 
       await db.runAsync(
-        'UPDATE prendas SET op = ?, estilo = ?, color = ?, fotoUri = ?, fotoUri2 = ? WHERE id = ?',
-        [prenda.op || '', prenda.estilo, prenda.color, prenda.fotoUri || null, prenda.fotoUri2 || null, prenda.id]
+        'UPDATE prendas SET op = ?, estilo = ?, color = ?, fotoUri = ?, fotoUri2 = ?, alarmaFechaHora = ?, alarmaNotificationId = ? WHERE id = ?',
+        [
+          prenda.op || '',
+          prenda.estilo,
+          prenda.color,
+          prenda.fotoUri || null,
+          prenda.fotoUri2 || null,
+          prenda.alarmaFechaHora || null,
+          prenda.alarmaNotificationId || null,
+          prenda.id
+        ]
       );
       return { success: true };
     } catch (e) {
@@ -96,7 +105,7 @@ export const PrendaService = {
       if (search.trim() === '') {
         return await db.getAllAsync<Prenda>('SELECT * FROM prendas WHERE cajaId = ? ORDER BY fechaCreacion DESC', [cajaId]);
       }
-      
+
       const startParam = `${search}%`;
       const exactParam = search;
       const searchParam = `%${search}%`;
@@ -111,8 +120,8 @@ export const PrendaService = {
             ELSE 2
           END), fechaCreacion DESC`,
         [
-          cajaId, searchParam, searchParam, searchParam, 
-          exactParam, exactParam, exactParam, 
+          cajaId, searchParam, searchParam, searchParam,
+          exactParam, exactParam, exactParam,
           startParam, startParam, startParam
         ]
       );
@@ -129,11 +138,11 @@ export const PrendaService = {
           await db.runAsync(
             'INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, fechaCreacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [
-              prenda.id, 
-              prenda.cajaId, 
-              prenda.op || '', 
-              prenda.estilo, 
-              prenda.color, 
+              prenda.id,
+              prenda.cajaId,
+              prenda.op || '',
+              prenda.estilo,
+              prenda.color,
               prenda.fotoUri || null,
               prenda.fotoUri2 || null,
               prenda.fechaCreacion || new Date().toISOString()

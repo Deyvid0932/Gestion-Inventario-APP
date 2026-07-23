@@ -1,18 +1,20 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
-  ScrollView, 
-  KeyboardAvoidingView, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  KeyboardAvoidingView,
   Platform,
   Alert,
   Animated,
   ActivityIndicator,
-  Image
+  Image,
+  Switch
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
@@ -25,6 +27,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrendaService } from '../services/PrendaService';
+import { AlarmService } from '../services/AlarmService';
 import { usePrenda } from '../hooks/usePrenda';
 import { Ionicons } from '@expo/vector-icons';
 import { clayStyles } from '../style/theme';
@@ -38,17 +41,29 @@ export const FormScreen = () => {
   const insets = useSafeAreaInsets();
   const { addPrenda } = usePrenda();
   const lastSubmitTime = useRef(0);
- 
+
 
   const { initialData, entityType, parentId } = route.params || {};
   const [formData, setFormData] = useState<Record<string, string>>(initialData || {});
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
-  
+
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
   const [imageUri, setImageUri] = useState<string | null>(initialData?.fotoUri || null);
   const [imageUri2, setImageUri2] = useState<string | null>(initialData?.fotoUri2 || null);
+
+  const [alarmEnabled, setAlarmEnabled] = useState<boolean>(!!initialData?.alarmaFechaHora);
+  const [alarmDate, setAlarmDate] = useState<Date>(() => {
+    if (initialData?.alarmaFechaHora) {
+      return new Date(initialData.alarmaFechaHora);
+    }
+    const d = new Date(Date.now() + 3600000);
+    d.setSeconds(0, 0);
+    return d;
+  });
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const triggerShake = useCallback(() => {
     Animated.sequence([
@@ -106,8 +121,6 @@ export const FormScreen = () => {
     }
   };
 
-  // handleAddSecondPhoto eliminada para evitar la advertencia del diálogo de alerta.
-
   const removeImage = (slot: 1 | 2) => {
     if (slot === 1) {
       if (imageUri2) {
@@ -162,15 +175,45 @@ export const FormScreen = () => {
         } else {
           await db.runAsync('INSERT INTO inventarios (id, nombre, descripcion, fechaCreacion, estado) VALUES (?, ?, ?, ?, ?)', [id, formData.nombre, formData.descripcion || '', fecha, 'Activo']);
         }
-      } 
+      }
       else if (entityType === 'caja') {
         if (isUpdate) {
           await db.runAsync('UPDATE cajas SET nombre = ? WHERE id = ?', [formData.nombre, id]);
         } else {
           await db.runAsync('INSERT INTO cajas (id, inventarioId, nombre, fechaCreacion) VALUES (?, ?, ?, ?)', [id, parentId!, formData.nombre, fecha]);
         }
-      } 
+      }
       else if (entityType === 'prenda') {
+        let finalNotificationId: string | null = initialData?.alarmaNotificationId || null;
+        let finalAlarmaFechaHora: string | null = initialData?.alarmaFechaHora || null;
+
+        if (alarmEnabled) {
+          if (initialData?.alarmaNotificationId) {
+            await AlarmService.cancelPrendaAlarm(initialData.alarmaNotificationId);
+          }
+          if (alarmDate.getTime() > Date.now()) {
+            const cajaIdVal = parentId || initialData?.cajaId || '';
+            const cajaNomVal = initialData?.cajaNombre || 'Caja';
+            const newNotifId = await AlarmService.schedulePrendaAlarm(
+              id,
+              cajaIdVal,
+              cajaNomVal,
+              formData.estilo || 'Sin Estilo',
+              formData.op || 'Sin OP',
+              formData.color || 'Sin Color',
+              alarmDate
+            );
+            if (newNotifId) {
+              finalNotificationId = newNotifId;
+              finalAlarmaFechaHora = alarmDate.toISOString();
+            }
+          }
+        } else if (initialData?.alarmaNotificationId) {
+          await AlarmService.cancelPrendaAlarm(initialData.alarmaNotificationId);
+          finalNotificationId = null;
+          finalAlarmaFechaHora = null;
+        }
+
         const prendaData = {
           id,
           cajaId: parentId || initialData?.cajaId,
@@ -179,7 +222,9 @@ export const FormScreen = () => {
           color: formData.color || '',
           fotoUri: imageUri || null,
           fotoUri2: imageUri2 || null,
-          estado: 1
+          estado: 1,
+          alarmaFechaHora: finalAlarmaFechaHora,
+          alarmaNotificationId: finalNotificationId,
         } as any;
 
         if (isUpdate) {
@@ -217,7 +262,7 @@ export const FormScreen = () => {
   const getColorPreview = (text: string) => {
     if (!text) return null;
     const hex = getColorHex(text);
-    return hex === '#8E8E93' ? null : hex; // No mostrar si es el gris por defecto
+    return hex === '#8E8E93' ? null : hex;
   };
 
   const renderInput = (label: string, field: string, placeholder: string, optional = false) => {
@@ -237,9 +282,9 @@ export const FormScreen = () => {
         </View>
         <View style={[
           styles.inputContainer,
-          { 
-            borderRadius: clayStyles.borderRadius - 4, // Ligeramente menor que el card para armonía
-            backgroundColor: currentTheme.card, 
+          {
+            borderRadius: clayStyles.borderRadius - 4,
+            backgroundColor: currentTheme.card,
             borderColor: isFocused ? currentTheme.primary : (formData[field] && !isValid && !optional ? '#FF3B30' : currentTheme.border),
             borderWidth: isFocused ? 2 : clayStyles.borderWidth,
           }
@@ -247,7 +292,7 @@ export const FormScreen = () => {
           <TextInput
             style={[styles.input, { color: currentTheme.text }]}
             value={formData[field] || ''}
-            onChangeText={t => setFormData(prev => ({...prev, [field]: t}))}
+            onChangeText={t => setFormData(prev => ({ ...prev, [field]: t }))}
             placeholder={placeholder}
             placeholderTextColor={currentTheme.textSecondary}
             onFocus={() => setFocusedField(field)}
@@ -265,7 +310,7 @@ export const FormScreen = () => {
     <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
       <Navbar title={getTitle()} showBackButton />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom, 20) }]}
           keyboardShouldPersistTaps="handled"
           bounces={false}
@@ -274,17 +319,17 @@ export const FormScreen = () => {
         >
           <Animated.View style={[
             styles.card,
-            clayStyles, 
-            { 
-              backgroundColor: currentTheme.card, 
+            clayStyles,
+            {
+              backgroundColor: currentTheme.card,
               borderColor: currentTheme.border,
               shadowColor: currentTheme.borderShadow || '#000',
               transform: [{ translateX: shakeAnim }]
             }
           ]}>
-            
+
             {(entityType === 'inventario' || entityType === 'caja') && renderInput('Nombre', 'nombre', 'Ingrese el nombre')}
-            
+
             {entityType === 'inventario' && renderInput('Descripción', 'descripcion', 'Descripción opcional', true)}
 
             {(entityType === 'prenda') && (
@@ -292,15 +337,14 @@ export const FormScreen = () => {
                 {renderInput('Estilo', 'estilo', 'Ej. Polo Slim')}
                 {renderInput('OP', 'op', 'Orden de Producción', true)}
                 {renderInput('Color', 'color', 'Ej. Rojo')}
-                
-                {/* Selector de imagen dinámico */}
+
                 <View style={styles.inputWrapper}>
                   <View style={styles.labelRow}>
                     <Text style={[styles.label, { color: currentTheme.textSecondary }]}>
                       Fotos <Text style={{ color: currentTheme.textSecondary, fontSize: 10, fontWeight: '400' }}>(Máx. 2 fotos, opcional)</Text>
                     </Text>
                   </View>
-                  
+
                   {!imageUri && !imageUri2 ? (
                     <View style={styles.imagePickerRow}>
                       <TouchableOpacity
@@ -347,12 +391,12 @@ export const FormScreen = () => {
                           <View style={{ flex: 1, height: '100%', gap: 8, justifyContent: 'space-between' }}>
                             <TouchableOpacity
                               style={[
-                                styles.imagePickerBtnCompact, 
-                                { 
+                                styles.imagePickerBtnCompact,
+                                {
                                   flex: 1,
-                                  borderRadius: 12, 
-                                  borderWidth: 1, 
-                                  borderColor: currentTheme.border, 
+                                  borderRadius: 12,
+                                  borderWidth: 1,
+                                  borderColor: currentTheme.border,
                                   backgroundColor: currentTheme.card,
                                   justifyContent: 'center',
                                   alignItems: 'center',
@@ -367,12 +411,12 @@ export const FormScreen = () => {
                             </TouchableOpacity>
                             <TouchableOpacity
                               style={[
-                                styles.imagePickerBtnCompact, 
-                                { 
+                                styles.imagePickerBtnCompact,
+                                {
                                   flex: 1,
-                                  borderRadius: 12, 
-                                  borderWidth: 1, 
-                                  borderColor: currentTheme.border, 
+                                  borderRadius: 12,
+                                  borderWidth: 1,
+                                  borderColor: currentTheme.border,
                                   backgroundColor: currentTheme.card,
                                   justifyContent: 'center',
                                   alignItems: 'center',
@@ -391,10 +435,116 @@ export const FormScreen = () => {
                     </View>
                   )}
                 </View>
+
+                <View style={[styles.inputWrapper, { marginTop: 12 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="notifications-outline" size={18} color={currentTheme.primary} />
+                      <Text style={[styles.label, { color: currentTheme.textSecondary, marginBottom: 0 }]}>
+                        Alarma <Text style={{ color: currentTheme.textSecondary, fontSize: 10, fontWeight: '400' }}>(Opcional)</Text>
+                      </Text>
+                    </View>
+                    <Switch
+                      value={alarmEnabled}
+                      onValueChange={(val) => {
+                        setAlarmEnabled(val);
+                        if (val) AlarmService.requestPermissions();
+                      }}
+                      trackColor={{ false: '#767577', true: currentTheme.primary }}
+                      thumbColor={alarmEnabled ? '#FFFFFF' : '#f4f3f4'}
+                    />
+                  </View>
+
+                  {alarmEnabled && (
+                    <View style={{ backgroundColor: currentTheme.background, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: currentTheme.border }}>
+                      <Text style={{ fontSize: 12, color: currentTheme.textSecondary, marginBottom: 10 }}>
+                        Programar fecha y hora de la notificación:
+                      </Text>
+
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <TouchableOpacity
+                          style={{
+                            flex: 1,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            padding: 10,
+                            borderRadius: 12,
+                            backgroundColor: currentTheme.card,
+                            borderWidth: 1,
+                            borderColor: currentTheme.border
+                          }}
+                          onPress={() => setShowDatePicker(true)}
+                        >
+                          <Ionicons name="calendar-outline" size={16} color={currentTheme.primary} />
+                          <Text style={{ fontSize: 12, color: currentTheme.text, fontWeight: '600' }}>
+                            {alarmDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={{
+                            flex: 1,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            padding: 10,
+                            borderRadius: 12,
+                            backgroundColor: currentTheme.card,
+                            borderWidth: 1,
+                            borderColor: currentTheme.border
+                          }}
+                          onPress={() => setShowTimePicker(true)}
+                        >
+                          <Ionicons name="time-outline" size={16} color={currentTheme.primary} />
+                          <Text style={{ fontSize: 12, color: currentTheme.text, fontWeight: '600' }}>
+                            {alarmDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {showDatePicker && (
+                        <DateTimePicker
+                          value={alarmDate}
+                          mode="date"
+                          display="default"
+                          minimumDate={new Date()}
+                          onChange={(event, selectedDate) => {
+                            setShowDatePicker(false);
+                            if (selectedDate) {
+                              const newDate = new Date(alarmDate);
+                              newDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+                              newDate.setSeconds(0, 0);
+                              setAlarmDate(newDate);
+                            }
+                          }}
+                        />
+                      )}
+
+                      {showTimePicker && (
+                        <DateTimePicker
+                          value={alarmDate}
+                          mode="time"
+                          display="default"
+                          onChange={(event, selectedDate) => {
+                            setShowTimePicker(false);
+                            if (selectedDate) {
+                              const newDate = new Date(alarmDate);
+                              newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
+                              setAlarmDate(newDate);
+                            }
+                          }}
+                        />
+                      )}
+                    </View>
+                  )}
+                </View>
               </>
             )}
 
-            <TouchableOpacity 
+            <TouchableOpacity
               activeOpacity={1}
               onPressIn={onPressIn}
               onPressOut={onPressOut}
@@ -404,7 +554,7 @@ export const FormScreen = () => {
             >
               <Animated.View style={[
                 styles.saveBtn,
-                { 
+                {
                   borderRadius: clayStyles.borderRadius - 8,
                   backgroundColor: currentTheme.primary,
                   borderColor: currentTheme.border,
@@ -435,10 +585,10 @@ export const FormScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { paddingHorizontal: 20, paddingTop: 20 },
-  card: { 
-    padding: 18, 
-    borderRadius: 22, 
-    borderWidth: 1, 
+  card: {
+    padding: 18,
+    borderRadius: 22,
+    borderWidth: 1,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -449,10 +599,10 @@ const styles = StyleSheet.create({
   labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, justifyContent: 'space-between' },
   label: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   colorDot: { width: 14, height: 14, borderRadius: 7 },
-  inputContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    borderRadius: 20, 
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
     paddingHorizontal: 15,
     height: 58,
     borderWidth: 1,
@@ -464,11 +614,10 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, fontSize: 15, height: '100%', paddingVertical: 0 },
   checkIcon: { marginLeft: 10 },
-  saveBtn: { 
-    height: 60, 
-    justifyContent: 'center', 
+  saveBtn: {
+    height: 60,
+    justifyContent: 'center',
     alignItems: 'center',
-    // clayStyles applied via spread
   },
   saveText: { color: '#FFF', fontSize: 18, fontWeight: '800' },
   imagePickerRow: {

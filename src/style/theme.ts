@@ -1,53 +1,98 @@
-
 const palette = {
   white: '#FFFFFF',
   black: '#000000',
-  
-  // Light Mode (Equivalente Suave Pastel)
-  lightBg: '#f6f5fa',
-  lightCard: '#ffffff',
-  lightPrimary: '#9b84e2',
-  lightTextSecondary: '#8d85a6',
-  lightBorder: '#00000010', // Sombra suave sutil
-
-  // Dark Mode (Dark Claymorphism Especificado)
-  darkBg: '#1a162b', // Morado muy oscuro
-  darkCard: '#2d264d', // Morado pastel oscuro
-  darkPrimary: '#8b6fd8', // Morado pastel vibrante
-  darkTextSecondary: '#a89ebf', // Lavanda grisáceo
-  darkBorder: '#ffffff10', // Borde translúcido plastilina
-  darkBorderShadow: '#130f20', // Sombra del fondo pero más oscura
-  
-  // Estados
   success: '#4ade80',
 };
 
-export const theme = {
-  light: {
-    background: palette.lightBg,
-    card: palette.lightCard,
-    text: palette.black,
-    textSecondary: palette.lightTextSecondary,
-    border: palette.lightBorder,
-    borderShadow: '#e2e0ed', 
-    primary: palette.lightPrimary,
-    primaryText: palette.white,
-    success: palette.success,
+export type ColorSchemeType = 'morado' | 'dorado' | 'celeste';
+
+export const SCHEME_COLORS: Record<ColorSchemeType, string> = {
+  morado: '#8b6fd8',
+  dorado: '#eab308',
+  celeste: '#06b6d4',
+};
+
+export const schemes = {
+  morado: {
+    light: {
+      background: '#f6f5fa',
+      card: '#ffffff',
+      text: palette.black,
+      textSecondary: '#8d85a6',
+      border: '#00000010',
+      borderShadow: '#e2e0ed',
+      primary: '#9b84e2',
+      primaryText: palette.white,
+      success: palette.success,
+    },
+    dark: {
+      background: '#1a162b',
+      card: '#2d264d',
+      text: palette.white,
+      textSecondary: '#a89ebf',
+      border: '#ffffff10',
+      borderShadow: '#130f20',
+      primary: '#8b6fd8',
+      primaryText: palette.white,
+      success: palette.success,
+    }
   },
-  dark: {
-    background: palette.darkBg,
-    card: palette.darkCard,
-    text: palette.white,
-    textSecondary: palette.darkTextSecondary,
-    border: palette.darkBorder,
-    borderShadow: palette.darkBorderShadow,
-    primary: palette.darkPrimary,
-    primaryText: palette.white,
-    success: palette.success,
+  dorado: {
+    light: {
+      background: '#faf8f0',
+      card: '#ffffff',
+      text: palette.black,
+      textSecondary: '#948b6e',
+      border: '#00000010',
+      borderShadow: '#ede8d5',
+      primary: '#ca8a04',
+      primaryText: palette.white,
+      success: palette.success,
+    },
+    dark: {
+      background: '#1a1912',
+      card: '#2d2a1f',
+      text: palette.white,
+      textSecondary: '#b8af91',
+      border: '#ffffff10',
+      borderShadow: '#14130d',
+      primary: '#eab308',
+      primaryText: palette.black,
+      success: palette.success,
+    }
+  },
+  celeste: {
+    light: {
+      background: '#f0f8fa',
+      card: '#ffffff',
+      text: palette.black,
+      textSecondary: '#6e8d94',
+      border: '#00000010',
+      borderShadow: '#d5e6ed',
+      primary: '#0891b2',
+      primaryText: palette.white,
+      success: palette.success,
+    },
+    dark: {
+      background: '#0f1a2b',
+      card: '#1e2d3d',
+      text: palette.white,
+      textSecondary: '#91abb8',
+      border: '#ffffff10',
+      borderShadow: '#0a121f',
+      primary: '#06b6d4',
+      primaryText: palette.black,
+      success: palette.success,
+    }
   }
 };
 
-// Utilidades compartidas para el efecto Claymorphism
+export const theme = schemes.morado;
+
+export const getTheme = (colorScheme: ColorSchemeType = 'morado', mode: 'light' | 'dark' = 'light') => {
+  return schemes[colorScheme]?.[mode] || schemes.morado[mode];
+};
+
 export const clayStyles = {
   borderRadius: 28, 
   borderWidth: 1, 

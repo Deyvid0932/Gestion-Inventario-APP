@@ -47,11 +47,11 @@ export const HistoryScreen = () => {
   const [showExportModal, setShowExportModal] = useState(false);
 
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<'Activo' | 'Inactivo'>('Activo');
+  const [status, setStatus] = useState<'Activo' | 'Inactivo' | 'Alarmas'>('Activo');
   const [results, setResults] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const tabAnim = useRef(new Animated.Value(status === 'Activo' ? 0 : 1)).current;
+  const tabAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const fetchHistory = async (showLoading = true) => {
@@ -60,31 +60,48 @@ export const HistoryScreen = () => {
       fadeAnim.setValue(0);
     }
     try {
-      const estadoDb = status === 'Activo' ? 1 : 0;
       const searchParam = `%${search}%`;
       const startParam = `${search}%`;
       const exactParam = search;
 
-      const query = `
-        SELECT p.id, p.cajaId, p.op, p.estilo, p.color, p.estado, p.fechaCreacion,
-               c.nombre as cajaNombre, i.nombre as inventarioNombre
-        FROM prendas p
-        JOIN cajas c ON p.cajaId = c.id
-        JOIN inventarios i ON c.inventarioId = i.id
-        WHERE p.estado = ? AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?)
-        ORDER BY 
-          (CASE 
-            WHEN p.op = ? OR p.estilo = ? OR p.color = ? THEN 0
-            WHEN p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ? THEN 1
-            ELSE 2
-          END), p.fechaCreacion DESC
-      `;
-      
-      const rows = await db.getAllAsync<HistoryItem>(query, [
-        estadoDb, searchParam, searchParam, searchParam, 
-        exactParam, exactParam, exactParam, 
-        startParam, startParam, startParam
-      ]);
+      let query = '';
+      let params: any[] = [];
+
+      if (status === 'Alarmas') {
+        query = `
+          SELECT p.id, p.cajaId, p.op, p.estilo, p.color, p.estado, p.fechaCreacion, p.alarmaFechaHora,
+                 c.nombre as cajaNombre, i.nombre as inventarioNombre
+          FROM prendas p
+          JOIN cajas c ON p.cajaId = c.id
+          JOIN inventarios i ON c.inventarioId = i.id
+          WHERE p.alarmaFechaHora IS NOT NULL AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?)
+          ORDER BY p.alarmaFechaHora ASC
+        `;
+        params = [searchParam, searchParam, searchParam];
+      } else {
+        const estadoDb = status === 'Activo' ? 1 : 0;
+        query = `
+          SELECT p.id, p.cajaId, p.op, p.estilo, p.color, p.estado, p.fechaCreacion, p.alarmaFechaHora,
+                 c.nombre as cajaNombre, i.nombre as inventarioNombre
+          FROM prendas p
+          JOIN cajas c ON p.cajaId = c.id
+          JOIN inventarios i ON c.inventarioId = i.id
+          WHERE p.estado = ? AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?)
+          ORDER BY 
+            (CASE 
+              WHEN p.op = ? OR p.estilo = ? OR p.color = ? THEN 0
+              WHEN p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ? THEN 1
+              ELSE 2
+            END), p.fechaCreacion DESC
+        `;
+        params = [
+          estadoDb, searchParam, searchParam, searchParam, 
+          exactParam, exactParam, exactParam, 
+          startParam, startParam, startParam
+        ];
+      }
+
+      const rows = await db.getAllAsync<HistoryItem>(query, params);
       setResults(rows);
       
       Animated.timing(fadeAnim, {
@@ -106,17 +123,18 @@ export const HistoryScreen = () => {
 
   useFocusEffect(useCallback(() => { fetchHistory(); }, [db, search, status]));
 
-  const toggleStatus = (newStatus: 'Activo' | 'Inactivo') => {
+  const toggleStatus = (newStatus: 'Activo' | 'Inactivo' | 'Alarmas') => {
     setStatus(newStatus);
-    Animated.spring(tabAnim, { toValue: newStatus === 'Activo' ? 0 : 1, useNativeDriver: false }).start();
+    const targetVal = newStatus === 'Activo' ? 0 : (newStatus === 'Inactivo' ? 1 : 2);
+    Animated.spring(tabAnim, { toValue: targetVal, useNativeDriver: false }).start();
   };
 
   const renderItem = ({ item, index }: { item: HistoryItem, index: number }) => {
-    const dateToUse = item.fechaCreacion || new Date().toISOString();
+    const dateToUse = status === 'Alarmas' ? (item.alarmaFechaHora || item.fechaCreacion || new Date().toISOString()) : (item.fechaCreacion || new Date().toISOString());
     const itemDateLabel = getRelativeDateLabel(dateToUse);
     
     const prevItem = index > 0 ? results[index - 1] : null;
-    const prevDateToUse = prevItem?.fechaCreacion || null;
+    const prevDateToUse = prevItem ? (status === 'Alarmas' ? (prevItem.alarmaFechaHora || prevItem.fechaCreacion) : prevItem.fechaCreacion) : null;
     const prevDateLabel = prevDateToUse ? getRelativeDateLabel(prevDateToUse) : null;
     
     const showHeader = itemDateLabel !== prevDateLabel;
@@ -126,12 +144,14 @@ export const HistoryScreen = () => {
       <View>
         {showHeader && (
           <View style={styles.dateHeader}>
-            <Text style={[styles.dateHeaderText, { color: currentTheme.primary }]}>{itemDateLabel}</Text>
+            <Text style={[styles.dateHeaderText, { color: currentTheme.primary }]}>
+              {status === 'Alarmas' ? `⏰ Alarma: ${itemDateLabel}` : itemDateLabel}
+            </Text>
           </View>
         )}
         <View style={styles.timelineRow}>
           <View style={styles.timelineCol}>
-            <View style={[styles.timelineDot, { backgroundColor: currentTheme.primary }]} />
+            <View style={[styles.timelineDot, { backgroundColor: status === 'Alarmas' ? '#EAB308' : currentTheme.primary }]} />
             <View style={[styles.timelineLine, { backgroundColor: currentTheme.border }]} />
           </View>
           
@@ -149,9 +169,19 @@ export const HistoryScreen = () => {
               </View>
               <View style={[styles.colorSwatch, { backgroundColor: colorHex, borderColor: currentTheme.border }]} />
             </View>
-            <Text style={[styles.locationText, { color: '#2ecc71' }]}>
+
+            <Text style={[styles.locationText, { color: '#2ecc71', marginBottom: 4 }]}>
               {item.inventarioNombre} • {item.cajaNombre} • {item.color}
             </Text>
+
+            {item.alarmaFechaHora && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAB30815', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginTop: 4, alignSelf: 'flex-start' }}>
+                <Ionicons name="notifications-outline" size={13} color="#EAB308" style={{ marginRight: 4 }} />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EAB308' }}>
+                  Alarma: {new Date(item.alarmaFechaHora).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} {new Date(item.alarmaFechaHora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -159,8 +189,8 @@ export const HistoryScreen = () => {
   };
 
   const tabTranslateX = tabAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [4, (width - 44) / 2],
+    inputRange: [0, 1, 2],
+    outputRange: [4, (width - 50) / 3, ((width - 50) / 3) * 2],
   });
 
   return (
@@ -168,12 +198,15 @@ export const HistoryScreen = () => {
       <Navbar title="Historial" />
       
       <View style={[styles.segmentedWrapper, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
-        <Animated.View style={[styles.segmentIndicator, { backgroundColor: "#E4E4E7", width: (width - 50) / 2, transform: [{ translateX: tabTranslateX }] }]} />
+        <Animated.View style={[styles.segmentIndicator, { backgroundColor: themeMode === 'light' ? "#E4E4E7" : "#27272A", width: (width - 60) / 3, transform: [{ translateX: tabTranslateX }] }]} />
         <TouchableOpacity style={styles.segmentTab} onPress={() => toggleStatus('Activo')}>
           <Text style={[styles.segmentText, { color: status === 'Activo' ? '#2ecc71' : currentTheme.textSecondary, fontWeight: status === 'Activo' ? '800' : '600' }]}>Activos</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.segmentTab} onPress={() => toggleStatus('Inactivo')}>
           <Text style={[styles.segmentText, { color: status === 'Inactivo' ? '#e74c3c' : currentTheme.textSecondary, fontWeight: status === 'Inactivo' ? '800' : '600' }]}>Inactivos</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.segmentTab} onPress={() => toggleStatus('Alarmas')}>
+          <Text style={[styles.segmentText, { color: status === 'Alarmas' ? '#EAB308' : currentTheme.textSecondary, fontWeight: status === 'Alarmas' ? '800' : '600' }]}>⏰ Alarmas</Text>
         </TouchableOpacity>
       </View>
 

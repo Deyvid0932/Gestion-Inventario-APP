@@ -33,31 +33,24 @@ export const StatsService = {
       };
 
       await db.withTransactionAsync(async () => {
-        // 1. Total Inventarios
         const invResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM inventarios');
         if (invResult) stats.totalInventarios = invResult.count;
 
-        // 2. Total Cajas
         const cajasResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM cajas');
         if (cajasResult) stats.totalCajas = cajasResult.count;
 
-        // 3. Total Prendas
         const prendasResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM prendas');
         if (prendasResult) stats.totalPrendas = prendasResult.count;
 
-        // 4. Activas
         const activasResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM prendas WHERE estado = 1');
         if (activasResult) stats.prendasActivas = activasResult.count;
 
-        // 5. Inactivas
         const inactivasResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM prendas WHERE estado = 0');
         if (inactivasResult) stats.prendasInactivas = inactivasResult.count;
 
-        // 6. Con Foto
         const fotoResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM prendas WHERE fotoUri IS NOT NULL');
         if (fotoResult) stats.prendasConFoto = fotoResult.count;
 
-        // 7. Cajas Top (Para gráfico de barras)
         const topResult = await db.getAllAsync<{ nombre: string, total: number }>(`
           SELECT c.nombre, COUNT(*) as total 
           FROM prendas p 
@@ -66,7 +59,7 @@ export const StatsService = {
           ORDER BY total DESC 
           LIMIT 5
         `);
-        
+
         if (topResult && topResult.length > 0) {
           stats.cajaTopNombre = topResult[0].nombre;
           stats.cajaTopCantidad = topResult[0].total;
@@ -77,7 +70,6 @@ export const StatsService = {
       return stats;
     } catch (e) {
       console.error('Error fetching stats:', e);
-      // Return defaults on error
       return {
         totalInventarios: 0,
         totalCajas: 0,

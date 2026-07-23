@@ -2,20 +2,20 @@ import { Modal, TouchableWithoutFeedback, View, StyleSheet } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 interface ImagePreviewModalProps {
-  uri: string | null;      // La foto es un string (o nula si no hay)
-  visible: boolean;        // Es un interruptor (true/false)
-  onClose: () => void;     // Es una función que no devuelve nada
+  uri: string | null;
+  visible: boolean;
+  onClose: () => void;
 }
 
-export const ImagePreviewModal = ({ uri, visible, onClose } : ImagePreviewModalProps ) => (
+export const ImagePreviewModal = ({ uri, visible, onClose }: ImagePreviewModalProps) => (
   <Modal transparent visible={visible} animationType="fade">
     <TouchableWithoutFeedback onPress={onClose}>
       <View style={styles.overlay}>
-        <Animated.Image 
-          entering={FadeIn.duration(300)} // Animación suave al aparecer
+        <Animated.Image
+          entering={FadeIn.duration(300)}
           source={{ uri: uri || '' }}
-          style={styles.fullImage} 
-          resizeMode="contain" 
+          style={styles.fullImage}
+          resizeMode="contain"
         />
       </View>
     </TouchableWithoutFeedback>
@@ -25,7 +25,7 @@ export const ImagePreviewModal = ({ uri, visible, onClose } : ImagePreviewModalP
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.9)', // Fondo oscuro profesional
+    backgroundColor: 'rgba(0,0,0,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
   },

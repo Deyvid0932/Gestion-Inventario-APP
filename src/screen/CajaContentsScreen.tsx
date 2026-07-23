@@ -367,29 +367,29 @@ const CajaContentsScreen = () => {
         }}
       />
 
-      <Modal 
-  visible={isModalVisible} 
-  transparent={true} 
-  animationType="fade"
->
-  <View style={styles.modalOverlay}>
-    <TouchableOpacity 
-      style={styles.closeButton} 
-      onPress={() => setModalVisible(false)} // Cierra el modal
-    >
-      <Ionicons name="close" size={30} color="white" />
-    </TouchableOpacity>
-    
-    <Image 
-      source={{ uri: currentImage || '' }} 
-      style={styles.modalImage} 
-      resizeMode="contain" 
-    />
-  </View>
-</Modal>
+      <Modal
+        visible={isModalVisible}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => setModalVisible(false)}
+          >
+            <Ionicons name="close" size={30} color="white" />
+          </TouchableOpacity>
+
+          <Image
+            source={{ uri: currentImage || '' }}
+            style={styles.modalImage}
+            resizeMode="contain"
+          />
+        </View>
+      </Modal>
     </GestureHandlerRootView>
 
-    
+
   );
 };
 

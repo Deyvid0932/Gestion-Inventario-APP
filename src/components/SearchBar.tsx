@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
     margin: 15,
     paddingHorizontal: 16,
     height: 52,
-    borderRadius: clayStyles.borderRadius, // redondez extrema
+    borderRadius: clayStyles.borderRadius,
     borderWidth: clayStyles.borderWidth,
   },
   icon: {

@@ -21,7 +21,6 @@ export const CajaService = {
   },
 
   getSiblingCajas: async (db: SQLiteDatabase, currentCajaId: string) => {
-    // Obtiene todas las cajas del mismo inventario excepto la caja actual
     return await db.getAllAsync<Caja>(
       `SELECT * FROM cajas 
        WHERE inventarioId = (SELECT inventarioId FROM cajas WHERE id = ?) 

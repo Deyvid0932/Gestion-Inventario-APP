@@ -129,7 +129,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 20,
     marginBottom: 16,
-    // Claymorphism properties applied via spread from clayStyles
   },
   cardMain: {
     flexDirection: 'row',
@@ -171,14 +170,14 @@ const styles = StyleSheet.create({
     width: 160,
     flexDirection: 'row',
     height: '100%',
-    paddingBottom: 12, // match card marginBottom
+    paddingBottom: 12,
   },
   actionButton: {
     flex: 1,
     height: '100%',
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    borderRadius: 12, 
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
     marginHorizontal: 4,
   },
 });

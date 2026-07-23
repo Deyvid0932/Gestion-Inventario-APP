@@ -6,7 +6,6 @@ const { width } = Dimensions.get('window');
 export const SkeletonLoader = ({ theme }: { theme: any }) => {
   const animatedValue = useRef(new Animated.Value(0)).current;
 
-  //UseEffect es un hook que se ejecuta un bucle infinito que anima el valor de animatedValue de 0 a 1 en un tiempo de 1500ms
   useEffect(() => {
     const loopAnimation = Animated.loop(
       Animated.timing(animatedValue, {

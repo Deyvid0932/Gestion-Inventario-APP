@@ -1,11 +1,13 @@
 import { create } from 'zustand';
-import { theme } from '../style/theme';
+import { getTheme, ColorSchemeType, theme } from '../style/theme';
 import { Prenda } from '../types';
 
 interface AppState {
   themeMode: 'light' | 'dark';
+  colorScheme: ColorSchemeType;
   currentTheme: typeof theme.light;
   toggleTheme: () => void;
+  setColorScheme: (scheme: ColorSchemeType) => void;
 
   prendas: Prenda[];
   selectedPrendas: string[];
@@ -20,15 +22,21 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set) => ({
   themeMode: 'light',
-  currentTheme: theme.light,
+  colorScheme: 'morado',
+  currentTheme: getTheme('morado', 'light'),
   
   toggleTheme: () => set((state) => {
     const newMode = state.themeMode === 'light' ? 'dark' : 'light';
     return {
       themeMode: newMode,
-      currentTheme: theme[newMode]
+      currentTheme: getTheme(state.colorScheme, newMode)
     };
   }),
+
+  setColorScheme: (scheme) => set((state) => ({
+    colorScheme: scheme,
+    currentTheme: getTheme(scheme, state.themeMode)
+  })),
 
   prendas: [],
   selectedPrendas: [],
@@ -45,8 +53,6 @@ export const useAppStore = create<AppState>((set) => ({
     return { prendas: newPrendas };
   }),
 
-  
-
   toggleSelectPrenda: (id) => set((state) => {
     const isSelected = state.selectedPrendas.includes(id);
     return {
@@ -59,4 +65,3 @@ export const useAppStore = create<AppState>((set) => ({
   clearSelectedPrendas: () => set({ selectedPrendas: [] }),
   selectAllPrendas: (ids) => set({ selectedPrendas: ids }),
 }));
-

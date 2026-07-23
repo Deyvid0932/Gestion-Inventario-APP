@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert, Platform, KeyboardAvoidingView, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { clayStyles } from '../style/theme';
+import { clayStyles, SCHEME_COLORS, ColorSchemeType } from '../style/theme';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -22,8 +22,7 @@ interface ChatMessage {
 export const ChatbotScreen = () => {
   const db = useSQLiteContext();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
-  const { currentTheme, themeMode } = useAppStore();
-
+  const { currentTheme, themeMode, toggleTheme, colorScheme, setColorScheme } = useAppStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -33,7 +32,6 @@ export const ChatbotScreen = () => {
   const flatListRef = useRef<FlatList>(null);
   const lastNavTime = useRef(0);
 
-  // Cargar sesiones iniciales
   useEffect(() => {
     const loadSessions = async () => {
       const allSessions = await ChatbotService.getSessions(db);
@@ -166,6 +164,15 @@ export const ChatbotScreen = () => {
       </Text>
       <Text style={[styles.cardLocation, { color: currentTheme.primary, marginTop: 4 }]}>📍 {match.cajaNombre || 'Sin Caja'} → {match.inventarioNombre || 'General'}</Text>
 
+      {match.alarmaFechaHora && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: currentTheme.primary + '15', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginBottom: 8, alignSelf: 'flex-start' }}>
+          <Ionicons name="time-outline" size={14} color={currentTheme.primary} style={{ marginRight: 4 }} />
+          <Text style={{ fontSize: 11, fontWeight: '700', color: currentTheme.primary }}>
+            Alarma: {new Date(match.alarmaFechaHora).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} {new Date(match.alarmaFechaHora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        </View>
+      )}
+
       <TouchableOpacity
         style={[styles.redirectBtn, { backgroundColor: currentTheme.primary + '20' }]}
         onPress={() => navigateSafe('ExcelGrid', { cajaId: match.cajaId, nombreCaja: match.cajaNombre, targetPrendaId: match.id })}
@@ -182,7 +189,6 @@ export const ChatbotScreen = () => {
       style={[styles.container, { backgroundColor: currentTheme.background }]}
     >
 
-      {/* Navbar (Clon exacto de Navbar.tsx) */}
       <View style={[styles.navbar, { backgroundColor: currentTheme.card, borderBottomColor: currentTheme.border }]}>
         <StatusBar
           barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'}
@@ -195,25 +201,36 @@ export const ChatbotScreen = () => {
           <Text style={[styles.navTitle, { color: currentTheme.text }]} numberOfLines={1}>Groq IA</Text>
         </View>
         <View style={[styles.navRight, { flexDirection: 'row', alignItems: 'center' }]}>
-          <TouchableOpacity
-            onPress={handleClear}
-            style={{ marginRight: 12, width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="trash-outline" size={22} color={currentTheme.text} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
+            {(['morado', 'dorado', 'celeste'] as ColorSchemeType[]).map((schemeKey) => (
+              <TouchableOpacity
+                key={schemeKey}
+                onPress={() => setColorScheme(schemeKey)}
+                activeOpacity={0.7}
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 11,
+                  marginHorizontal: 3,
+                  backgroundColor: SCHEME_COLORS[schemeKey],
+                  borderWidth: colorScheme === schemeKey ? 2 : 0,
+                  borderColor: themeMode === 'light' ? '#000000' : '#FFFFFF',
+                }}
+              />
+            ))}
+          </View>
+
 
           <TouchableOpacity
-            onPress={useAppStore.getState().toggleTheme}
-            style={{ width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }}
+            onPress={toggleTheme}
+            style={{ width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }}
             activeOpacity={0.7}
           >
-            <Ionicons name={themeMode === 'light' ? "moon-outline" : "sunny-outline"} size={22} color={currentTheme.text} />
+            <Ionicons name={themeMode === 'light' ? "moon-outline" : "sunny-outline"} size={20} color={currentTheme.text} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Mensajes (Lista optimizada) */}
       <FlatList
         ref={flatListRef}
         style={styles.messageList}
@@ -223,11 +240,9 @@ export const ChatbotScreen = () => {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         contentContainerStyle={styles.chatList}
-
-        // CAMBIO 2: Desmontado nativo para evitar trabones de renderizado
         removeClippedSubviews={Platform.OS === 'android'}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-        extraData={themeMode} // <-- Fuerza el re-render inmediato al cambiar el tema
+        extraData={themeMode}
 
         renderItem={({ item }) => (
           <Animated.View
@@ -252,7 +267,7 @@ export const ChatbotScreen = () => {
                   style={{ marginRight: 3 }}
                 />
                 <Text style={{ fontSize: 10, fontWeight: '600', color: item.engineUsed === 'ia' ? '#3B82F6' : '#EAB308' }}>
-                  {item.engineUsed === 'ia' ? 'North Mini Code' : 'Motor Local'}
+                  {item.engineUsed === 'ia' ? 'Groq' : 'Motor Local'}
                 </Text>
               </View>
             )}
@@ -273,7 +288,6 @@ export const ChatbotScreen = () => {
         }
       />
 
-      {/* Entrada (Alineada para que no flote erráticamente) */}
       <View style={[styles.inputArea, { backgroundColor: currentTheme.card, borderTopColor: currentTheme.border }]}>
         <TextInput
           style={[
@@ -292,8 +306,7 @@ export const ChatbotScreen = () => {
           editable={!isTyping}
           returnKeyType="send"
           blurOnSubmit={false}
-          numberOfLines={1} // CAMBIO 3: Estabiliza el cálculo inicial de altura en Android
-          textAlignVertical="center" // CAMBIO 4: Clave para que el input no desplace su texto hacia arriba
+          textAlignVertical="top"
         />
 
         <TouchableOpacity
@@ -311,7 +324,15 @@ export const ChatbotScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Sidebar Overlay and Drawer */}
+      <View style={[styles.disclaimerBar, { backgroundColor: currentTheme.card }]}>
+        <Text style={[styles.disclaimerText, { color: currentTheme.textSecondary }]}>
+          ⚠️ Esta IA puede cometer errores
+        </Text>
+        <Text style={[styles.disclaimerText, { color: currentTheme.textSecondary, opacity: 0.6 }]}>
+          Creador: Deyvid Jair Chupillon Silva
+        </Text>
+      </View>
+
       {isSidebarOpen && (
         <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { zIndex: 99, backgroundColor: 'rgba(0,0,0,0.5)' }]}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setIsSidebarOpen(false)} />
@@ -439,7 +460,6 @@ const styles = StyleSheet.create({
   resultCard: {
     padding: 16,
     marginTop: 8,
-    // clayStyles applied via spread
   },
   cardRow: {
     flexDirection: 'row',
@@ -484,11 +504,24 @@ const styles = StyleSheet.create({
     borderWidth: clayStyles.borderWidth,
     borderRadius: clayStyles.borderRadius,
     paddingHorizontal: 16,
-    paddingVertical: Platform.OS === 'android' ? 8 : 12, // Relleno equilibrado
+    paddingVertical: Platform.OS === 'android' ? 8 : 12,
     fontSize: 15,
     marginRight: 10,
-    minHeight: 40,
-    maxHeight: 80,
+    minHeight: 44,
+    maxHeight: 120,
+  },
+  disclaimerBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 5,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(150,150,150,0.15)',
+  },
+  disclaimerText: {
+    fontSize: 9,
+    fontWeight: '500',
   },
   sendBtn: {
     width: 44,

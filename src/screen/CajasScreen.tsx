@@ -19,7 +19,7 @@ import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flat
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CajaService } from '../services/CajaService';
 import CajaCard from '../components/CajaCard';
-import Reanimated from 'react-native-reanimated';
+
 
 type CajasRouteProp = RouteProp<RootStackParamList, 'Cajas'>;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -66,7 +66,7 @@ const CajasScreen = () => {
   useFocusEffect(
     useCallback(() => {
       if (db) {
-        fetchCajas(true); // Restauramos que siempre muestre el "carga" al entrar
+        fetchCajas(true);
       }
     }, [fetchCajas])
   );
