@@ -19,6 +19,12 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS pending_deletions (
+        id TEXT PRIMARY KEY NOT NULL,
+        tableName TEXT NOT NULL,
+        recordId TEXT NOT NULL,
+        createdAt TEXT NOT NULL
+      );
     `);
     await db.runAsync('ALTER TABLE chat_history ADD COLUMN sessionId TEXT;').catch(() => { });
     await db.runAsync('ALTER TABLE chat_history ADD COLUMN engineUsed TEXT;').catch(() => { });
@@ -220,9 +226,13 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       currentDbVersion = 11;
     }
     if (currentDbVersion === 11) {
+      try {
+        await db.runAsync('ALTER TABLE prendas ADD COLUMN alarmaFechaHora TEXT;');
+      } catch (e) { }
+      try {
+        await db.runAsync('ALTER TABLE prendas ADD COLUMN alarmaNotificationId TEXT;');
+      } catch (e) { }
       await db.execAsync(`
-        ALTER TABLE prendas ADD COLUMN alarmaFechaHora TEXT;
-        ALTER TABLE prendas ADD COLUMN alarmaNotificationId TEXT;
         INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 12);
       `);
       currentDbVersion = 12;

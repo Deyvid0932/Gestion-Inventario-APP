@@ -1,48 +1,48 @@
 import { SQLiteDatabase } from 'expo-sqlite';
+import { supabase } from '../database/supabase';
 import { SearchResult } from '../utils/nlpEngine';
 import { ChatSession } from '../types';
 
 export interface ChatMessage {
   id: string;
-  sender: 'user' | 'bot';
+  sender: 'bot' | 'user';
   text: string;
   matches?: SearchResult[];
-  timestamp: number;
   engineUsed?: 'ia' | 'local';
+  timestamp: number;
 }
 
 const BASE_QUERY = `
-  SELECT p.id, p.op, p.estilo, p.color, p.estado, p.fotoUri, p.cajaId,
-  c.nombre as cajaNombre, i.nombre as inventarioNombre, i.id as inventarioId
+  SELECT 
+    p.id,
+    p.op,
+    p.estilo,
+    p.color,
+    p.fotoUri,
+    p.fotoUri2,
+    p.estado,
+    c.nombre as cajaNombre,
+    i.nombre as inventarioNombre
   FROM prendas p
   JOIN cajas c ON p.cajaId = c.id
   JOIN inventarios i ON c.inventarioId = i.id
 `;
 
 const extractOP = (text: string): string | null => {
-  const cleaned = text.toUpperCase().trim();
-  const opMatch = cleaned.match(/^OP\s*(\d+)$/i);
-  if (opMatch) return opMatch[1];
-  if (/^\d{3,}$/.test(cleaned)) return cleaned;
-  return null;
+  const match = text.match(/\b(?:op|o\/p|orden|order)?\s*[:#-]?\s*(\d{5,8})\b/i);
+  return match ? match[1] : null;
 };
 
-const COLORES_CONOCIDOS = [
-  'ROJO', 'AZUL', 'VERDE', 'AMARILLO', 'NEGRO', 'BLANCO', 'GRIS', 'NARANJA',
-  'MORADO', 'ROSA', 'CELESTE', 'TURQUESA', 'BEIGE', 'CREMA', 'MARRON',
-  'CAFE', 'CORAL', 'SALMON', 'LILA', 'FUCSIA', 'DORADO', 'PLATEADO',
-  'BURGUNDY', 'VINO', 'OLIVO', 'AQUA', 'NAVY', 'RED', 'BLUE', 'GREEN',
-  'BLACK', 'WHITE', 'PINK', 'PURPLE', 'ORANGE', 'YELLOW', 'BROWN', 'GREY'
-];
-
 const extractColor = (text: string): string | null => {
-  const cleaned = text.toUpperCase().replace(/[^A-Z0-9\s]/g, '').trim();
-  const colorMatch = cleaned.match(/COLOR\s+(\w+)/);
-  if (colorMatch) return colorMatch[1];
-  if (COLORES_CONOCIDOS.includes(cleaned)) return cleaned;
-  const words = cleaned.split(/\s+/);
-  for (const word of words) {
-    if (COLORES_CONOCIDOS.includes(word)) return word;
+  const colors = [
+    'NEGRO', 'BLANCO', 'ROJO', 'AZUL', 'VERDE', 'AMARILLO', 'GRIS',
+    'MARRON', 'ROSADO', 'PURPURA', 'CELESTE', 'BEIGE', 'MARINO',
+    'NAVY', 'BLACK', 'WHITE', 'RED', 'BLUE', 'GREEN'
+  ];
+
+  const upper = text.toUpperCase();
+  for (const c of colors) {
+    if (upper.includes(c)) return c;
   }
   return null;
 };
@@ -157,44 +157,26 @@ const executeSearch = async (
   return executeSearch(db, 'ESTILO', valor);
 };
 
-
 const askGroqToClassify = async (
   message: string,
   history: ChatMessage[]
 ): Promise<{ tipo: string; valor: string } | null> => {
   const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY;
-  if (!apiKey) {
-    console.warn('[Groq] Falta EXPO_PUBLIC_GROQ_API_KEY. Se usará el motor local.');
-    return null;
-  }
+  if (!apiKey) return null;
+
+  const prompt = `
+Eres la IA clasificadora de intenciones para Topytop Kith.
+Clasifica la consulta del usuario.
+Historial reciente:
+${history.map(h => `${h.sender}: ${h.text}`).join('\n')}
+
+Usuario: "${message}"
+
+Responde UNICAMENTE en JSON con formato:
+{"tipo": "SALUDO" | "CONVERSACION" | "LIBRE" | "OP" | "COLOR" | "ESTILO" | "CAJA" | "INVENTARIO", "valor": "extraido_o_respuesta"}
+`;
 
   try {
-    const conversationContext = history
-      .slice()
-      .reverse()
-      .map(item => `${item.sender === 'user' ? 'Usuario' : 'Asistente'}: ${item.text}`)
-      .join('\n');
-
-    const prompt = `Contexto reciente de la conversación:
-${conversationContext || '(No hay mensajes anteriores)'}
-
-Analiza la siguiente frase nueva de un usuario de una app de inventario de ropa: "${message}"
-
-Clasifícala en uno de estos tipos:
-- OP: el usuario busca explícitamente por número de OP (ej: "OP 101", "op 5") o escribe exclusivamente un número sin letras (ej: "123").
-- ESTILO: el usuario busca por un estilo de prenda. IMPORTANTE: Los estilos en esta app suelen ser códigos alfanuméricos como "khm 030 001", "KHM 030", "KH 12", "polo slim". Si la consulta contiene letras (como KHM, POLO, CAMISA, etc.), SIEMPRE debes clasificarla como ESTILO, NUNCA como OP.
-- COLOR: el usuario busca por un color específico (ej: "rojo", "azul", "negro").
-- CAJA: el usuario pregunta cuántas prendas hay en una caja específica.
-- INVENTARIO: el usuario pide un resumen general del inventario.
-- SALUDO: el usuario solo saluda (hola, buenos días, etc).
-- LIBRE: cualquier otra cosa que NO sea una búsqueda en la base de datos.
-
-Si el tipo es LIBRE, responde directamente la conversación en el campo "valor" (breve, directo, en español). Si es cualquier otro tipo, en "valor" pon el término extraído para buscar en la base de datos.
-
-Responde ÚNICAMENTE con un objeto JSON con este formato exacto, sin explicaciones ni bloques de código markdown. Ejemplos:
-{"tipo": "ESTILO", "valor": "CAMISA001"}
-{"tipo": "LIBRE", "valor": "¡De nada! Si necesitas algo más, aquí estoy."}`;
-
     const response = await fetch(
       'https://api.groq.com/openai/v1/chat/completions',
       {
@@ -240,23 +222,21 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto, sin explicacion
   }
 };
 
-
 export const ChatbotService = {
   getSessions: async (db: SQLiteDatabase, userId?: string | null): Promise<ChatSession[]> => {
     try {
       if (userId) {
-        // Adoptar cualquier sesión de invitado huérfana al usuario actual
         await db.runAsync(
           `UPDATE chat_sessions SET user_id = ?, sync_status = 'PENDING' WHERE user_id IS NULL OR user_id = ''`,
           [userId]
         );
         return await db.getAllAsync<ChatSession>(
-          'SELECT * FROM chat_sessions WHERE deleted_at IS NULL AND user_id = ? ORDER BY updatedAt DESC',
+          'SELECT * FROM chat_sessions WHERE user_id = ? ORDER BY updatedAt DESC',
           [userId]
         );
       } else {
         return await db.getAllAsync<ChatSession>(
-          'SELECT * FROM chat_sessions WHERE deleted_at IS NULL AND (user_id IS NULL OR user_id = "") ORDER BY updatedAt DESC'
+          'SELECT * FROM chat_sessions WHERE (user_id IS NULL OR user_id = "") ORDER BY updatedAt DESC'
         );
       }
     } catch (e) {
@@ -281,11 +261,14 @@ export const ChatbotService = {
     }
   },
 
-  deleteSession: async (db: SQLiteDatabase, sessionId: string): Promise<void> => {
+  deleteSession: async (db: SQLiteDatabase, sessionId: string, userId?: string | null): Promise<void> => {
     try {
-      const now = new Date().toISOString();
-      await db.runAsync('UPDATE chat_history SET deleted_at = ?, sync_status = "PENDING" WHERE sessionId = ?', [now, sessionId]);
-      await db.runAsync('UPDATE chat_sessions SET deleted_at = ?, sync_status = "PENDING" WHERE id = ?', [now, sessionId]);
+      if (userId) {
+        await supabase.from('chat_history').delete().eq('sessionId', sessionId);
+        await supabase.from('chat_sessions').delete().eq('id', sessionId);
+      }
+      await db.runAsync('DELETE FROM chat_history WHERE sessionId = ?', [sessionId]);
+      await db.runAsync('DELETE FROM chat_sessions WHERE id = ?', [sessionId]);
     } catch (e) {
       console.error('Error deleting chat session', e);
     }
@@ -306,14 +289,14 @@ export const ChatbotService = {
   getHistoryBySession: async (db: SQLiteDatabase, sessionId: string): Promise<ChatMessage[]> => {
     try {
       const history = await db.getAllAsync<{ id: string, sender: string, text: string, matches_json: string, engineUsed?: string, timestamp: number }>(
-        'SELECT * FROM chat_history WHERE sessionId = ? AND deleted_at IS NULL ORDER BY timestamp DESC LIMIT 100',
+        'SELECT * FROM chat_history WHERE sessionId = ? ORDER BY timestamp DESC LIMIT 100',
         [sessionId]
       );
       return history.map(row => {
         let parsedMatches;
         if (row.matches_json) {
           try {
-            parsedMatches = JSON.parse(row.matches_json);
+            parsedMatches = typeof row.matches_json === 'string' ? JSON.parse(row.matches_json) : row.matches_json;
           } catch (_) { }
         }
         const engineUsed = (row.engineUsed as 'ia' | 'local' | undefined) || (row.sender === 'bot' ? 'ia' : undefined);
@@ -350,10 +333,17 @@ export const ChatbotService = {
     }
   },
 
-  clearHistory: async (db: SQLiteDatabase): Promise<void> => {
-    const now = new Date().toISOString();
-    await db.runAsync('UPDATE chat_history SET deleted_at = ?, sync_status = "PENDING"', [now]);
-    await db.runAsync('UPDATE chat_sessions SET deleted_at = ?, sync_status = "PENDING"', [now]);
+  clearHistory: async (db: SQLiteDatabase, userId?: string | null): Promise<void> => {
+    try {
+      if (userId) {
+        await supabase.from('chat_history').delete().neq('id', '');
+        await supabase.from('chat_sessions').delete().neq('id', '');
+      }
+      await db.runAsync('DELETE FROM chat_history');
+      await db.runAsync('DELETE FROM chat_sessions');
+    } catch (e) {
+      console.error('Error clearing history', e);
+    }
   },
 
   searchAndRespond: async (db: SQLiteDatabase, message: string, sessionId: string): Promise<{ text: string, matches: SearchResult[], engineUsed: 'ia' | 'local' }> => {

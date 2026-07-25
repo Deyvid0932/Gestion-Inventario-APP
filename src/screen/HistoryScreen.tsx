@@ -42,7 +42,7 @@ export const HistoryScreen = () => {
   const db = useSQLiteContext();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const currentTheme = useAppStore(state => state.currentTheme);
-  const themeMode = useAppStore(state => state.themeMode);;
+  const themeMode = useAppStore(state => state.themeMode);
   const { width } = useWindowDimensions();
   const [showExportModal, setShowExportModal] = useState(false);
 
@@ -77,8 +77,7 @@ export const HistoryScreen = () => {
           FROM prendas p
           JOIN cajas c ON p.cajaId = c.id
           JOIN inventarios i ON c.inventarioId = i.id
-          WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL AND i.deleted_at IS NULL ${userClause}
-            AND p.alarmaFechaHora IS NOT NULL AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?)
+          WHERE p.alarmaFechaHora IS NOT NULL AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?) ${userClause}
           ORDER BY p.alarmaFechaHora ASC
         `;
         params = [searchParam, searchParam, searchParam];
@@ -90,8 +89,7 @@ export const HistoryScreen = () => {
           FROM prendas p
           JOIN cajas c ON p.cajaId = c.id
           JOIN inventarios i ON c.inventarioId = i.id
-          WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL AND i.deleted_at IS NULL ${userClause}
-            AND p.estado = ? AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?)
+          WHERE p.estado = ? AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?) ${userClause}
           ORDER BY 
             (CASE 
               WHEN p.op = ? OR p.estilo = ? OR p.color = ? THEN 0
@@ -173,7 +171,7 @@ export const HistoryScreen = () => {
                   {item.op ? item.op : 'Sin OP'}
                 </Text>
 
-                {item.alarmaFechaHora && (
+                {status === 'Alarmas' && item.alarmaFechaHora && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAB30815', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 4 }}>
                     <Ionicons name="notifications-outline" size={11} color="#EAB308" style={{ marginRight: 3 }} />
                     <Text style={{ fontSize: 10, fontWeight: '700', color: '#EAB308' }}>

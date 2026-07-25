@@ -22,15 +22,23 @@ export const CajaService = {
 
   hardDelete: async (db: SQLiteDatabase, id: string, userId?: string | null) => {
     try {
+      let remoteDeleted = false;
+
       if (userId) {
         const { error } = await supabase.from('cajas').delete().eq('id', id);
-        if (error) {
-          console.error('Error al eliminar caja en Supabase:', error);
-          return { success: false, error: 'No se pudo eliminar en la nube. Verifica tu conexión.' };
+        if (!error) {
+          remoteDeleted = true;
         }
       }
 
       await db.withTransactionAsync(async () => {
+        if (userId && !remoteDeleted) {
+          const deletionId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          await db.runAsync(
+            `INSERT INTO pending_deletions (id, tableName, recordId, createdAt) VALUES (?, 'cajas', ?, ?)`,
+            [deletionId, id, new Date().toISOString()]
+          );
+        }
         await db.runAsync(`DELETE FROM prendas WHERE cajaId = ?`, [id]);
         await db.runAsync(`DELETE FROM cajas WHERE id = ?`, [id]);
       });

@@ -5,7 +5,7 @@ import { supabase } from '../../database/supabase';
 export class ChatHistorySyncAdapter implements SyncAdapter {
   tableName = 'chat_history';
 
-  async pushLocal(db: SQLiteDatabase, userId: string): Promise<SyncResult> {
+  async pushLocal(db: SQLiteDatabase, _userId: string): Promise<SyncResult> {
     const result: SyncResult = { success: true, pushedCount: 0, pulledCount: 0 };
     try {
       const pendingRows = await db.getAllAsync<any>(
@@ -21,7 +21,6 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
         await db.runAsync(`UPDATE chat_history SET sync_status = 'SYNCING' WHERE id = ?`, [id]);
       }
 
-      // CLAVE: Supabase usa "sessionId" y "engineUsed" con comillas (case-sensitive en PostgreSQL)
       const payload = pendingRows.map(row => {
         let parsedMatches = null;
         if (row.matches_json) {
@@ -40,7 +39,6 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
           "engineUsed": row.engineUsed || null,
           timestamp: row.timestamp,
           updated_at: row.updated_at || new Date().toISOString(),
-          deleted_at: row.deleted_at || null,
         };
       });
 
@@ -83,19 +81,29 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
         return result;
       }
 
-      if (!remoteRows || remoteRows.length === 0) {
+      if (!remoteRows) {
         return result;
       }
 
       await db.withTransactionAsync(async () => {
+        if (since === null) {
+          const remoteIds = new Set(remoteRows.map(r => r.id));
+          const localRows = await db.getAllAsync<{ id: string }>('SELECT id FROM chat_history');
+          for (const localRow of localRows) {
+            if (!remoteIds.has(localRow.id)) {
+              await db.runAsync('DELETE FROM chat_history WHERE id = ?', [localRow.id]);
+            }
+          }
+        }
+
         for (const r of remoteRows) {
           const local = await db.getFirstAsync<any>('SELECT * FROM chat_history WHERE id = ?', [r.id]);
           const matchesStr = r.matches_json ? (typeof r.matches_json === 'string' ? r.matches_json : JSON.stringify(r.matches_json)) : null;
 
           if (!local) {
             await db.runAsync(
-              `INSERT INTO chat_history (id, sessionId, sender, text, matches_json, engineUsed, timestamp, updated_at, deleted_at, sync_status) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
+              `INSERT INTO chat_history (id, sessionId, sender, text, matches_json, engineUsed, timestamp, updated_at, sync_status) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
               [
                 r.id,
                 r.sessionId,
@@ -105,7 +113,6 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
                 r.engineUsed || null,
                 r.timestamp,
                 r.updated_at,
-                r.deleted_at || null,
               ]
             );
             result.pulledCount++;
@@ -115,7 +122,7 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
 
             if (remoteTime >= localTime) {
               await db.runAsync(
-                `UPDATE chat_history SET sessionId = ?, sender = ?, text = ?, matches_json = ?, engineUsed = ?, timestamp = ?, updated_at = ?, deleted_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
+                `UPDATE chat_history SET sessionId = ?, sender = ?, text = ?, matches_json = ?, engineUsed = ?, timestamp = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
                 [
                   r.sessionId,
                   r.sender,
@@ -124,7 +131,6 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
                   r.engineUsed || null,
                   r.timestamp,
                   r.updated_at,
-                  r.deleted_at || null,
                   r.id,
                 ]
               );

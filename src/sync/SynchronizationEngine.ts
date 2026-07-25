@@ -6,6 +6,7 @@ import { CajaSyncAdapter } from './adapters/CajaSyncAdapter';
 import { PrendaSyncAdapter } from './adapters/PrendaSyncAdapter';
 import { ChatSessionSyncAdapter } from './adapters/ChatSessionSyncAdapter';
 import { ChatHistorySyncAdapter } from './adapters/ChatHistorySyncAdapter';
+import { supabase } from '../database/supabase';
 
 const LAST_SYNC_KEY = 'last_sync_timestamp';
 
@@ -61,6 +62,26 @@ class SynchronizationEngineClass {
     }
   }
 
+  // Procesar borrados pendientes offline
+  async processPendingDeletions(db: SQLiteDatabase): Promise<void> {
+    try {
+      const pendingDeletions = await db.getAllAsync<{ id: string; tableName: string; recordId: string }>(
+        `SELECT * FROM pending_deletions ORDER BY createdAt ASC`
+      );
+
+      if (!pendingDeletions || pendingDeletions.length === 0) return;
+
+      for (const item of pendingDeletions) {
+        const { error } = await supabase.from(item.tableName).delete().eq('id', item.recordId);
+        if (!error) {
+          await db.runAsync(`DELETE FROM pending_deletions WHERE id = ?`, [item.id]);
+        }
+      }
+    } catch (e) {
+      console.error('Error al procesar pending_deletions:', e);
+    }
+  }
+
   // Push de todos los registros locales PENDING / FAILED
   async pushAllPending(db: SQLiteDatabase, userId: string): Promise<SyncResult> {
     const totalResult: SyncResult = { success: true, pushedCount: 0, pulledCount: 0, errors: [] };
@@ -69,6 +90,7 @@ class SynchronizationEngineClass {
     this.isSyncing = true;
     try {
       await this.recoverStuckSyncing(db);
+      await this.processPendingDeletions(db);
 
       for (const adapter of this.adapters) {
         const res = await adapter.pushLocal(db, userId);
@@ -91,7 +113,7 @@ class SynchronizationEngineClass {
 
     this.isSyncing = true;
     try {
-      const localCount = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM inventarios WHERE deleted_at IS NULL');
+      const localCount = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM inventarios');
       const isEmpty = !localCount || localCount.count === 0;
 
       // Si la BD local está vacía o forceFull es true, descargar todo (since = null)
@@ -139,9 +161,10 @@ class SynchronizationEngineClass {
     for (const adapter of reversed) {
       await adapter.cleanForUser(db);
     }
-    // Limpiar tablas de chat
+    // Limpiar tablas de chat y cola de eliminaciones
     await db.runAsync('DELETE FROM chat_history').catch(() => {});
     await db.runAsync('DELETE FROM chat_sessions').catch(() => {});
+    await db.runAsync('DELETE FROM pending_deletions').catch(() => {});
     await AsyncStorage.removeItem(LAST_SYNC_KEY);
   }
 

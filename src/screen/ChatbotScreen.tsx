@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { clayStyles } from '../style/theme';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Animated, { FadeIn, FadeInRight, FadeInLeft, SlideInLeft, SlideOutLeft, FadeOut } from 'react-native-reanimated';
 import { useAppStore } from '../store/useAppStore';
@@ -64,29 +64,36 @@ export const ChatbotScreen = () => {
     };
   }, []);
 
-  useEffect(() => {
-    let isMounted = true;
-    const loadSessions = async () => {
-      const allSessions = await ChatbotService.getSessions(db, user?.id);
-      if (!isMounted) return;
-      setSessions(allSessions);
-      if (allSessions.length > 0) {
-        setCurrentSessionId(prev => {
-          if (prev && allSessions.some(s => s.id === prev)) return prev;
-          return allSessions[0].id;
-        });
-      } else {
-        const newSessionId = await ChatbotService.createSession(db, 'Nueva conversación', user?.id);
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      const syncAndLoadSessions = async () => {
+        if (user?.id) {
+          await SynchronizationEngine.fullSync(db, user.id).catch(() => {});
+        }
+        const allSessions = await ChatbotService.getSessions(db, user?.id);
         if (!isMounted) return;
-        setCurrentSessionId(newSessionId);
-        setSessions(await ChatbotService.getSessions(db, user?.id));
-      }
-    };
-    loadSessions();
-    return () => {
-      isMounted = false;
-    };
-  }, [db, user?.id]);
+        setSessions(allSessions);
+
+        if (allSessions.length > 0) {
+          setCurrentSessionId(prev => {
+            if (prev && allSessions.some(s => s.id === prev)) return prev;
+            return allSessions[0].id;
+          });
+        } else {
+          const newSessionId = await ChatbotService.createSession(db, 'Nueva conversación', user?.id);
+          if (!isMounted) return;
+          setCurrentSessionId(newSessionId);
+          setSessions(await ChatbotService.getSessions(db, user?.id));
+        }
+      };
+
+      syncAndLoadSessions();
+      return () => {
+        isMounted = false;
+      };
+    }, [db, user?.id])
+  );
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -200,7 +207,7 @@ export const ChatbotScreen = () => {
   };
 
   const handleDeleteSession = async (sessionId: string) => {
-    await ChatbotService.deleteSession(db, sessionId);
+    await ChatbotService.deleteSession(db, sessionId, user?.id);
     const updatedSessions = await ChatbotService.getSessions(db, user?.id);
     setSessions(updatedSessions);
 

@@ -1,7 +1,6 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import { SyncAdapter, SyncResult } from '../SyncAdapter';
 import { supabase } from '../../database/supabase';
-import { ChatSession } from '../../types';
 
 export class ChatSessionSyncAdapter implements SyncAdapter {
   tableName = 'chat_sessions';
@@ -23,8 +22,6 @@ export class ChatSessionSyncAdapter implements SyncAdapter {
         await db.runAsync(`UPDATE chat_sessions SET sync_status = 'SYNCING', user_id = ? WHERE id = ?`, [userId, id]);
       }
 
-      // CLAVE: Supabase usa "createdAt" y "updatedAt" con comillas (case-sensitive)
-      // El client de Supabase JS envía las keys tal cual, PostgreSQL las respeta si la columna fue creada con comillas
       const payload = pendingRows.map(row => ({
         id: row.id,
         user_id: userId,
@@ -32,7 +29,6 @@ export class ChatSessionSyncAdapter implements SyncAdapter {
         "createdAt": row.createdAt,
         "updatedAt": row.updatedAt,
         updated_at: row.updated_at || new Date().toISOString(),
-        deleted_at: row.deleted_at || null,
       }));
 
       const { error } = await supabase.from('chat_sessions').upsert(payload, { onConflict: 'id' });
@@ -74,18 +70,29 @@ export class ChatSessionSyncAdapter implements SyncAdapter {
         return result;
       }
 
-      if (!remoteRows || remoteRows.length === 0) {
+      if (!remoteRows) {
         return result;
       }
 
       await db.withTransactionAsync(async () => {
+        if (since === null) {
+          const remoteIds = new Set(remoteRows.map(r => r.id));
+          const localRows = await db.getAllAsync<{ id: string }>('SELECT id FROM chat_sessions WHERE user_id = ?', [userId]);
+          for (const localRow of localRows) {
+            if (!remoteIds.has(localRow.id)) {
+              await db.runAsync('DELETE FROM chat_history WHERE sessionId = ?', [localRow.id]);
+              await db.runAsync('DELETE FROM chat_sessions WHERE id = ?', [localRow.id]);
+            }
+          }
+        }
+
         for (const r of remoteRows) {
           const local = await db.getFirstAsync<any>('SELECT * FROM chat_sessions WHERE id = ?', [r.id]);
 
           if (!local) {
             await db.runAsync(
-              `INSERT INTO chat_sessions (id, user_id, title, createdAt, updatedAt, updated_at, deleted_at, sync_status) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
+              `INSERT INTO chat_sessions (id, user_id, title, createdAt, updatedAt, updated_at, sync_status) 
+               VALUES (?, ?, ?, ?, ?, ?, 'SYNCED')`,
               [
                 r.id,
                 r.user_id,
@@ -93,7 +100,6 @@ export class ChatSessionSyncAdapter implements SyncAdapter {
                 r.createdAt,
                 r.updatedAt,
                 r.updated_at,
-                r.deleted_at || null,
               ]
             );
             result.pulledCount++;
@@ -103,14 +109,13 @@ export class ChatSessionSyncAdapter implements SyncAdapter {
 
             if (remoteTime >= localTime) {
               await db.runAsync(
-                `UPDATE chat_sessions SET user_id = ?, title = ?, createdAt = ?, updatedAt = ?, updated_at = ?, deleted_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
+                `UPDATE chat_sessions SET user_id = ?, title = ?, createdAt = ?, updatedAt = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
                 [
                   r.user_id,
                   r.title,
                   r.createdAt,
                   r.updatedAt,
                   r.updated_at,
-                  r.deleted_at || null,
                   r.id,
                 ]
               );

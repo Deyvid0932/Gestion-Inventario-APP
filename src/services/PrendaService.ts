@@ -116,15 +116,43 @@ export const PrendaService = {
 
   hardDelete: async (db: SQLiteDatabase, id: string, userId?: string | null) => {
     try {
+      const prenda = await db.getFirstAsync<{ fotoUri?: string; fotoUri2?: string }>(
+        `SELECT fotoUri, fotoUri2 FROM prendas WHERE id = ?`,
+        [id]
+      );
+
+      let remoteDeleted = false;
+
       if (userId) {
         const { error } = await supabase.from('prendas').delete().eq('id', id);
-        if (error) {
-          console.error('Error al eliminar prenda en Supabase:', error);
-          return { success: false, error: 'No se pudo eliminar en la nube. Verifica tu conexión.' };
+        if (!error) {
+          remoteDeleted = true;
+          const photosToRemove: string[] = [];
+          if (prenda?.fotoUri && prenda.fotoUri.includes('supabase.co')) {
+            const path = prenda.fotoUri.split('/garment-pictures/')[1];
+            if (path) photosToRemove.push(path);
+          }
+          if (prenda?.fotoUri2 && prenda.fotoUri2.includes('supabase.co')) {
+            const path = prenda.fotoUri2.split('/garment-pictures/')[1];
+            if (path) photosToRemove.push(path);
+          }
+          if (photosToRemove.length > 0) {
+            await supabase.storage.from('garment-pictures').remove(photosToRemove).catch(() => {});
+          }
         }
       }
 
-      await db.runAsync(`DELETE FROM prendas WHERE id = ?`, [id]);
+      await db.withTransactionAsync(async () => {
+        if (userId && !remoteDeleted) {
+          const deletionId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          await db.runAsync(
+            `INSERT INTO pending_deletions (id, tableName, recordId, createdAt) VALUES (?, 'prendas', ?, ?)`,
+            [deletionId, id, new Date().toISOString()]
+          );
+        }
+        await db.runAsync(`DELETE FROM prendas WHERE id = ?`, [id]);
+      });
+
       return { success: true };
     } catch (e: any) {
       console.error('Error en hardDelete de prenda:', e);
