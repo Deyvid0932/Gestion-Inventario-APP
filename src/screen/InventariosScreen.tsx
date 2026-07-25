@@ -20,6 +20,7 @@ import { SkeletonLoader } from '../components/SkeletonLoader';
 import InventarioCard from '../components/InventarioCard';
 import { InventarioService } from '../services/InventarioService';
 import { SynchronizationEngine } from '../sync/SynchronizationEngine';
+import { EmptyState } from '../design-system/components/EmptyState';
 import { AuthManager } from '../services/AuthManager';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -113,7 +114,7 @@ export const InventariosScreen = () => {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: currentTheme.background }}>
       <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
-        <Navbar title="Lotes de Trabajo" />
+        <Navbar title="Lotes de Trabajo" showBackButton={true} />
 
         {loading ? (
           <SkeletonLoader theme={currentTheme} />
@@ -146,7 +147,7 @@ export const InventariosScreen = () => {
               keyExtractor={item => item.id.toString()}
               contentContainerStyle={styles.listContent}
               initialNumToRender={10}
-              maxToRenderPerBatch={10}
+              maxToRenderPerBatch={8}
               windowSize={5}
               removeClippedSubviews={true}
               ListEmptyComponent={
@@ -154,15 +155,11 @@ export const InventariosScreen = () => {
                   style={styles.emptyContainer}
                   entering={FadeIn.duration(400)} 
                 >
-                  <View style={styles.emptyContainer}>
-                    <View style={[styles.emptyIconCircle, { backgroundColor: currentTheme.card }]}>
-                      <Ionicons name="cube-outline" size={80} color={currentTheme.primary} />
-                    </View>
-                    <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>¡Lotes Vacíos!</Text>
-                    <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
-                      Parece que aún no has creado inventarios. Toca el botón + para comenzar.
-                    </Text>
-                  </View>
+                  <EmptyState 
+                    icon="cube-outline"
+                    title="¡Lotes Vacíos!"
+                    subtitle="Parece que aún no has creado inventarios. Toca el botón + para comenzar."
+                  />
                 </Reanimated.View>
               }
             />

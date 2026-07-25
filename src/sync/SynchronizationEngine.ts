@@ -49,6 +49,26 @@ class SynchronizationEngineClass {
     return time;
   }
 
+  // Obtener el total de registros pendientes de sincronización o borrado
+  async getPendingCount(db: SQLiteDatabase): Promise<number> {
+    try {
+      let count = 0;
+      for (const adapter of this.adapters) {
+        const res = await db.getFirstAsync<{ total: number }>(
+          `SELECT count(*) as total FROM ${adapter.tableName} WHERE sync_status = 'PENDING' OR sync_status = 'FAILED'`
+        );
+        count += res?.total || 0;
+      }
+      const deletionsRes = await db.getFirstAsync<{ total: number }>(
+        `SELECT count(*) as total FROM pending_deletions`
+      );
+      count += deletionsRes?.total || 0;
+      return count;
+    } catch {
+      return 0;
+    }
+  }
+
   // Desatascar registros que quedaron en SYNCING al cerrarse la app repentinamente
   async recoverStuckSyncing(db: SQLiteDatabase): Promise<void> {
     try {

@@ -35,6 +35,11 @@ import { usePrenda } from '../hooks/usePrenda';
 import { Ionicons } from '@expo/vector-icons';
 import { clayStyles } from '../style/theme';
 import { getColorHex } from '../utils/colorUtils';
+import { AppButton } from '../design-system/components/AppButton';
+import { AppCard } from '../design-system/components/AppCard';
+import { recognizeImageText } from '../services/ocrService';
+import { extractLabelData } from '../utils/ocrParser';
+import { resizeForOCR } from '../utils/imageProcessor';
 
 export const FormScreen = () => {
   const route = useRoute<RouteProp<RootStackParamList, 'Form'>>();
@@ -68,6 +73,7 @@ export const FormScreen = () => {
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
 
   const triggerShake = useCallback(() => {
     Animated.sequence([
@@ -107,7 +113,7 @@ export const FormScreen = () => {
       if (!result.canceled && result.assets[0]) {
         const optimized = await manipulateAsync(
           result.assets[0].uri,
-          [{ resize: { width: 600 } }],
+          [{ resize: { width: 600, height: 600 } }],
           { compress: 0.5, format: SaveFormat.JPEG }
         );
         const fileName = `prenda_${Date.now()}_slot${slot}.jpg`;
@@ -145,6 +151,43 @@ export const FormScreen = () => {
     Animated.spring(buttonScale, { toValue: 1, useNativeDriver: true, tension: 100 }).start();
   };
 
+  const handleOCRScan = async () => {
+    try {
+      const res = await ImagePicker.requestCameraPermissionsAsync();
+      if (res.status !== 'granted') {
+        Alert.alert('Permiso', 'Se necesita acceso a la cámara para escanear.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'] as any,
+        allowsEditing: true,
+        quality: 1
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setIsScanning(true);
+        const optimized = await resizeForOCR(result.assets[0].uri);
+        const text = await recognizeImageText(optimized.uri);
+        const data = extractLabelData(text);
+
+        setFormData(prev => ({
+          ...prev,
+          ...(data.op ? { op: data.op } : {}),
+          ...(data.estilo ? { estilo: data.estilo } : {}),
+          ...(data.color ? { color: data.color } : {}),
+          ...(data.talla ? { talla: data.talla } : {}),
+        }));
+        
+        setIsScanning(false);
+      }
+    } catch (error) {
+      console.error(error);
+      setIsScanning(false);
+      Alert.alert('Error', 'No se pudo escanear la etiqueta.');
+    }
+  };
+
   const isFieldValid = (field: string) => {
     return !!(formData[field] && formData[field].trim().length > 0);
   };
@@ -162,7 +205,7 @@ export const FormScreen = () => {
     if (entityType === 'inventario' || entityType === 'caja') {
       if (!isFieldValid('nombre')) isValid = false;
     } else if (entityType === 'prenda') {
-      if (!isFieldValid('color') || !isFieldValid('estilo')) isValid = false;
+      if (!isFieldValid('color') || !isFieldValid('estilo') || !isFieldValid('talla')) isValid = false;
     }
 
     if (!isValid) {
@@ -230,6 +273,7 @@ export const FormScreen = () => {
           op: formData.op || '',
           estilo: formData.estilo || '',
           color: formData.color || '',
+          talla: formData.talla || '',
           fotoUri: imageUri || null,
           fotoUri2: imageUri2 || null,
           estado: 1,
@@ -333,16 +377,8 @@ export const FormScreen = () => {
           overScrollMode="never"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View style={[
-            styles.card,
-            clayStyles,
-            {
-              backgroundColor: currentTheme.card,
-              borderColor: currentTheme.border,
-              shadowColor: currentTheme.borderShadow || '#000',
-              transform: [{ translateX: shakeAnim }]
-            }
-          ]}>
+          <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
+            <AppCard variant="elevated" style={[{ borderColor: currentTheme.border, padding: 18 }]}>
 
             {(entityType === 'inventario' || entityType === 'caja') && renderInput('Nombre', 'nombre', 'Ingrese el nombre')}
 
@@ -350,6 +386,14 @@ export const FormScreen = () => {
 
             {(entityType === 'prenda') && (
               <>
+                <AppButton
+                  title="Escanear Etiqueta"
+                  icon="scan-outline"
+                  onPress={handleOCRScan}
+                  variant="secondary"
+                  loading={isScanning}
+                  style={{ marginBottom: 16 }}
+                />
                 {renderInput('Estilo', 'estilo', 'Ej. Polo Slim')}
                 <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
                   <View style={{ flex: 1 }}>
@@ -357,6 +401,9 @@ export const FormScreen = () => {
                   </View>
                   <View style={{ flex: 1 }}>
                     {renderInput('Color', 'color', 'Ej. Rojo')}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {renderInput('Talla', 'talla', 'Ej. M')}
                   </View>
                 </View>
 
@@ -566,41 +613,13 @@ export const FormScreen = () => {
               </>
             )}
 
-            <TouchableOpacity
-              activeOpacity={1}
-              onPressIn={onPressIn}
-              onPressOut={onPressOut}
+            <AppButton
+              title={initialData?.id ? 'Actualizar' : 'Guardar Registro'}
               onPress={handleSubmit}
-              disabled={loading}
+              loading={loading}
               style={{ marginTop: 24 }}
-              accessibilityLabel={initialData?.id ? 'Actualizar registro' : 'Guardar registro'}
-              accessibilityRole="button"
-            >
-              <Animated.View style={[
-                styles.saveBtn,
-                {
-                  borderRadius: clayStyles.borderRadius - 8,
-                  backgroundColor: currentTheme.primary,
-                  borderColor: currentTheme.border,
-                  borderWidth: clayStyles.borderWidth,
-                  shadowColor: currentTheme.primary,
-                  shadowOpacity: 0.3,
-                  shadowOffset: { width: 0, height: 6 },
-                  shadowRadius: 10,
-                  elevation: 5,
-                  transform: [{ scale: buttonScale }],
-                  opacity: loading ? 0.7 : 1
-                }
-              ]}>
-                {loading ? (
-                  <ActivityIndicator color={currentTheme.primaryText} />
-                ) : (
-                  <Text style={[styles.saveText, { color: currentTheme.primaryText }]} allowFontScaling={true}>
-                    {initialData?.id ? 'Actualizar' : 'Guardar Registro'}
-                  </Text>
-                )}
-              </Animated.View>
-            </TouchableOpacity>
+            />
+            </AppCard>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>

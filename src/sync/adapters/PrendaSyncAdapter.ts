@@ -27,6 +27,7 @@ export class PrendaSyncAdapter implements SyncAdapter {
         op: row.op || '',
         estilo: row.estilo,
         color: row.color,
+        talla: row.talla || '',
         "fotoUri": row.fotoUri || null,
         "fotoUri2": row.fotoUri2 || null,
         estado: row.estado,
@@ -95,14 +96,15 @@ export class PrendaSyncAdapter implements SyncAdapter {
 
           if (!local) {
             await db.runAsync(
-              `INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, estado, fechaCreacion, alarmaFechaHora, alarmaNotificationId, updated_at, sync_status) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
+              `INSERT INTO prendas (id, cajaId, op, estilo, color, talla, fotoUri, fotoUri2, estado, fechaCreacion, alarmaFechaHora, alarmaNotificationId, updated_at, sync_status) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
               [
                 r.id,
                 r.cajaId,
                 r.op || '',
                 r.estilo,
                 r.color,
+                r.talla || '',
                 r.fotoUri || null,
                 r.fotoUri2 || null,
                 r.estado,
@@ -119,12 +121,13 @@ export class PrendaSyncAdapter implements SyncAdapter {
 
             if (remoteTime >= localTime) {
               await db.runAsync(
-                `UPDATE prendas SET cajaId = ?, op = ?, estilo = ?, color = ?, fotoUri = ?, fotoUri2 = ?, estado = ?, fechaCreacion = ?, alarmaFechaHora = ?, alarmaNotificationId = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
+                `UPDATE prendas SET cajaId = ?, op = ?, estilo = ?, color = ?, talla = ?, fotoUri = ?, fotoUri2 = ?, estado = ?, fechaCreacion = ?, alarmaFechaHora = ?, alarmaNotificationId = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
                 [
                   r.cajaId,
                   r.op || '',
                   r.estilo,
                   r.color,
+                  r.talla || '',
                   r.fotoUri || null,
                   r.fotoUri2 || null,
                   r.estado,
@@ -159,10 +162,7 @@ export class PrendaSyncAdapter implements SyncAdapter {
   async adoptForUser(db: SQLiteDatabase, _userId: string): Promise<void> {
     try {
       const now = new Date().toISOString();
-      await db.runAsync(
-        `UPDATE prendas SET sync_status = 'PENDING', updated_at = ? WHERE sync_status IS NULL OR sync_status = ''`,
-        [now]
-      );
+      await db.runAsync(`UPDATE prendas SET sync_status = 'PENDING', updated_at = ? WHERE sync_status IS NULL OR sync_status = ''`, [now]);
     } catch (e) {
       console.error('Error al adoptar prendas:', e);
     }

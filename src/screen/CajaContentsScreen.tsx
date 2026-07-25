@@ -31,6 +31,7 @@ import { MovePrendaModal } from '../components/MovePrendaModal';
 import { SuccessModal } from '../components/SuccessModal';
 
 import { AuthManager } from '../services/AuthManager';
+import { EmptyState } from '../design-system/components/EmptyState';
 
 type ExcelGridRouteProp = RouteProp<RootStackParamList, 'ExcelGrid'>;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -428,7 +429,7 @@ const CajaContentsScreen = () => {
               renderItem={renderItem}
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContent}
-              initialNumToRender={8}
+              initialNumToRender={10}
               maxToRenderPerBatch={8}
               windowSize={5}
               removeClippedSubviews={true}
@@ -456,13 +457,11 @@ const CajaContentsScreen = () => {
                 />
               }
               ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="shirt-outline" size={100} color={currentTheme.border} />
-                  <Text style={[styles.emptyTitle, { color: currentTheme.textSecondary }]}>¡Sin Prendas!</Text>
-                  <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
-                    Toca "Nuevo" o usa el OCR para comenzar.
-                  </Text>
-                </View>
+                <EmptyState 
+                  icon="shirt-outline"
+                  title="¡Sin Prendas!"
+                  subtitle="Toca 'Nuevo' o usa el OCR para comenzar."
+                />
               }
 
               ListFooterComponent={<View style={{ height: 50 }} />}

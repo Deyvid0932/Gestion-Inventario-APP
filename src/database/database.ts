@@ -38,6 +38,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     await db.runAsync('ALTER TABLE chat_history ADD COLUMN updated_at TEXT;').catch(() => { });
     await db.runAsync('ALTER TABLE chat_history ADD COLUMN deleted_at TEXT;').catch(() => { });
     await db.runAsync("ALTER TABLE chat_history ADD COLUMN sync_status TEXT DEFAULT 'PENDING';").catch(() => { });
+    await db.runAsync('ALTER TABLE prendas ADD COLUMN talla TEXT;').catch(() => { });
   } catch (e) {
     console.error('Error auto-corrigiendo esquema:', e);
   }
@@ -82,6 +83,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         op TEXT,
         estilo TEXT NOT NULL,
         color TEXT NOT NULL,
+        talla TEXT,
         fotoUri TEXT,
         fotoUri2 TEXT,
         estado INTEGER NOT NULL DEFAULT 1,

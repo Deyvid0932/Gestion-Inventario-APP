@@ -23,14 +23,15 @@ export const PrendaService = {
 
       const now = new Date().toISOString();
       await db.runAsync(
-        `INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, estado, fechaCreacion, alarmaFechaHora, alarmaNotificationId, updated_at, sync_status) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+        `INSERT INTO prendas (id, cajaId, op, estilo, color, talla, fotoUri, fotoUri2, estado, fechaCreacion, alarmaFechaHora, alarmaNotificationId, updated_at, sync_status) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
         [
           prenda.id,
           prenda.cajaId,
           prenda.op || '',
           prenda.estilo,
           prenda.color,
+          prenda.talla || '',
           prenda.fotoUri || null,
           prenda.fotoUri2 || null,
           prenda.estado ?? 1,
@@ -66,11 +67,12 @@ export const PrendaService = {
 
       const now = new Date().toISOString();
       await db.runAsync(
-        `UPDATE prendas SET op = ?, estilo = ?, color = ?, fotoUri = ?, fotoUri2 = ?, alarmaFechaHora = ?, alarmaNotificationId = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
+        `UPDATE prendas SET op = ?, estilo = ?, color = ?, talla = ?, fotoUri = ?, fotoUri2 = ?, alarmaFechaHora = ?, alarmaNotificationId = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
         [
           prenda.op || '',
           prenda.estilo,
           prenda.color,
+          prenda.talla || '',
           prenda.fotoUri || null,
           prenda.fotoUri2 || null,
           prenda.alarmaFechaHora || null,
@@ -175,11 +177,11 @@ export const PrendaService = {
 
       return await db.getAllAsync<Prenda>(
         `SELECT * FROM prendas 
-         WHERE cajaId = ? AND (op LIKE ? OR estilo LIKE ? OR color LIKE ?) 
+         WHERE cajaId = ? AND (op LIKE ? OR estilo LIKE ? OR color LIKE ? OR talla LIKE ?) 
          ORDER BY 
           (CASE 
-            WHEN op = ? OR estilo = ? OR color = ? THEN 0
-            WHEN op LIKE ? OR estilo LIKE ? OR color LIKE ? THEN 1
+            WHEN op = ? OR estilo = ? OR color = ? OR talla = ? THEN 0
+            WHEN op LIKE ? OR estilo LIKE ? OR color LIKE ? OR talla LIKE ? THEN 1
             ELSE 2
           END), fechaCreacion DESC`,
         [
@@ -187,9 +189,12 @@ export const PrendaService = {
           searchParam,
           searchParam,
           searchParam,
+          searchParam,
           exactParam,
           exactParam,
           exactParam,
+          exactParam,
+          startParam,
           startParam,
           startParam,
           startParam,
@@ -207,14 +212,15 @@ export const PrendaService = {
       await db.withTransactionAsync(async () => {
         for (const prenda of prendas) {
           await db.runAsync(
-            `INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, estado, fechaCreacion, updated_at, sync_status) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+            `INSERT INTO prendas (id, cajaId, op, estilo, color, talla, fotoUri, fotoUri2, estado, fechaCreacion, updated_at, sync_status) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
             [
               prenda.id,
               prenda.cajaId,
               prenda.op || '',
               prenda.estilo,
               prenda.color,
+              prenda.talla || '',
               prenda.fotoUri || null,
               prenda.fotoUri2 || null,
               prenda.estado ?? 1,

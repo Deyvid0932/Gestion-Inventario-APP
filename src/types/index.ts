@@ -38,6 +38,7 @@ export interface Prenda {
   op: string;
   estilo: string;
   color: string;
+  talla?: string;
   estado: 1 | 0;
   fotoUri?: string | null;
   fotoUri2?: string | null;
@@ -56,6 +57,7 @@ export interface HistoryItem extends Prenda {
 
 export type RootStackParamList = {
   MainTabs: undefined;
+  Inventarios: undefined;
   Cajas: { inventarioId: string; nombreInventario: string };
   ExcelGrid: { cajaId: string; nombreCaja: string; targetPrendaId?: string };
   Form: {
@@ -67,12 +69,13 @@ export type RootStackParamList = {
 };
 
 export type BottomTabParamList = {
-  Inventarios: undefined;
-  Stats: undefined;
+  Home: undefined;
   Chatbot: undefined;
   History: undefined;
-  GarmentDetails: { cajaId: string; nombreCaja: string };
+  Settings: undefined;
 };
+
+export type RootTabParamList = BottomTabParamList;
 
 export interface ChatSession {
   id: string;

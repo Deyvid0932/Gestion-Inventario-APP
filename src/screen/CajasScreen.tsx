@@ -20,6 +20,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CajaService } from '../services/CajaService';
 import { AuthManager } from '../services/AuthManager';
 import CajaCard from '../components/CajaCard';
+import { EmptyState } from '../design-system/components/EmptyState';
 
 type CajasRouteProp = RouteProp<RootStackParamList, 'Cajas'>;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -177,7 +178,7 @@ export const CajasScreen = () => {
               activationDistance={10}
               containerStyle={{ flex: 1 }}
               initialNumToRender={10}
-              maxToRenderPerBatch={10}
+              maxToRenderPerBatch={8}
               windowSize={5}
               refreshControl={
                 <RefreshControl
@@ -188,13 +189,11 @@ export const CajasScreen = () => {
                 />
               }
               ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="cube-outline" size={80} color={currentTheme.primary} />
-                  <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>No hay cajas</Text>
-                  <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
-                    Toca el botón + para agregar una caja a este lote.
-                  </Text>
-                </View>
+                <EmptyState 
+                  icon="cube-outline"
+                  title="No hay cajas"
+                  subtitle="Toca el botón + para agregar una caja a este lote."
+                />
               }
             />
           )}

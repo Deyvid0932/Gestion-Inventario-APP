@@ -38,3 +38,40 @@ export const processOCRText = (rawText: string, cajaId: string) => {
         return null;
     }).filter(item => item !== null);
 };
+
+export const extractLabelData = (rawText: string) => {
+    const normalizedText = rawText.replace(/[|\\/]/g, ' ').toUpperCase();
+    const result = { op: '', estilo: '', color: '', talla: '' };
+
+    const estiloRegex = /(KH[A-Z]*)\s*([0-9OQ]{3})\s*([0-9OQ]{2,3})/i;
+    const estiloMatch = normalizedText.match(estiloRegex);
+    if (estiloMatch) {
+        const normalizeNumbers = (text: string) => text.replace(/[OQ]/g, '0').replace(/[IL]/g, '1');
+        result.estilo = `${estiloMatch[1]} ${normalizeNumbers(estiloMatch[2])} ${normalizeNumbers(estiloMatch[3])}`.trim();
+    }
+
+    const colorRegex = /((?:BL|WHI|WH|NOC|SAN|SUN|CYC|LHE|SIL|SI|MYS|HER|KIN|LAY|NAV|TUR|TU|VOY|VO|EQU|STA|SAS|)[A-Z\s\(\)\/Y]+)/i;
+    // Attempt to extract color from the line with estilo if possible, otherwise global match
+    const colorMatch = normalizedText.match(colorRegex);
+    if (colorMatch) {
+        result.color = colorMatch[0].trim();
+    }
+
+    const opRegex = /(?:OP|O\.P\.|0P)\s*[:\-]?\s*([A-Z0-9]+)/i;
+    const opMatch = normalizedText.match(opRegex);
+    if (opMatch) {
+        result.op = opMatch[1].trim();
+    }
+
+    const tallaRegex = /(?:TALLA|SIZE|T)\s*[:\-]?\s*([A-Z0-9]+)/i;
+    const tallaMatch = normalizedText.match(tallaRegex);
+    if (tallaMatch) {
+        // Simple sanity check for common sizes
+        const extracted = tallaMatch[1].trim();
+        if (/^(XS|S|M|L|XL|XXL|XXXL|[0-9]{1,2})$/i.test(extracted)) {
+            result.talla = extracted;
+        }
+    }
+
+    return result;
+};

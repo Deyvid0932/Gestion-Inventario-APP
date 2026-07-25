@@ -2,15 +2,16 @@ import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { InventariosScreen } from '../screen/InventariosScreen';
-import CajaContentsScreen from '../screen/CajaContentsScreen';
-import { HistoryScreen } from '../screen/HistoryScreen';
-import { StatsScreen } from '../screen/StatsScreen';
+import { HomeScreen } from '../screen/HomeScreen';
 import { ChatbotScreen } from '../screen/ChatbotScreen';
+import { HistoryScreen } from '../screen/HistoryScreen';
+import { SettingsScreen } from '../screen/SettingsScreen';
+import { InventariosScreen } from '../screen/InventariosScreen';
+import { CajasScreen } from '../screen/CajasScreen';
+import CajaContentsScreen from '../screen/CajaContentsScreen';
+import { FormScreen } from '../screen/FormScreen';
 import { RootStackParamList, BottomTabParamList } from '../types';
 import { useAppStore } from '../store/useAppStore';
-import { CajasScreen } from '../screen/CajasScreen';
-import { FormScreen } from '../screen/FormScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -48,6 +49,7 @@ const MainStack = () => {
       }}
     >
       <Stack.Screen name="MainTabs" component={TabNavigator} />
+      <Stack.Screen name="Inventarios" component={InventariosScreen} />
       <Stack.Screen name="Cajas" component={CajasScreen} />
       <Stack.Screen name="ExcelGrid" component={CajaContentsScreen} />
       <Stack.Screen name="Form" component={FormScreen} />
@@ -60,19 +62,20 @@ const TabNavigator = () => {
 
   return (
     <Tab.Navigator
+      initialRouteName="Home"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap;
 
-          if (route.name === 'Inventarios') {
-            iconName = focused ? 'file-tray-stacked' : 'file-tray-stacked-outline';
-          } else if (route.name === 'Stats') {
-            iconName = focused ? 'stats-chart' : 'stats-chart-outline';
+          if (route.name === 'Home') {
+            iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Chatbot') {
             iconName = focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline';
           } else if (route.name === 'History') {
             iconName = focused ? 'time' : 'time-outline';
+          } else if (route.name === 'Settings') {
+            iconName = focused ? 'settings' : 'settings-outline';
           } else {
             iconName = 'help';
           }
@@ -87,10 +90,10 @@ const TabNavigator = () => {
         },
       })}
     >
-      <Tab.Screen name="Inventarios" component={InventariosScreen} options={{ title: 'Lotes' }} />
-      <Tab.Screen name="Stats" component={StatsScreen} options={{ title: 'Estadísticas' }} />
+      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Inicio' }} />
       <Tab.Screen name="Chatbot" component={ChatbotScreen} options={{ title: 'Asistente' }} />
       <Tab.Screen name="History" component={HistoryScreen} options={{ title: 'Historial' }} />
+      <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Ajustes' }} />
     </Tab.Navigator>
   );
 };
