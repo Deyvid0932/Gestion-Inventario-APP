@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, RefreshControl, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, RefreshControl, ScrollView } from 'react-native';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,8 +10,6 @@ import { useAppStore } from '../store/useAppStore';
 import { StatsService, DashboardStats } from '../services/StatsService';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import { clayStyles } from '../style/theme';
-
-const { width } = Dimensions.get('window');
 
 const STATS_CONFIG = [
   { key: 'totalInventarios', title: 'Total Lotes', icon: 'layers-outline', color: '#6C5CE7' },
@@ -24,7 +22,9 @@ const STATS_CONFIG = [
 
 export const StatsScreen = () => {
   const db = useSQLiteContext();
-  const { currentTheme, themeMode } = useAppStore();
+  const currentTheme = useAppStore(state => state.currentTheme);
+  const themeMode = useAppStore(state => state.themeMode);;
+  const { width } = useWindowDimensions();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   card: {
-    width: (width - 48) / 2,
+    width: '48%',
     padding: 16,
     marginBottom: 16,
     alignItems: 'flex-start',

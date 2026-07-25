@@ -1,4 +1,4 @@
-import React, { memo, useRef } from 'react';
+import React, { memo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -42,7 +42,7 @@ const InventarioCard = memo(({
 
   const progressColor = getProgressColor();
 
-  const renderRightActions = (progress: any) => {
+  const renderRightActions = useCallback((progress: any) => {
     const trans = progress.interpolate({
       inputRange: [0, 1],
       outputRange: [160, 0],
@@ -95,7 +95,7 @@ const InventarioCard = memo(({
         </Animated.View>
       </View>
     );
-  };
+  }, [onEdit, onDelete, item.nombre]);
 
   return (
     <Swipeable
@@ -162,6 +162,14 @@ const InventarioCard = memo(({
       </TouchableOpacity>
     </Swipeable>
   );
+}, (prev, next) => {
+  return prev.item.id === next.item.id &&
+    prev.item.nombre === next.item.nombre &&
+    prev.item.descripcion === next.item.descripcion &&
+    prev.item.estado === next.item.estado &&
+    prev.item.totalPrendas === next.item.totalPrendas &&
+    prev.item.prendasEscaneadas === next.item.prendasEscaneadas &&
+    prev.theme === next.theme;
 });
 
 const styles = StyleSheet.create({

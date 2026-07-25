@@ -37,7 +37,8 @@ export const FormScreen = () => {
   const route = useRoute<RouteProp<RootStackParamList, 'Form'>>();
   const navigation = useNavigation();
   const db = useSQLiteContext();
-  const { currentTheme, themeMode } = useAppStore();
+  const currentTheme = useAppStore(state => state.currentTheme);
+  const themeMode = useAppStore(state => state.themeMode);;
   const insets = useSafeAreaInsets();
   const { addPrenda } = usePrenda();
   const lastSubmitTime = useRef(0);
@@ -93,8 +94,7 @@ export const FormScreen = () => {
       const options = {
         mediaTypes: ['images'] as any,
         allowsEditing: true,
-        aspect: [1, 1] as [number, number],
-        quality: 0.8
+        quality: 1
       };
 
       const result = source === 'camera'
@@ -105,7 +105,7 @@ export const FormScreen = () => {
         const optimized = await manipulateAsync(
           result.assets[0].uri,
           [{ resize: { width: 600 } }],
-          { compress: 0.8, format: SaveFormat.JPEG }
+          { compress: 0.5, format: SaveFormat.JPEG }
         );
         const fileName = `prenda_${Date.now()}_slot${slot}.jpg`;
         const destUri = `${FileSystem.documentDirectory}${fileName}`;
@@ -214,9 +214,16 @@ export const FormScreen = () => {
           finalAlarmaFechaHora = null;
         }
 
+        const targetCajaId = parentId || initialData?.cajaId || '';
+        if (!targetCajaId) {
+          Alert.alert('Error', 'No se encontró el identificador de la caja.');
+          setLoading(false);
+          return;
+        }
+
         const prendaData = {
           id,
-          cajaId: parentId || initialData?.cajaId,
+          cajaId: targetCajaId,
           op: formData.op || '',
           estilo: formData.estilo || '',
           color: formData.color || '',
@@ -335,8 +342,14 @@ export const FormScreen = () => {
             {(entityType === 'prenda') && (
               <>
                 {renderInput('Estilo', 'estilo', 'Ej. Polo Slim')}
-                {renderInput('OP', 'op', 'Orden de Producción', true)}
-                {renderInput('Color', 'color', 'Ej. Rojo')}
+                <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+                  <View style={{ flex: 1 }}>
+                    {renderInput('OP', 'op', 'Ej. 1', true)}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {renderInput('Color', 'color', 'Ej. Rojo')}
+                  </View>
+                </View>
 
                 <View style={styles.inputWrapper}>
                   <View style={styles.labelRow}>
@@ -550,7 +563,9 @@ export const FormScreen = () => {
               onPressOut={onPressOut}
               onPress={handleSubmit}
               disabled={loading}
-              style={{ marginTop: 15 }}
+              style={{ marginTop: 24 }}
+              accessibilityLabel={initialData?.id ? 'Actualizar registro' : 'Guardar registro'}
+              accessibilityRole="button"
             >
               <Animated.View style={[
                 styles.saveBtn,
@@ -571,7 +586,9 @@ export const FormScreen = () => {
                 {loading ? (
                   <ActivityIndicator color={currentTheme.primaryText} />
                 ) : (
-                  <Text style={[styles.saveText, { color: currentTheme.primaryText }]}>{initialData?.id ? 'Actualizar' : 'Guardar Registro'}</Text>
+                  <Text style={[styles.saveText, { color: currentTheme.primaryText }]} allowFontScaling={true}>
+                    {initialData?.id ? 'Actualizar' : 'Guardar Registro'}
+                  </Text>
                 )}
               </Animated.View>
             </TouchableOpacity>

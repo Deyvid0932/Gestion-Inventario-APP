@@ -1,16 +1,31 @@
 import { create } from 'zustand';
+import { SQLiteDatabase } from 'expo-sqlite';
+import { User, Session } from '@supabase/supabase-js';
 import { getTheme, ColorSchemeType, theme } from '../style/theme';
 import { Prenda } from '../types';
+import { SettingsService } from '../services/SettingsService';
 
 interface AppState {
   themeMode: 'light' | 'dark';
   colorScheme: ColorSchemeType;
   currentTheme: typeof theme.light;
-  toggleTheme: () => void;
-  setColorScheme: (scheme: ColorSchemeType) => void;
+  loadThemeFromDb: (db: SQLiteDatabase) => Promise<void>;
+  toggleTheme: (db?: SQLiteDatabase) => void;
+  setColorScheme: (scheme: ColorSchemeType, db?: SQLiteDatabase) => void;
+
+  // Supabase Auth & Sync State
+  user: User | null;
+  session: Session | null;
+  isAuthLoading: boolean;
+  lastSyncTime: string | null;
+  setUser: (user: User | null) => void;
+  setSession: (session: Session | null) => void;
+  setIsAuthLoading: (loading: boolean) => void;
+  setLastSyncTime: (time: string | null) => void;
+  logout: () => void;
 
   prendas: Prenda[];
-  selectedPrendas: string[];
+  selectedPrendas: Record<string, boolean>;
   
   setPrendas: (prendas: Prenda[]) => void;
   addPrendaToState: (prenda: Prenda) => void;
@@ -24,22 +39,54 @@ export const useAppStore = create<AppState>((set) => ({
   themeMode: 'light',
   colorScheme: 'morado',
   currentTheme: getTheme('morado', 'light'),
+
+  loadThemeFromDb: async (db: SQLiteDatabase) => {
+    try {
+      const settings = await SettingsService.loadThemeSettings(db);
+      set({
+        themeMode: settings.themeMode,
+        colorScheme: settings.colorScheme,
+        currentTheme: getTheme(settings.colorScheme, settings.themeMode)
+      });
+    } catch (e) {
+      console.error('Error cargando tema desde SQLite:', e);
+    }
+  },
   
-  toggleTheme: () => set((state) => {
+  toggleTheme: (db?: SQLiteDatabase) => set((state) => {
     const newMode = state.themeMode === 'light' ? 'dark' : 'light';
+    if (db) {
+      SettingsService.saveSetting(db, 'themeMode', newMode);
+    }
     return {
       themeMode: newMode,
       currentTheme: getTheme(state.colorScheme, newMode)
     };
   }),
 
-  setColorScheme: (scheme) => set((state) => ({
-    colorScheme: scheme,
-    currentTheme: getTheme(scheme, state.themeMode)
-  })),
+  setColorScheme: (scheme, db?: SQLiteDatabase) => set((state) => {
+    if (db) {
+      SettingsService.saveSetting(db, 'colorScheme', scheme);
+    }
+    return {
+      colorScheme: scheme,
+      currentTheme: getTheme(scheme, state.themeMode)
+    };
+  }),
+
+  // Auth State
+  user: null,
+  session: null,
+  isAuthLoading: false,
+  lastSyncTime: null,
+  setUser: (user) => set({ user }),
+  setSession: (session) => set({ session, user: session?.user ?? null }),
+  setIsAuthLoading: (isAuthLoading) => set({ isAuthLoading }),
+  setLastSyncTime: (lastSyncTime) => set({ lastSyncTime }),
+  logout: () => set({ user: null, session: null }),
 
   prendas: [],
-  selectedPrendas: [],
+  selectedPrendas: {},
   setPrendas: (prendas) => set({ prendas }),
   addPrendaToState: (prenda) => set((state) => ({ 
     prendas: [prenda, ...state.prendas] 
@@ -54,14 +101,19 @@ export const useAppStore = create<AppState>((set) => ({
   }),
 
   toggleSelectPrenda: (id) => set((state) => {
-    const isSelected = state.selectedPrendas.includes(id);
+    const isSelected = !!state.selectedPrendas[id];
     return {
-      selectedPrendas: isSelected
-        ? state.selectedPrendas.filter(sid => sid !== id)
-        : [...state.selectedPrendas, id]
+      selectedPrendas: {
+        ...state.selectedPrendas,
+        [id]: !isSelected
+      }
     };
   }),
 
-  clearSelectedPrendas: () => set({ selectedPrendas: [] }),
-  selectAllPrendas: (ids) => set({ selectedPrendas: ids }),
+  clearSelectedPrendas: () => set({ selectedPrendas: {} }),
+  selectAllPrendas: (ids) => {
+    const record: Record<string, boolean> = {};
+    ids.forEach(id => record[id] = true);
+    set({ selectedPrendas: record });
+  },
 }));

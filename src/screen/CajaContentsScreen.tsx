@@ -8,7 +8,8 @@ import {
   RefreshControl,
   Animated,
   Modal,
-  Image
+  Image,
+  ScrollView
 } from 'react-native';
 import { RouteProp, useRoute, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -27,6 +28,7 @@ import { PrendaCard } from '../components/PrendaCard';
 import { SearchBar } from '../components/SearchBar';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import { MovePrendaModal } from '../components/MovePrendaModal';
+import { SuccessModal } from '../components/SuccessModal';
 
 type ExcelGridRouteProp = RouteProp<RootStackParamList, 'ExcelGrid'>;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -40,6 +42,16 @@ const CajaContentsScreen = () => {
 
   const [search, setSearch] = useState('');
   const [localPrendas, setLocalPrendas] = useState<Prenda[]>([]);
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'ALARM' | 'PHOTOS' | 'INACTIVE'>('ALL');
+
+  const filteredPrendas = React.useMemo(() => {
+    return localPrendas.filter((item: Prenda) => {
+      if (activeFilter === 'ALARM') return !!item.alarmaFechaHora;
+      if (activeFilter === 'PHOTOS') return !!item.fotoUri || !!item.fotoUri2;
+      if (activeFilter === 'INACTIVE') return item.estado === 0;
+      return true;
+    });
+  }, [localPrendas, activeFilter]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -60,6 +72,15 @@ const CajaContentsScreen = () => {
   const [currentImage, setCurrentImage] = useState<string | null>(null);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [prendaToMove, setPrendaToMove] = useState<string | null>(null);
+  const [successModalConfig, setSuccessModalConfig] = useState<{
+    isVisible: boolean;
+    title: string;
+    message: string;
+  }>({
+    isVisible: false,
+    title: '',
+    message: '',
+  });
 
   const fetchPrendas = useCallback(async (showLoading = false) => {
     if (!db) return;
@@ -109,6 +130,21 @@ const CajaContentsScreen = () => {
     }, [db, fetchPrendas, clearSelectedPrendas])
   );
 
+  const isInitialMount = useRef(true);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (db) {
+      const timer = setTimeout(() => {
+        fetchPrendas(false);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [search, db, fetchPrendas]);
+
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -138,7 +174,7 @@ const CajaContentsScreen = () => {
   }, [navigation]);
 
   const handleItemPress = useCallback((item: Prenda) => {
-    if (selectedPrendas.length > 0) toggleSelectPrenda(item.id);
+    if (Object.keys(selectedPrendas).filter(k => selectedPrendas[k]).length > 0) toggleSelectPrenda(item.id);
     else {
       navigateSafe('Form', {
         mode: 'ADVANCED',
@@ -147,12 +183,12 @@ const CajaContentsScreen = () => {
         initialData: item
       });
     }
-  }, [selectedPrendas.length, cajaId, navigateSafe, toggleSelectPrenda]);
+  }, [Object.keys(selectedPrendas).filter(k => selectedPrendas[k]).length, cajaId, navigateSafe, toggleSelectPrenda]);
 
   const handleBulkDelete = () => {
     Alert.alert(
       "Eliminar Selección",
-      `¿Deseas eliminar las ${selectedPrendas.length} prendas seleccionadas?`,
+      `¿Deseas eliminar las ${Object.keys(selectedPrendas).filter(k => selectedPrendas[k]).length} prendas seleccionadas?`,
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -160,7 +196,8 @@ const CajaContentsScreen = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              for (const id of selectedPrendas) {
+              const selectedIds = Object.keys(selectedPrendas).filter(k => selectedPrendas[k]);
+              for (const id of selectedIds) {
                 await db.runAsync('DELETE FROM prendas WHERE id = ?', [id]);
               }
               clearSelectedPrendas();
@@ -220,7 +257,7 @@ const CajaContentsScreen = () => {
     <PrendaCard
       item={item}
       theme={currentTheme}
-      isSelected={selectedPrendas.includes(item.id)}
+      isSelected={!!selectedPrendas[item.id]}
       isHighlighted={item.id === highlightedId}
       onPress={() => handleItemPress(item)}
       onLongPress={() => toggleSelectPrenda(item.id)}
@@ -258,13 +295,13 @@ const CajaContentsScreen = () => {
       <Navbar title={nombreCaja} showBackButton />
 
       <View style={styles.headerActions}>
-        {selectedPrendas.length > 0 ? (
+        {Object.keys(selectedPrendas).filter(k => selectedPrendas[k]).length > 0 ? (
           <TouchableOpacity
             onPress={handleBulkDelete}
             style={[styles.bulkDeleteButton, { backgroundColor: '#e74c3c' }]}
           >
             <Ionicons name="trash" size={24} color="#FFF" />
-            <Text style={[styles.bulkDeleteText, { color: '#FFF' }]}>Eliminar Prendas ({selectedPrendas.length})</Text>
+            <Text style={[styles.bulkDeleteText, { color: '#FFF' }]}>Eliminar Prendas ({Object.keys(selectedPrendas).filter(k => selectedPrendas[k]).length})</Text>
             <TouchableOpacity onPress={clearSelectedPrendas} style={styles.clearSelectionSmall}>
               <Ionicons name="close-circle" size={24} color="#FFF" />
             </TouchableOpacity>
@@ -295,6 +332,78 @@ const CajaContentsScreen = () => {
         <SearchBar value={search} onChangeText={setSearch} placeholder="Filtrar prendas..." />
       </View>
 
+      <View style={{ height: 38, marginBottom: 8 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 8, alignItems: 'center' }}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setActiveFilter('ALL')}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 5,
+              borderRadius: 20,
+              backgroundColor: activeFilter === 'ALL' ? currentTheme.primary : currentTheme.card,
+              borderWidth: 1,
+              borderColor: activeFilter === 'ALL' ? currentTheme.primary : currentTheme.border,
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: activeFilter === 'ALL' ? currentTheme.primaryText : currentTheme.text }}>
+              Todas ({localPrendas.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setActiveFilter('ALARM')}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 5,
+              borderRadius: 20,
+              backgroundColor: activeFilter === 'ALARM' ? '#EAB308' : currentTheme.card,
+              borderWidth: 1,
+              borderColor: activeFilter === 'ALARM' ? '#EAB308' : currentTheme.border,
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: activeFilter === 'ALARM' ? '#000' : currentTheme.text }}>
+              ⏰ Con Alarma ({localPrendas.filter((p: Prenda) => !!p.alarmaFechaHora).length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setActiveFilter('PHOTOS')}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 5,
+              borderRadius: 20,
+              backgroundColor: activeFilter === 'PHOTOS' ? currentTheme.primary : currentTheme.card,
+              borderWidth: 1,
+              borderColor: activeFilter === 'PHOTOS' ? currentTheme.primary : currentTheme.border,
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: activeFilter === 'PHOTOS' ? currentTheme.primaryText : currentTheme.text }}>
+              📷 Con Fotos ({localPrendas.filter((p: Prenda) => !!p.fotoUri || !!p.fotoUri2).length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setActiveFilter('INACTIVE')}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 5,
+              borderRadius: 20,
+              backgroundColor: activeFilter === 'INACTIVE' ? '#8E8E93' : currentTheme.card,
+              borderWidth: 1,
+              borderColor: activeFilter === 'INACTIVE' ? '#8E8E93' : currentTheme.border,
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: activeFilter === 'INACTIVE' ? '#FFF' : currentTheme.text }}>
+              ⚪ Inactivas ({localPrendas.filter((p: Prenda) => p.estado === 0).length})
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
       <View style={{ flex: 1 }}>
         {showSkeleton ? (
           <SkeletonLoader theme={currentTheme} />
@@ -304,7 +413,7 @@ const CajaContentsScreen = () => {
               key={`prendas-${themeMode}`}
               extraData={themeMode}
               ref={flatListRef}
-              data={localPrendas}
+              data={filteredPrendas}
               renderItem={renderItem}
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContent}
@@ -312,6 +421,7 @@ const CajaContentsScreen = () => {
               maxToRenderPerBatch={8}
               windowSize={5}
               removeClippedSubviews={true}
+              getItemLayout={(_, index) => ({ length: 142, offset: 142 * index, index })}
               updateCellsBatchingPeriod={50}
               onScrollToIndexFailed={(info) => {
                 const offset = info.averageItemLength * info.index;
@@ -354,17 +464,29 @@ const CajaContentsScreen = () => {
         isVisible={moveModalVisible}
         onClose={() => setMoveModalVisible(false)}
         currentCajaId={cajaId}
-        onSelectCaja={async (newCajaId) => {
+        onSelectCaja={async (newCajaId, nombreCajaDestino) => {
           if (prendaToMove && db) {
             setMoveModalVisible(false);
             const result = await PrendaService.movePrenda(db, prendaToMove, newCajaId);
             if (result.success) {
               fetchPrendas(false);
+              setSuccessModalConfig({
+                isVisible: true,
+                title: '¡Prenda Movida con Éxito! 📦',
+                message: `La prenda se trasladó a la "${nombreCajaDestino}" correctamente.`
+              });
             } else {
               Alert.alert("Error", result.error || "No se pudo mover la prenda");
             }
           }
         }}
+      />
+
+      <SuccessModal
+        isVisible={successModalConfig.isVisible}
+        title={successModalConfig.title}
+        message={successModalConfig.message}
+        onClose={() => setSuccessModalConfig(prev => ({ ...prev, isVisible: false }))}
       />
 
       <Modal

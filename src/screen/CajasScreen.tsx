@@ -29,7 +29,8 @@ const CajasScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const { inventarioId, nombreInventario } = route.params;
   const db = useSQLiteContext();
-  const { currentTheme, themeMode } = useAppStore();
+  const currentTheme = useAppStore(state => state.currentTheme);
+  const themeMode = useAppStore(state => state.themeMode);;
 
   const [cajas, setCajas] = useState<CajaWithStats[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,6 +165,9 @@ const CajasScreen = () => {
             contentContainerStyle={styles.listContent}
             activationDistance={10}
             containerStyle={{ flex: 1 }}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}

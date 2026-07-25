@@ -23,20 +23,41 @@ export interface PrendaAlarmItem {
   alarmaNotificationId: string;
 }
 
+let isChannelInitialized = false;
+
+const initAndroidChannelIfNeeded = async () => {
+  if (Platform.OS === 'android' && !isChannelInitialized) {
+    try {
+      await Notifications.deleteNotificationChannelAsync('garment-alarms').catch(() => {});
+      await Notifications.deleteNotificationChannelAsync('garment-alarms-v2').catch(() => {});
+      await Notifications.setNotificationChannelAsync('garment-alarms-v3', {
+        name: 'Alarmas de Garment Manager',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 500, 250, 500, 250, 500],
+        lightColor: '#8b6fd8',
+        enableVibrate: true,
+        enableLights: true,
+        audioAttributes: {
+          usage: Notifications.AndroidAudioUsage.ALARM,
+          contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+        },
+      });
+      isChannelInitialized = true;
+    } catch (_) {}
+  }
+};
+
 export const AlarmService = {
   requestPermissions: async (): Promise<boolean> => {
-    try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      return finalStatus === 'granted';
-    } catch (e) {
-      console.error('Error al solicitar permisos de notificación:', e);
-      return false;
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
     }
+
+    return finalStatus === 'granted';
   },
 
   schedulePrendaAlarm: async (
@@ -64,25 +85,7 @@ export const AlarmService = {
         return null;
       }
 
-      if (Platform.OS === 'android') {
-        try {
-          await Notifications.deleteNotificationChannelAsync('garment-alarms');
-          await Notifications.deleteNotificationChannelAsync('garment-alarms-v2');
-        } catch (_) { }
-
-        await Notifications.setNotificationChannelAsync('garment-alarms-v3', {
-          name: 'Alarmas de Garment Manager',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 500, 250, 500, 250, 500],
-          lightColor: '#8b6fd8',
-          enableVibrate: true,
-          enableLights: true,
-          audioAttributes: {
-            usage: Notifications.AndroidAudioUsage.ALARM,
-            contentType: Notifications.AndroidAudioContentType.SONIFICATION,
-          },
-        });
-      }
+      await initAndroidChannelIfNeeded();
 
       const title = `⏰ ALARMA: ${estilo.toUpperCase()}`;
       const body = `OP: ${op || 'Sin OP'} | Color: ${color || 'N/A'} - Caja: ${cajaNombre || 'Caja'}`;

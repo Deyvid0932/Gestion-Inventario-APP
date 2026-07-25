@@ -11,7 +11,7 @@ interface SearchBarProps {
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({ value, onChangeText, placeholder = "Buscar..." }) => {
-  const { currentTheme } = useAppStore();
+  const currentTheme = useAppStore(state => state.currentTheme);;
 
   return (
     <View style={[styles.container, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000', shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 4 }, elevation: 4 }]}>

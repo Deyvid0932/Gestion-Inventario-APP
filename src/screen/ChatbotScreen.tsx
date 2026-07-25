@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert, Platform, KeyboardAvoidingView, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert, Platform, KeyboardAvoidingView, StatusBar, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { clayStyles, SCHEME_COLORS, ColorSchemeType } from '../style/theme';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -8,6 +8,8 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import Animated, { FadeIn, FadeInRight, FadeInLeft, SlideInLeft, SlideOutLeft, FadeOut } from 'react-native-reanimated';
 import { useAppStore } from '../store/useAppStore';
 import { ChatbotService } from '../services/ChatbotService';
+import { VoiceService } from '../services/VoiceService';
+import { ThemeModal } from '../components/ThemeModal';
 import { SearchResult } from '../utils/nlpEngine';
 import { RootStackParamList, ChatSession } from '../types';
 
@@ -22,15 +24,25 @@ interface ChatMessage {
 export const ChatbotScreen = () => {
   const db = useSQLiteContext();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
-  const { currentTheme, themeMode, toggleTheme, colorScheme, setColorScheme } = useAppStore();
+  const currentTheme = useAppStore(state => state.currentTheme);
+  const themeMode = useAppStore(state => state.themeMode);;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [themeModalVisible, setThemeModalVisible] = useState(false);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const lastNavTime = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      VoiceService.stopRecording();
+    };
+  }, []);
 
   useEffect(() => {
     const loadSessions = async () => {
@@ -57,7 +69,7 @@ export const ChatbotScreen = () => {
         setMessages([{
           id: '1',
           sender: 'bot',
-          text: '¡Hola! Soy Gemini NLP, tu Copiloto inteligente. ¿En qué te puedo ayudar hoy con tu inventario?'
+          text: '¡Hola! 👋 Soy tu asistente de inventario Topytop Kith. Puedes buscar por estilo, OP o color o hacer preguntas generales. ¿Qué necesitas?'
         }]);
       }
     };
@@ -143,9 +155,25 @@ export const ChatbotScreen = () => {
     ]);
   };
 
-  const handleClear = () => {
-    if (!currentSessionId) return;
-    handleDeleteSession(currentSessionId);
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      setIsRecording(false);
+      setIsTranscribing(true);
+      const transcribedText = await VoiceService.stopRecordingAndTranscribe();
+      setIsTranscribing(false);
+      if (transcribedText) {
+        setInput(prev => (prev ? `${prev} ${transcribedText}` : transcribedText));
+      } else {
+        Alert.alert('Voz no detectada', 'No se pudo interpretar la voz. Intenta hablar nuevamente.');
+      }
+    } else {
+      const started = await VoiceService.startRecording();
+      if (started) {
+        setIsRecording(true);
+      } else {
+        Alert.alert('Permiso de micrófono', 'Se requiere acceso al micrófono para grabar tu voz.');
+      }
+    }
   };
 
   const renderResultCard = (match: SearchResult) => (
@@ -195,38 +223,19 @@ export const ChatbotScreen = () => {
           backgroundColor={currentTheme.card}
         />
         <View style={styles.navLeft}>
-          <TouchableOpacity onPress={() => setIsSidebarOpen(true)} style={{ marginRight: 12 }}>
+          <TouchableOpacity onPress={() => setIsSidebarOpen(true)} style={{ marginRight: 12 }} accessibilityLabel="Abrir menú">
             <Ionicons name="menu" size={28} color={currentTheme.text} />
           </TouchableOpacity>
-          <Text style={[styles.navTitle, { color: currentTheme.text }]} numberOfLines={1}>Groq IA</Text>
+          <Text style={[styles.navTitle, { color: currentTheme.text }]} numberOfLines={1}>Llama 3.3</Text>
         </View>
         <View style={[styles.navRight, { flexDirection: 'row', alignItems: 'center' }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
-            {(['morado', 'dorado', 'celeste'] as ColorSchemeType[]).map((schemeKey) => (
-              <TouchableOpacity
-                key={schemeKey}
-                onPress={() => setColorScheme(schemeKey)}
-                activeOpacity={0.7}
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: 11,
-                  marginHorizontal: 3,
-                  backgroundColor: SCHEME_COLORS[schemeKey],
-                  borderWidth: colorScheme === schemeKey ? 2 : 0,
-                  borderColor: themeMode === 'light' ? '#000000' : '#FFFFFF',
-                }}
-              />
-            ))}
-          </View>
-
-
           <TouchableOpacity
-            onPress={toggleTheme}
-            style={{ width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: themeMode === 'light' ? '#F4F4F5' : '#27272A' }}
+            onPress={() => setThemeModalVisible(true)}
+            style={{ width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: currentTheme.card, borderWidth: 1, borderColor: currentTheme.border }}
             activeOpacity={0.7}
+            accessibilityLabel="Cambiar tema"
           >
-            <Ionicons name={themeMode === 'light' ? "moon-outline" : "sunny-outline"} size={20} color={currentTheme.text} />
+            <Ionicons name="color-palette-outline" size={20} color={currentTheme.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -240,11 +249,13 @@ export const ChatbotScreen = () => {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         contentContainerStyle={styles.chatList}
+        initialNumToRender={15}
+        maxToRenderPerBatch={10}
+        windowSize={5}
         removeClippedSubviews={Platform.OS === 'android'}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         extraData={themeMode}
-
-        renderItem={({ item }) => (
+            renderItem={({ item }) => (
           <Animated.View
             entering={item.sender === 'user' ? FadeInRight.duration(200) : FadeInLeft.duration(200)}
             style={[
@@ -267,7 +278,7 @@ export const ChatbotScreen = () => {
                   style={{ marginRight: 3 }}
                 />
                 <Text style={{ fontSize: 10, fontWeight: '600', color: item.engineUsed === 'ia' ? '#3B82F6' : '#EAB308' }}>
-                  {item.engineUsed === 'ia' ? 'Groq' : 'Motor Local'}
+                  {item.engineUsed === 'ia' ? 'Llama 3.3' : 'Motor Local'}
                 </Text>
               </View>
             )}
@@ -288,7 +299,47 @@ export const ChatbotScreen = () => {
         }
       />
 
+      {(isRecording || isTranscribing) && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isRecording ? '#EF444420' : currentTheme.primary + '20', paddingVertical: 6, paddingHorizontal: 12 }}>
+          <Ionicons
+            name={isRecording ? "mic" : "sync"}
+            size={16}
+            color={isRecording ? "#EF4444" : currentTheme.primary}
+            style={{ marginRight: 6 }}
+          />
+          <Text style={{ fontSize: 12, fontWeight: '700', color: isRecording ? "#EF4444" : currentTheme.primary }} allowFontScaling={true}>
+            {isRecording ? "🎙️ Escuchando... Toca el botón rojo para finalizar" : "⏳ Transcribiendo voz a texto..."}
+          </Text>
+        </View>
+      )}
+
       <View style={[styles.inputArea, { backgroundColor: currentTheme.card, borderTopColor: currentTheme.border }]}>
+        <TouchableOpacity
+          style={[
+            styles.sendBtn,
+            {
+              backgroundColor: isRecording ? '#EF4444' : currentTheme.card,
+              borderWidth: 1,
+              borderColor: isRecording ? '#EF4444' : currentTheme.border,
+              marginRight: 8,
+            },
+          ]}
+          onPress={handleToggleRecording}
+          disabled={isTyping || isTranscribing}
+          accessibilityLabel="Entrada por voz"
+          accessibilityRole="button"
+        >
+          {isTranscribing ? (
+            <ActivityIndicator size="small" color={currentTheme.primary} />
+          ) : (
+            <Ionicons
+              name={isRecording ? "stop" : "mic-outline"}
+              size={20}
+              color={isRecording ? '#FFFFFF' : currentTheme.primary}
+            />
+          )}
+        </TouchableOpacity>
+
         <TextInput
           style={[
             styles.input,
@@ -298,15 +349,16 @@ export const ChatbotScreen = () => {
               borderColor: currentTheme.border,
             },
           ]}
-          placeholder="Ej: ¿Dónde está la OP 123?"
+          placeholder={isRecording ? "Hablando..." : "Ej: ¿Dónde está la OP 123?"}
           placeholderTextColor={currentTheme.textSecondary}
           value={input}
           onChangeText={setInput}
           multiline
-          editable={!isTyping}
+          editable={!isTyping && !isRecording}
           returnKeyType="send"
           blurOnSubmit={false}
           textAlignVertical="top"
+          allowFontScaling={true}
         />
 
         <TouchableOpacity
@@ -319,19 +371,26 @@ export const ChatbotScreen = () => {
           ]}
           onPress={handleSend}
           disabled={!input.trim() || isTyping}
+          accessibilityLabel="Enviar mensaje"
+          accessibilityRole="button"
         >
           <Ionicons name="send" size={18} color={currentTheme.primaryText || '#fff'} />
         </TouchableOpacity>
       </View>
 
       <View style={[styles.disclaimerBar, { backgroundColor: currentTheme.card }]}>
-        <Text style={[styles.disclaimerText, { color: currentTheme.textSecondary }]}>
+        <Text style={[styles.disclaimerText, { color: currentTheme.textSecondary }]} allowFontScaling={true}>
           ⚠️ Esta IA puede cometer errores
         </Text>
-        <Text style={[styles.disclaimerText, { color: currentTheme.textSecondary, opacity: 0.6 }]}>
+        <Text style={[styles.disclaimerText, { color: currentTheme.textSecondary, opacity: 0.6 }]} allowFontScaling={true}>
           Creador: Deyvid Jair Chupillon Silva
         </Text>
       </View>
+
+      <ThemeModal
+        visible={themeModalVisible}
+        onClose={() => setThemeModalVisible(false)}
+      />
 
       {isSidebarOpen && (
         <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { zIndex: 99, backgroundColor: 'rgba(0,0,0,0.5)' }]}>

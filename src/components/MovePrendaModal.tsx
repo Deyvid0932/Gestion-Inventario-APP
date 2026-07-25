@@ -17,7 +17,7 @@ import { useAppStore } from '../store/useAppStore';
 interface MovePrendaModalProps {
   isVisible: boolean;
   onClose: () => void;
-  onSelectCaja: (cajaId: string) => void;
+  onSelectCaja: (cajaId: string, nombreCaja: string) => void;
   currentCajaId: string;
 }
 
@@ -44,14 +44,34 @@ export const MovePrendaModal = ({ isVisible, onClose, onSelectCaja, currentCajaI
     }
   }, [isVisible, currentCajaId, db]);
 
-  const renderItem = ({ item }: { item: Caja }) => (
+  const renderItem = ({ item, index }: { item: Caja, index: number }) => (
     <TouchableOpacity
-      style={[styles.cajaItem, { borderBottomColor: currentTheme.border }]}
-      onPress={() => onSelectCaja(item.id)}
+      style={[
+        styles.cajaCard,
+        {
+          backgroundColor: currentTheme.card,
+          borderColor: currentTheme.border,
+        }
+      ]}
+      activeOpacity={0.7}
+      onPress={() => onSelectCaja(item.id, item.nombre)}
     >
-      <Ionicons name="cube-outline" size={24} color={currentTheme.text} style={styles.icon} />
-      <Text style={[styles.cajaText, { color: currentTheme.text }]}>{item.nombre}</Text>
-      <Ionicons name="chevron-forward" size={20} color={currentTheme.textSecondary} />
+      <View style={[styles.iconContainer, { backgroundColor: currentTheme.primary + '18' }]}>
+        <Ionicons name="cube" size={22} color={currentTheme.primary} />
+      </View>
+
+      <View style={styles.cajaInfo}>
+        <Text style={[styles.cajaTitle, { color: currentTheme.text }]} numberOfLines={1}>
+          {item.nombre}
+        </Text>
+        <Text style={[styles.cajaSubtitle, { color: currentTheme.textSecondary }]}>
+          Caja N° {index + 1} del Inventario
+        </Text>
+      </View>
+
+      <View style={[styles.arrowBadge, { backgroundColor: currentTheme.primary + '15' }]}>
+        <Ionicons name="arrow-forward" size={16} color={currentTheme.primary} />
+      </View>
     </TouchableOpacity>
   );
 
@@ -63,22 +83,52 @@ export const MovePrendaModal = ({ isVisible, onClose, onSelectCaja, currentCajaI
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <View style={[styles.modalContainer, { backgroundColor: currentTheme.card }]}>
+        <TouchableOpacity style={styles.backdropPress} activeOpacity={1} onPress={onClose} />
+
+        <View style={[styles.modalContainer, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+          <View style={styles.handleBarContainer}>
+            <View style={[styles.handleBar, { backgroundColor: currentTheme.border }]} />
+          </View>
+
           <View style={[styles.header, { borderBottomColor: currentTheme.border }]}>
-            <Text style={[styles.title, { color: currentTheme.text }]}>Mover a...</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={24} color={currentTheme.text} />
+            <View style={styles.headerTitleRow}>
+              <View style={[styles.headerIconBg, { backgroundColor: currentTheme.primary + '20' }]}>
+                <Ionicons name="swap-horizontal" size={22} color={currentTheme.primary} />
+              </View>
+              <View>
+                <Text style={[styles.title, { color: currentTheme.text }]}>Mover Prenda de Caja</Text>
+                <Text style={[styles.subtitle, { color: currentTheme.textSecondary }]}>
+                  Selecciona la caja de destino
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: currentTheme.border + '50' }]}
+              accessibilityLabel="Cerrar modal"
+            >
+              <Ionicons name="close" size={20} color={currentTheme.text} />
             </TouchableOpacity>
           </View>
 
           {loading ? (
             <View style={styles.centerContent}>
               <ActivityIndicator size="large" color={currentTheme.primary} />
+              <Text style={[styles.loadingText, { color: currentTheme.textSecondary }]}>
+                Cargando cajas disponibles...
+              </Text>
             </View>
           ) : cajas.length === 0 ? (
             <View style={styles.centerContent}>
-              <Text style={{ color: currentTheme.textSecondary, textAlign: 'center' }}>
-                No hay otras cajas en este inventario.
+              <View style={[styles.emptyIconBg, { backgroundColor: currentTheme.border + '40' }]}>
+                <Ionicons name="archive-outline" size={42} color={currentTheme.textSecondary} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>
+                No hay otras cajas disponibles
+              </Text>
+              <Text style={[styles.emptySub, { color: currentTheme.textSecondary }]}>
+                Crea una nueva caja en este inventario para poder trasladar prendas.
               </Text>
             </View>
           ) : (
@@ -87,6 +137,7 @@ export const MovePrendaModal = ({ isVisible, onClose, onSelectCaja, currentCajaI
               keyExtractor={(item) => item.id}
               renderItem={renderItem}
               contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
             />
           )}
         </View>
@@ -98,51 +149,145 @@ export const MovePrendaModal = ({ isVisible, onClose, onSelectCaja, currentCajaI
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
+  backdropPress: {
+    flex: 1,
+  },
   modalContainer: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    minHeight: '40%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '75%',
+    minHeight: '45%',
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 20,
+  },
+  handleBarContainer: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  handleBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     borderBottomWidth: 1,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  listContent: {
-    paddingBottom: 40,
-  },
-  cajaItem: {
+  headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
+    gap: 12,
   },
-  icon: {
-    marginRight: 12,
+  headerIconBg: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  cajaText: {
-    flex: 1,
-    fontSize: 16,
+  title: {
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  subtitle: {
+    fontSize: 12,
     fontWeight: '500',
+    marginTop: 2,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  listContent: {
+    padding: 18,
+    paddingBottom: 32,
+  },
+  cajaCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  cajaInfo: {
+    flex: 1,
+  },
+  cajaTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  cajaSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 3,
+  },
+  arrowBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   centerContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    minHeight: 200,
+    padding: 24,
+    minHeight: 220,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  emptyIconBg: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  emptySub: {
+    fontSize: 13,
+    fontWeight: '400',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
   },
 });

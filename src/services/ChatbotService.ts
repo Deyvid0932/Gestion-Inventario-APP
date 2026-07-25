@@ -185,9 +185,9 @@ ${conversationContext || '(No hay mensajes anteriores)'}
 Analiza la siguiente frase nueva de un usuario de una app de inventario de ropa: "${message}"
 
 Clasifícala en uno de estos tipos:
-- OP: el usuario menciona un número de OP o código.
+- OP: el usuario menciona un número de OP: código respondes .
 - COLOR: el usuario busca por un color específico.
-- ESTILO: el usuario busca por nombre/código de estilo de prenda.
+- ESTILO: el usuario busca por nombre que empieza con KH asumes que es estilo de prenda .
 - CAJA: el usuario pregunta cuántas prendas hay en una caja específica.
 - INVENTARIO: el usuario pide un resumen general del inventario.
 - SALUDO: el usuario solo saluda (hola, buenos días, etc).
@@ -199,7 +199,7 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto, sin explicacion
 {"tipo": "ESTILO", "valor": "CAMISA001"}
 {"tipo": "LIBRE", "valor": "¡De nada! Si necesitas algo más, aquí estoy."}`;
 
-    console.log('[Groq] Enviando solicitud al modelo llama-3.3-70b-versatile.');
+    // console.log('[Groq] Enviando solicitud al modelo llama-3.3-70b-versatile.');
     const response = await fetch(
       'https://api.groq.com/openai/v1/chat/completions',
       {
@@ -241,7 +241,7 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto, sin explicacion
     }
 
     const rawText = data.choices?.[0]?.message?.content || '';
-    console.log("📥 Texto crudo recibido de Groq:", rawText);
+    //console.log("📥 Texto crudo recibido de Groq:", rawText);
 
     if (!rawText.trim()) {
       return { tipo: 'LIBRE', valor: 'No pude interpretar tu mensaje. ¿Puedes reformularlo?' };
@@ -308,17 +308,27 @@ export const ChatbotService = {
 
   getHistoryBySession: async (db: SQLiteDatabase, sessionId: string): Promise<ChatMessage[]> => {
     try {
-      const history = await db.getAllAsync<{ id: string, sender: string, text: string, matches_json: string, timestamp: number }>(
+      const history = await db.getAllAsync<{ id: string, sender: string, text: string, matches_json: string, engineUsed?: string, timestamp: number }>(
         'SELECT * FROM chat_history WHERE sessionId = ? ORDER BY timestamp DESC LIMIT 50',
         [sessionId]
       );
-      return history.map(row => ({
-        id: row.id,
-        sender: row.sender as 'user' | 'bot',
-        text: row.text,
-        matches: row.matches_json ? JSON.parse(row.matches_json) : undefined,
-        timestamp: row.timestamp
-      }));
+      return history.map(row => {
+        let parsedMatches;
+        if (row.matches_json) {
+          try {
+            parsedMatches = JSON.parse(row.matches_json);
+          } catch (_) { }
+        }
+        const engineUsed = (row.engineUsed as 'ia' | 'local' | undefined) || (row.sender === 'bot' ? 'ia' : undefined);
+        return {
+          id: row.id,
+          sender: row.sender as 'user' | 'bot',
+          text: row.text,
+          matches: parsedMatches,
+          engineUsed,
+          timestamp: row.timestamp
+        };
+      });
     } catch (e) {
       console.error('Error fetching chat history by session', e);
       return [];
@@ -329,8 +339,8 @@ export const ChatbotService = {
     try {
       const matchesStr = msg.matches ? JSON.stringify(msg.matches) : null;
       await db.runAsync(
-        'INSERT INTO chat_history (id, sender, text, matches_json, timestamp, sessionId) VALUES (?, ?, ?, ?, ?, ?)',
-        [msg.id, msg.sender, msg.text, matchesStr, msg.timestamp, sessionId]
+        'INSERT INTO chat_history (id, sender, text, matches_json, timestamp, sessionId, engineUsed) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [msg.id, msg.sender, msg.text, matchesStr, msg.timestamp, sessionId, msg.engineUsed || null]
       );
       await db.runAsync('UPDATE chat_sessions SET updatedAt = ? WHERE id = ?', [Date.now(), sessionId]);
     } catch (e) {
@@ -350,7 +360,7 @@ export const ChatbotService = {
 
     if (classification) {
       if (classification.tipo === 'SALUDO') {
-        return { text: '¡Hola! 👋 Soy tu asistente de inventario. Puedes buscar por estilo, OP o color. ¿Qué necesitas?', matches: [], engineUsed: 'ia' };
+        return { text: '¡Hola! 👋 Soy tu asistente de inventario Topytop Kith. Puedes buscar por estilo, OP o color. ¿Qué necesitas?', matches: [], engineUsed: 'ia' };
       }
 
       if (classification.tipo === 'LIBRE' || classification.tipo === 'CONVERSACION') {

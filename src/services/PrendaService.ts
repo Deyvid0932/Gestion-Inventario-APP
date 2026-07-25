@@ -1,12 +1,15 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import { Prenda } from '../types';
+import { AuthService } from './AuthService';
+import { supabase } from '../database/supabase';
 
 export const PrendaService = {
   addPrenda: async (db: SQLiteDatabase, prenda: Prenda) => {
+    const isGuest = await AuthService.isGuestMode();
     try {
       if (prenda.op && prenda.op.trim() !== '') {
         const existing = await db.getFirstAsync<{ id: string; op: string; }>(
-          'SELECT op FROM prendas WHERE op = ? AND cajaId = ?',
+          'SELECT id, op FROM prendas WHERE op = ? AND cajaId = ?',
           [prenda.op, prenda.cajaId]
         );
 
@@ -35,6 +38,21 @@ export const PrendaService = {
           prenda.alarmaNotificationId || null
         ]
       );
+
+      if (!isGuest) {
+        await supabase.from('prendas').upsert({
+          id: prenda.id,
+          cajaId: prenda.cajaId,
+          op: prenda.op || '',
+          estilo: prenda.estilo,
+          color: prenda.color,
+          fotoUri: prenda.fotoUri || null,
+          fotoUri2: prenda.fotoUri2 || null,
+          fechaCreacion: prenda.fechaCreacion || new Date().toISOString(),
+          alarmaFechaHora: prenda.alarmaFechaHora || null,
+          alarmaNotificationId: prenda.alarmaNotificationId || null
+        })
+      }
 
       return { success: true };
     } catch (e) {

@@ -32,32 +32,41 @@ export const StatsService = {
         top5Cajas: [],
       };
 
-      await db.withTransactionAsync(async () => {
-        const invResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM inventarios');
-        if (invResult) stats.totalInventarios = invResult.count;
+      const combinedQuery = `
+        SELECT 
+          (SELECT COUNT(*) FROM inventarios) as totalInventarios,
+          (SELECT COUNT(*) FROM cajas) as totalCajas,
+          (SELECT COUNT(*) FROM prendas) as totalPrendas,
+          (SELECT COUNT(*) FROM prendas WHERE estado = 1) as prendasActivas,
+          (SELECT COUNT(*) FROM prendas WHERE estado = 0) as prendasInactivas,
+          (SELECT COUNT(*) FROM prendas WHERE (fotoUri IS NOT NULL AND fotoUri != '') OR (fotoUri2 IS NOT NULL AND fotoUri2 != '')) as prendasConFoto
+      `;
 
-        const cajasResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM cajas');
-        if (cajasResult) stats.totalCajas = cajasResult.count;
+      const counts = await db.getFirstAsync<{
+        totalInventarios: number;
+        totalCajas: number;
+        totalPrendas: number;
+        prendasActivas: number;
+        prendasInactivas: number;
+        prendasConFoto: number;
+      }>(combinedQuery);
 
-        const prendasResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM prendas');
-        if (prendasResult) stats.totalPrendas = prendasResult.count;
+      if (counts) {
+        stats.totalInventarios = counts.totalInventarios;
+        stats.totalCajas = counts.totalCajas;
+        stats.totalPrendas = counts.totalPrendas;
+        stats.prendasActivas = counts.prendasActivas;
+        stats.prendasInactivas = counts.prendasInactivas;
+        stats.prendasConFoto = counts.prendasConFoto;
+      }
 
-        const activasResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM prendas WHERE estado = 1');
-        if (activasResult) stats.prendasActivas = activasResult.count;
-
-        const inactivasResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM prendas WHERE estado = 0');
-        if (inactivasResult) stats.prendasInactivas = inactivasResult.count;
-
-        const fotoResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM prendas WHERE fotoUri IS NOT NULL');
-        if (fotoResult) stats.prendasConFoto = fotoResult.count;
-
-        const topResult = await db.getAllAsync<{ nombre: string, total: number }>(`
-          SELECT c.nombre, COUNT(*) as total 
-          FROM prendas p 
-          JOIN cajas c ON p.cajaId = c.id 
-          GROUP BY p.cajaId 
-          ORDER BY total DESC 
-          LIMIT 5
+      const topResult = await db.getAllAsync<{ nombre: string, total: number }>(`
+        SELECT c.nombre, COUNT(*) as total 
+        FROM prendas p 
+        JOIN cajas c ON p.cajaId = c.id 
+        GROUP BY p.cajaId 
+        ORDER BY total DESC 
+        LIMIT 5
         `);
 
         if (topResult && topResult.length > 0) {
@@ -65,9 +74,8 @@ export const StatsService = {
           stats.cajaTopCantidad = topResult[0].total;
           stats.top5Cajas = topResult;
         }
-      });
 
-      return stats;
+        return stats;
     } catch (e) {
       console.error('Error fetching stats:', e);
       return {

@@ -22,7 +22,9 @@ type NavigationProp = StackNavigationProp<RootStackParamList>;
 export const InventariosScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const db = useSQLiteContext();
-  const { currentTheme, setPrendas, themeMode } = useAppStore();
+  const currentTheme = useAppStore(state => state.currentTheme);
+  const setPrendas = useAppStore(state => state.setPrendas);
+  const themeMode = useAppStore(state => state.themeMode);;
   const [inventarios, setInventarios] = useState<InventarioStats[]>([]);
   const [loading, setLoading] = useState(true);
   const lastNavTime = React.useRef(0);
@@ -110,6 +112,10 @@ export const InventariosScreen = () => {
               )}
               keyExtractor={item => item.id.toString()}
               contentContainerStyle={styles.listContent}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={true}
               ListEmptyComponent={
                 <Reanimated.View
                   style={styles.emptyContainer}

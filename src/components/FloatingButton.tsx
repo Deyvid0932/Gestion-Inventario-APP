@@ -16,7 +16,8 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
   style
 }) => {
 
-  const { currentTheme, themeMode } = useAppStore();
+  const currentTheme = useAppStore(state => state.currentTheme);
+  const themeMode = useAppStore(state => state.themeMode);;
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
 

@@ -4,12 +4,15 @@ const palette = {
   success: '#4ade80',
 };
 
-export type ColorSchemeType = 'morado' | 'dorado' | 'celeste';
+export type ColorSchemeType = 'morado' | 'dorado' | 'celeste' | 'verde' | 'rosado' | 'rojo';
 
 export const SCHEME_COLORS: Record<ColorSchemeType, string> = {
   morado: '#8b6fd8',
   dorado: '#eab308',
   celeste: '#06b6d4',
+  verde: '#10b981',
+  rosado: '#ec4899',
+  rojo: '#ef4444',
 };
 
 export const schemes = {
@@ -84,6 +87,78 @@ export const schemes = {
       primaryText: palette.black,
       success: palette.success,
     }
+  },
+  verde: {
+    light: {
+      background: '#f0fdf4',
+      card: '#ffffff',
+      text: palette.black,
+      textSecondary: '#65a30d',
+      border: '#00000010',
+      borderShadow: '#dcfce7',
+      primary: '#059669',
+      primaryText: palette.white,
+      success: palette.success,
+    },
+    dark: {
+      background: '#062c22',
+      card: '#0f3d30',
+      text: palette.white,
+      textSecondary: '#a7f3d0',
+      border: '#ffffff10',
+      borderShadow: '#022c22',
+      primary: '#10b981',
+      primaryText: palette.white,
+      success: palette.success,
+    }
+  },
+  rosado: {
+    light: {
+      background: '#fdf2f8',
+      card: '#ffffff',
+      text: palette.black,
+      textSecondary: '#9d174d',
+      border: '#00000010',
+      borderShadow: '#fce7f3',
+      primary: '#db2777',
+      primaryText: palette.white,
+      success: palette.success,
+    },
+    dark: {
+      background: '#2b1424',
+      card: '#421d37',
+      text: palette.white,
+      textSecondary: '#fbcfe8',
+      border: '#ffffff10',
+      borderShadow: '#1f0b1a',
+      primary: '#ec4899',
+      primaryText: palette.white,
+      success: palette.success,
+    }
+  },
+  rojo: {
+    light: {
+      background: '#fef2f2',
+      card: '#ffffff',
+      text: palette.black,
+      textSecondary: '#b91c1c',
+      border: '#00000010',
+      borderShadow: '#fee2e2',
+      primary: '#dc2626',
+      primaryText: palette.white,
+      success: palette.success,
+    },
+    dark: {
+      background: '#2c0b0e',
+      card: '#451117',
+      text: palette.white,
+      textSecondary: '#fca5a5',
+      border: '#ffffff10',
+      borderShadow: '#1f0507',
+      primary: '#ef4444',
+      primaryText: palette.white,
+      success: palette.success,
+    }
   }
 };
 
@@ -101,6 +176,15 @@ export const clayStyles = {
   shadowOffset: { width: 4, height: 8 },
   elevation: 8,
   padding: 20, 
+};
+
+export const typography = {
+  caption: 11,
+  bodySmall: 13,
+  body: 15,
+  subtitle: 17,
+  title: 20,
+  header: 24,
 };
 
 export type ThemeType = typeof theme.light;

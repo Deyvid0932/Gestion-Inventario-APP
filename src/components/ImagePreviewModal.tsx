@@ -1,5 +1,8 @@
 import { Modal, TouchableWithoutFeedback, View, StyleSheet } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { Image } from 'expo-image';
+
+const AnimatedImage = Animated.createAnimatedComponent(Image);
 
 interface ImagePreviewModalProps {
   uri: string | null;
@@ -11,11 +14,13 @@ export const ImagePreviewModal = ({ uri, visible, onClose }: ImagePreviewModalPr
   <Modal transparent visible={visible} animationType="fade">
     <TouchableWithoutFeedback onPress={onClose}>
       <View style={styles.overlay}>
-        <Animated.Image
+        <AnimatedImage
           entering={FadeIn.duration(300)}
           source={{ uri: uri || '' }}
           style={styles.fullImage}
-          resizeMode="contain"
+          contentFit="contain"
+          cachePolicy="memory-disk"
+          transition={200}
         />
       </View>
     </TouchableWithoutFeedback>

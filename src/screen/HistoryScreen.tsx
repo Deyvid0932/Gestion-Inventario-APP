@@ -1,13 +1,13 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { 
-  View, 
-  FlatList, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
+import React, { useState, useCallback, useRef } from 'react';
+import {
+  View,
+  FlatList,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   RefreshControl,
   Animated,
-  Dimensions
+  useWindowDimensions
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -22,28 +22,28 @@ import { SkeletonLoader } from '../components/SkeletonLoader';
 import { getColorHex } from '../utils/colorUtils';
 import { ExportModal } from '../components/ExportModal';
 
-const { width } = Dimensions.get('window');
-
 const getRelativeDateLabel = (dateString: string) => {
   const date = new Date(dateString);
   const now = new Date();
-  
+
   const dDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const dNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  
+
   const diffTime = dNow.getTime() - dDate.getTime();
   const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) return 'Hoy';
   if (diffDays === 1) return 'Ayer';
-  
+
   return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
 };
 
 export const HistoryScreen = () => {
   const db = useSQLiteContext();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
-  const { currentTheme, themeMode } = useAppStore();
+  const currentTheme = useAppStore(state => state.currentTheme);
+  const themeMode = useAppStore(state => state.themeMode);;
+  const { width } = useWindowDimensions();
   const [showExportModal, setShowExportModal] = useState(false);
 
   const [search, setSearch] = useState('');
@@ -95,18 +95,18 @@ export const HistoryScreen = () => {
             END), p.fechaCreacion DESC
         `;
         params = [
-          estadoDb, searchParam, searchParam, searchParam, 
-          exactParam, exactParam, exactParam, 
+          estadoDb, searchParam, searchParam, searchParam,
+          exactParam, exactParam, exactParam,
           startParam, startParam, startParam
         ];
       }
 
       const rows = await db.getAllAsync<HistoryItem>(query, params);
       setResults(rows);
-      
+
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 500,
+        duration: 400,
         useNativeDriver: true,
       }).start();
     } catch (error) {
@@ -114,7 +114,7 @@ export const HistoryScreen = () => {
     } finally {
       setRefreshing(false);
       if (showLoading) {
-        setTimeout(() => setLoading(false), 300);
+        setTimeout(() => setLoading(false), 200);
       } else {
         setLoading(false);
       }
@@ -132,11 +132,11 @@ export const HistoryScreen = () => {
   const renderItem = ({ item, index }: { item: HistoryItem, index: number }) => {
     const dateToUse = status === 'Alarmas' ? (item.alarmaFechaHora || item.fechaCreacion || new Date().toISOString()) : (item.fechaCreacion || new Date().toISOString());
     const itemDateLabel = getRelativeDateLabel(dateToUse);
-    
+
     const prevItem = index > 0 ? results[index - 1] : null;
     const prevDateToUse = prevItem ? (status === 'Alarmas' ? (prevItem.alarmaFechaHora || prevItem.fechaCreacion) : prevItem.fechaCreacion) : null;
     const prevDateLabel = prevDateToUse ? getRelativeDateLabel(prevDateToUse) : null;
-    
+
     const showHeader = itemDateLabel !== prevDateLabel;
     const colorHex = getColorHex(item.color);
 
@@ -145,7 +145,7 @@ export const HistoryScreen = () => {
         {showHeader && (
           <View style={styles.dateHeader}>
             <Text style={[styles.dateHeaderText, { color: currentTheme.primary }]}>
-              {status === 'Alarmas' ? `⏰ Alarma: ${itemDateLabel}` : itemDateLabel}
+              {status === 'Alarmas' ? `Alarma: ${itemDateLabel}` : itemDateLabel}
             </Text>
           </View>
         )}
@@ -154,8 +154,8 @@ export const HistoryScreen = () => {
             <View style={[styles.timelineDot, { backgroundColor: status === 'Alarmas' ? '#EAB308' : currentTheme.primary }]} />
             <View style={[styles.timelineLine, { backgroundColor: currentTheme.border }]} />
           </View>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             activeOpacity={0.8}
             style={[styles.card, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000' }]}
             onPress={() => navigation.navigate('ExcelGrid', { cajaId: item.cajaId, nombreCaja: item.cajaNombre, targetPrendaId: item.id })}
@@ -165,40 +165,52 @@ export const HistoryScreen = () => {
                 <View style={[styles.compactBadge, { backgroundColor: currentTheme.primary + '15' }]}>
                   <Text style={[styles.compactBadgeText, { color: currentTheme.primary }]}>{item.estilo}</Text>
                 </View>
-                <Text style={[styles.opText, { color: currentTheme.textSecondary }]}>{item.op || 'Sin OP'}</Text>
+                <Text style={[styles.opText, { color: currentTheme.textSecondary }]}>
+                  {item.op ? item.op : 'Sin OP'}
+                </Text>
+
+                {item.alarmaFechaHora && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAB30815', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 4 }}>
+                    <Ionicons name="notifications-outline" size={11} color="#EAB308" style={{ marginRight: 3 }} />
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#EAB308' }}>
+                      {new Date(item.alarmaFechaHora).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} {new Date(item.alarmaFechaHora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                )}
               </View>
               <View style={[styles.colorSwatch, { backgroundColor: colorHex, borderColor: currentTheme.border }]} />
             </View>
 
-            <Text style={[styles.locationText, { color: '#2ecc71', marginBottom: 4 }]}>
+            <Text style={[styles.locationText, { color: '#2ecc71' }]}>
               {item.inventarioNombre} • {item.cajaNombre} • {item.color}
             </Text>
-
-            {item.alarmaFechaHora && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAB30815', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginTop: 4, alignSelf: 'flex-start' }}>
-                <Ionicons name="notifications-outline" size={13} color="#EAB308" style={{ marginRight: 4 }} />
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EAB308' }}>
-                  Alarma: {new Date(item.alarmaFechaHora).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} {new Date(item.alarmaFechaHora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </View>
-            )}
           </TouchableOpacity>
         </View>
       </View>
     );
   };
 
+  const tabCount = 3;
+  const containerPaddingH = 4;
+  const containerMarginH = 18;
+  const containerBorderW = 1;
+  const innerWidth = width - (containerMarginH * 2) - (containerBorderW * 2) - (containerPaddingH * 2);
+  const tabWidth = innerWidth / tabCount;
   const tabTranslateX = tabAnim.interpolate({
     inputRange: [0, 1, 2],
-    outputRange: [4, (width - 50) / 3, ((width - 50) / 3) * 2],
+    outputRange: [
+      containerPaddingH,
+      containerPaddingH + tabWidth,
+      containerPaddingH + tabWidth * 2,
+    ],
   });
 
   return (
     <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <Navbar title="Historial" />
-      
+
       <View style={[styles.segmentedWrapper, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
-        <Animated.View style={[styles.segmentIndicator, { backgroundColor: themeMode === 'light' ? "#E4E4E7" : "#27272A", width: (width - 60) / 3, transform: [{ translateX: tabTranslateX }] }]} />
+        <Animated.View style={[styles.segmentIndicator, { backgroundColor: themeMode === 'light' ? "#E4E4E7" : "#27272A", width: tabWidth, transform: [{ translateX: tabTranslateX }] }]} />
         <TouchableOpacity style={styles.segmentTab} onPress={() => toggleStatus('Activo')}>
           <Text style={[styles.segmentText, { color: status === 'Activo' ? '#2ecc71' : currentTheme.textSecondary, fontWeight: status === 'Activo' ? '800' : '600' }]}>Activos</Text>
         </TouchableOpacity>
@@ -206,7 +218,7 @@ export const HistoryScreen = () => {
           <Text style={[styles.segmentText, { color: status === 'Inactivo' ? '#e74c3c' : currentTheme.textSecondary, fontWeight: status === 'Inactivo' ? '800' : '600' }]}>Inactivos</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.segmentTab} onPress={() => toggleStatus('Alarmas')}>
-          <Text style={[styles.segmentText, { color: status === 'Alarmas' ? '#EAB308' : currentTheme.textSecondary, fontWeight: status === 'Alarmas' ? '800' : '600' }]}>⏰ Alarmas</Text>
+          <Text style={[styles.segmentText, { color: status === 'Alarmas' ? '#EAB308' : currentTheme.textSecondary, fontWeight: status === 'Alarmas' ? '800' : '600' }]}>Alarmas</Text>
         </TouchableOpacity>
       </View>
 
@@ -227,6 +239,11 @@ export const HistoryScreen = () => {
             renderItem={renderItem}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.listContent}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={true}
+            getItemLayout={(_, index) => ({ length: 142, offset: 142 * index, index })}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchHistory(false); }} tintColor={currentTheme.primary} />}
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
@@ -239,11 +256,11 @@ export const HistoryScreen = () => {
           />
         </Animated.View>
       )}
-      <ExportModal 
-               visible={showExportModal} 
-               onClose={() => setShowExportModal(false)} 
-               data={results} 
-             />
+      <ExportModal
+        visible={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        data={results}
+      />
     </View>
   );
 };
@@ -257,8 +274,8 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', alignItems: 'center', paddingRight: 18, marginBottom: 5 },
   searchBarWrapper: { flex: 1 },
   exportBtn: { width: 46, height: 46, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 2 },
-  listContent: { 
-    padding: 18, 
+  listContent: {
+    padding: 18,
     paddingBottom: 40,
     flexGrow: 1,
   },
@@ -276,11 +293,11 @@ const styles = StyleSheet.create({
   opText: { fontSize: 12, fontWeight: '500' },
   colorSwatch: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5 },
   locationText: { fontSize: 14, fontWeight: '500', fontStyle: 'italic' },
-  emptyContainer: { 
+  emptyContainer: {
     flex: 1,
-    alignItems: 'center', 
+    alignItems: 'center',
     justifyContent: 'center',
-    opacity: 0.5 
+    opacity: 0.5
   },
   emptyText: { fontSize: 16, fontWeight: '600', marginTop: 15 },
 });

@@ -1,208 +1,489 @@
-import { useMemo, useState } from "react";
-import { HistoryItem } from "../types"
-import { Alert, Dimensions, Text, TouchableOpacity, View, Modal, StyleSheet } from "react-native";
-import { exportToExcel } from "../utils/export";
-import { Ionicons } from "@expo/vector-icons";
-import { ScrollView, Switch } from "react-native-gesture-handler";
-import { useAppStore } from "../store/useAppStore";
+import React, { useMemo, useState, useEffect } from 'react';
+import {
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  TouchableWithoutFeedback,
+  ScrollView,
+  Switch,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSQLiteContext } from 'expo-sqlite';
+import { HistoryItem } from '../types';
+import { exportToExcel } from '../utils/export';
+import { useAppStore } from '../store/useAppStore';
+import { clayStyles } from '../style/theme';
 
-
-const { width, height } = Dimensions.get('window');
-
-interface ExportModal {
-    visible: boolean;
-    onClose: () => void;
-    data: HistoryItem[];
-    title?: string;
+interface ExportModalProps {
+  visible: boolean;
+  onClose: () => void;
+  data?: HistoryItem[];
+  title?: string;
 }
 
-export const ExportModal = ({ visible, onClose, data }: ExportModal) => {
-    const { currentTheme, themeMode } = useAppStore();
+export const ExportModal = ({ visible, onClose, data: propData }: ExportModalProps) => {
+  const db = useSQLiteContext();
+  const currentTheme = useAppStore(state => state.currentTheme);
+  const themeMode = useAppStore(state => state.themeMode);
+  const insets = useSafeAreaInsets();
 
-    const availableBoxes = useMemo(() => {
-        return Array.from(new Set(data.map(item => item.cajaNombre)));
-    }, [data]);
+  const [exportData, setExportData] = useState<HistoryItem[]>(propData || []);
+  const [loadingData, setLoadingData] = useState(false);
 
-    const [selectedBoxes, setSelectedBoxes] = useState<string[]>(availableBoxes);
+  // Obtener datos si no se pasaron por props
+  useEffect(() => {
+    if (visible) {
+      if (propData && propData.length > 0) {
+        setExportData(propData);
+      } else if (db) {
+        setLoadingData(true);
+        db.getAllAsync<HistoryItem>(`
+          SELECT p.id, p.cajaId, p.op, p.estilo, p.color, p.estado, p.fechaCreacion, p.alarmaFechaHora,
+                 c.nombre as cajaNombre, i.nombre as inventarioNombre
+          FROM prendas p
+          JOIN cajas c ON p.cajaId = c.id
+          JOIN inventarios i ON c.inventarioId = i.id
+          ORDER BY c.nombre ASC, p.fechaCreacion DESC
+        `)
+          .then(rows => {
+            setExportData(rows || []);
+          })
+          .catch(e => {
+            console.error('Error al cargar prendas para exportación:', e);
+            setExportData([]);
+          })
+          .finally(() => {
+            setLoadingData(false);
+          });
+      }
+    }
+  }, [visible, propData, db]);
 
-    const [separateBySheet, setSeparateBySheet] = useState(false);
+  // Cajas disponibles a partir de los datos
+  const availableBoxes = useMemo(() => {
+    return Array.from(new Set(exportData.map(item => item.cajaNombre))).filter(Boolean);
+  }, [exportData]);
 
-    const [selectedColumns, selectSetColumns] = useState({
-        op: false,
-        estilo: true,
-        color: true,
-        estado: false,
-        ubicacion: false,
-    })
+  const [selectedBoxes, setSelectedBoxes] = useState<string[]>([]);
+  const [separateBySheet, setSeparateBySheet] = useState(false);
 
-    const toggleColumn = (key: keyof typeof selectedColumns) => {
-        selectSetColumns(prev => ({ ...prev, [key]: !prev[key] }));
-    };
+  // Auto-seleccionar todas las cajas cuando se cargan los datos o abre el modal
+  useEffect(() => {
+    if (visible && availableBoxes.length > 0) {
+      setSelectedBoxes(availableBoxes);
+    }
+  }, [visible, availableBoxes]);
 
-    const toggleBox = (boxName: string) => {
-        if (selectedBoxes.includes(boxName)) {
-            setSelectedBoxes(prev => prev.filter(name => name !== boxName));
-        } else {
-            setSelectedBoxes(prev => [...prev, boxName]);
-        }
-    };
+  const [selectedColumns, selectSetColumns] = useState({
+    op: false,
+    estilo: true,
+    color: true,
+    ubicacion: false,
+    estado: false,
+  });
 
-    const selectAllBoxes = () => {
-        if (selectedBoxes.length === availableBoxes.length) {
-            setSelectedBoxes([]);
-        } else {
-            setSelectedBoxes(availableBoxes);
-        }
-    };
+  const toggleColumn = (key: keyof typeof selectedColumns) => {
+    selectSetColumns(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
-    const handleExport = () => {
-        if (selectedBoxes.length === 0) {
-            Alert.alert("Atención", "Selecciona al menos una caja para exportar.");
-            return;
-        }
+  const toggleBox = (boxName: string) => {
+    if (selectedBoxes.includes(boxName)) {
+      setSelectedBoxes(prev => prev.filter(name => name !== boxName));
+    } else {
+      setSelectedBoxes(prev => [...prev, boxName]);
+    }
+  };
 
-        let nombreArchivo = ""
-        if (selectedBoxes.length === 1) {
-            nombreArchivo = `Reporte_${selectedBoxes[0]}`
-        } else {
-            nombreArchivo = `Reporte_${selectedBoxes.length}`
-        }
+  const selectAllBoxes = () => {
+    if (selectedBoxes.length === availableBoxes.length) {
+      setSelectedBoxes([]);
+    } else {
+      setSelectedBoxes(availableBoxes);
+    }
+  };
 
-        const finalFileName = `${nombreArchivo}`
+  const handleExport = () => {
+    if (selectedBoxes.length === 0) {
+      Alert.alert('Atención', 'Selecciona al menos una caja para generar la exportación.');
+      return;
+    }
 
-        const dataFiltrada = data.filter(item => selectedBoxes.includes(item.cajaNombre));
+    const dataFiltrada = exportData.filter(item => selectedBoxes.includes(item.cajaNombre));
 
-        const dataFinal = dataFiltrada.map(item => {
-            const row: any = {};
-            row['_cajaNombre'] = item.cajaNombre;
+    if (dataFiltrada.length === 0) {
+      Alert.alert('Sin Datos', 'No hay prendas para exportar en las cajas seleccionadas.');
+      return;
+    }
 
-            if (selectedColumns.op) row['OP'] = item.op || 'S/N';
-            if (selectedColumns.estilo) row['Estilo'] = item.estilo;
-            if (selectedColumns.color) row['Color'] = item.color;
-            if (selectedColumns.ubicacion) {
-                row['Inventario'] = item.inventarioNombre;
-                row['Caja'] = item.cajaNombre;
-            }
-            if (selectedColumns.estado) {
-                row['Estado'] = item.estado === 1 ? 'Activo' : 'Inactivo';
-            }
-            return row;
-        });
+    let nombreArchivo = '';
+    if (selectedBoxes.length === 1) {
+      nombreArchivo = `Reporte_${selectedBoxes[0]}`;
+    } else {
+      nombreArchivo = `Reporte_Inventario_${selectedBoxes.length}_Cajas`;
+    }
 
-        exportToExcel(dataFinal, finalFileName, separateBySheet);
+    const dataFinal = dataFiltrada.map(item => {
+      const row: any = {};
+      row['_cajaNombre'] = item.cajaNombre;
 
-        onClose();
-    };
-    return (
-        <Modal visible={visible} transparent animationType="fade">
-            <View style={styles.overlay}>
-                <View style={[styles.card, { backgroundColor: currentTheme.card }]}>
+      if (selectedColumns.op) row['OP'] = item.op || 'S/N';
+      if (selectedColumns.estilo) row['Estilo'] = item.estilo;
+      if (selectedColumns.color) row['Color'] = item.color;
+      if (selectedColumns.ubicacion) {
+        row['Inventario'] = item.inventarioNombre;
+        row['Caja'] = item.cajaNombre;
+      }
+      if (selectedColumns.estado) {
+        row['Estado'] = item.estado === 1 ? 'Activo' : 'Inactivo';
+      }
+      return row;
+    });
 
-                    <View style={styles.header}>
-                        <Text style={[styles.title, { color: currentTheme.text }]}>Configurar Exportación</Text>
-                        <TouchableOpacity onPress={onClose}>
-                            <Ionicons name="close" size={24} color={currentTheme.textSecondary} />
-                        </TouchableOpacity>
-                    </View>
+    exportToExcel(dataFinal, nombreArchivo, separateBySheet);
+    onClose();
+  };
 
-                    <ScrollView showsVerticalScrollIndicator={false}>
-                        <View style={styles.section}>
-                            <View style={styles.sectionHeader}>
-                                <Text style={[styles.sectionTitle, { color: currentTheme.textSecondary }]}>SELECCIONAR CAJAS</Text>
-                                <TouchableOpacity onPress={selectAllBoxes}>
-                                    <Text style={{ color: currentTheme.primary, fontWeight: '700' }}>
-                                        {selectedBoxes.length === availableBoxes.length ? 'Desmarcar todo' : 'Todas'}
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-                            <View style={styles.chipsContainer}>
-                                {availableBoxes.map(box => (
-                                    <TouchableOpacity
-                                        key={box}
-                                        onPress={() => toggleBox(box)}
-                                        style={[
-                                            styles.chip,
-                                            { borderColor: currentTheme.border },
-                                            selectedBoxes.includes(box) && { backgroundColor: currentTheme.primary, borderColor: currentTheme.primary }
-                                        ]}
-                                    >
-                                        <Text style={[
-                                            styles.chipText,
-                                            { color: currentTheme.textSecondary },
-                                            selectedBoxes.includes(box) && { color: themeMode === 'light' ? '#FFF' : '#000' }
-                                        ]}>{box}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        </View>
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.overlay}>
+          <TouchableWithoutFeedback>
+            <View
+              style={[
+                styles.sheetContainer,
+                clayStyles,
+                {
+                  backgroundColor: currentTheme.card,
+                  borderColor: currentTheme.border,
+                  shadowColor: currentTheme.borderShadow || '#000',
+                  maxHeight: '85%',
+                  paddingBottom: Math.max(insets.bottom + 16, 24),
+                },
+              ]}
+            >
+              <View style={styles.dragIndicator} />
 
-                        <View style={styles.section}>
-                            <Text style={[styles.sectionTitle, { color: currentTheme.textSecondary }]}>COLUMNAS DEL EXCEL</Text>
-                            {[
-                                { label: 'Orden de Producción (OP)', key: 'op' },
-                                { label: 'Estilo', key: 'estilo' },
-                                { label: 'Color de Prenda', key: 'color' },
-                                { label: 'Ubicación (Inventario. y Caja)', key: 'ubicacion' },
-                                { label: 'Estado (Activo/Inactivo)', key: 'estado' },
-                            ].map(col => (
-                                <TouchableOpacity
-                                    key={col.key}
-                                    style={styles.checkRow}
-                                    onPress={() => toggleColumn(col.key as any)}
-                                >
-                                    <Ionicons
-                                        name={selectedColumns[col.key as keyof typeof selectedColumns] ? "checkbox" : "square-outline"}
-                                        size={22}
-                                        color={selectedColumns[col.key as keyof typeof selectedColumns] ? currentTheme.primary : currentTheme.textSecondary}
-                                    />
-                                    <Text style={[styles.checkLabel, { color: currentTheme.text }]}>{col.label}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-
-                        <View style={[styles.section, styles.switchRow]}>
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.checkLabel, { color: currentTheme.text, fontWeight: '700' }]}>Separar por hojas</Text>
-                                <Text style={{ color: currentTheme.textSecondary, fontSize: 11 }}>Crea una pestaña de Excel por cada caja</Text>
-                            </View>
-                            <Switch
-                                value={separateBySheet}
-                                onValueChange={setSeparateBySheet}
-                                trackColor={{ false: "#767577", true: currentTheme.primary + '80' }}
-                                thumbColor={separateBySheet ? currentTheme.primary : "#f4f3f4"}
-                            />
-                        </View>
-                    </ScrollView>
-
-                    <TouchableOpacity
-                        style={[styles.exportBtn, { backgroundColor: currentTheme.primary }]}
-                        onPress={handleExport}
-                    >
-                        <Text style={[styles.exportBtnText, { color: themeMode === 'light' ? '#FFF' : '#000' }]}>Generar Reporte Excel</Text>
-                    </TouchableOpacity>
+              {/* Header */}
+              <View style={styles.headerRow}>
+                <View style={styles.titleContainer}>
+                  <Ionicons name="document-text-outline" size={24} color={currentTheme.primary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.modalTitle, { color: currentTheme.text }]} allowFontScaling={true}>
+                    Exportar a Excel
+                  </Text>
                 </View>
+                <TouchableOpacity
+                  onPress={onClose}
+                  style={[styles.closeBtn, { backgroundColor: currentTheme.border + '30' }]}
+                  accessibilityLabel="Cerrar modal de exportación"
+                >
+                  <Ionicons name="close" size={20} color={currentTheme.text} />
+                </TouchableOpacity>
+              </View>
+
+              {loadingData ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={currentTheme.primary} />
+                  <Text style={[styles.loadingText, { color: currentTheme.textSecondary }]}>
+                    Cargando inventario para exportar...
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                  {/* Sección: Cajas */}
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
+                      CAJAS A INCLUIR ({availableBoxes.length})
+                    </Text>
+                    {availableBoxes.length > 0 && (
+                      <TouchableOpacity onPress={selectAllBoxes}>
+                        <Text style={[styles.selectAllText, { color: currentTheme.primary }]}>
+                          {selectedBoxes.length === availableBoxes.length ? 'Desmarcar todas' : 'Todas'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {availableBoxes.length === 0 ? (
+                    <View style={[styles.emptyBoxCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                      <Ionicons name="cube-outline" size={32} color={currentTheme.textSecondary} style={{ marginBottom: 6 }} />
+                      <Text style={[styles.emptyBoxText, { color: currentTheme.textSecondary }]}>
+                        No hay prendas registradas en la base de datos para exportar.
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.chipsContainer}>
+                      {availableBoxes.map(box => {
+                        const isSelected = selectedBoxes.includes(box);
+                        return (
+                          <TouchableOpacity
+                            key={box}
+                            onPress={() => toggleBox(box)}
+                            activeOpacity={0.7}
+                            style={[
+                              styles.chip,
+                              {
+                                backgroundColor: isSelected ? currentTheme.primary + '18' : currentTheme.background,
+                                borderColor: isSelected ? currentTheme.primary : currentTheme.border,
+                              },
+                            ]}
+                          >
+                            <Ionicons
+                              name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                              size={16}
+                              color={isSelected ? currentTheme.primary : currentTheme.textSecondary}
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text
+                              style={[
+                                styles.chipText,
+                                {
+                                  color: isSelected ? currentTheme.primary : currentTheme.text,
+                                  fontWeight: isSelected ? '700' : '500',
+                                },
+                              ]}
+                            >
+                              {box}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {/* Sección: Columnas del Reporte */}
+                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary, marginTop: 18 }]}>
+                    COLUMNAS DEL REPORTE
+                  </Text>
+                  <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                    {[
+                      { label: 'Orden de Producción (OP)', key: 'op', icon: 'barcode-outline' },
+                      { label: 'Estilo de Prenda', key: 'estilo', icon: 'shirt-outline' },
+                      { label: 'Color de Prenda', key: 'color', icon: 'color-palette-outline' },
+                      { label: 'Ubicación (Lote y Caja)', key: 'ubicacion', icon: 'location-outline' },
+                      { label: 'Estado (Activo / Inactivo)', key: 'estado', icon: 'checkmark-circle-outline' },
+                    ].map((col, index, arr) => {
+                      const isChecked = selectedColumns[col.key as keyof typeof selectedColumns];
+                      return (
+                        <React.Fragment key={col.key}>
+                          <TouchableOpacity
+                            style={styles.checkRow}
+                            onPress={() => toggleColumn(col.key as any)}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons name={col.icon as any} size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                            <Text style={[styles.checkLabel, { color: currentTheme.text }]}>{col.label}</Text>
+                            <Ionicons
+                              name={isChecked ? 'checkbox' : 'square-outline'}
+                              size={22}
+                              color={isChecked ? currentTheme.primary : currentTheme.textSecondary}
+                            />
+                          </TouchableOpacity>
+                          {index < arr.length - 1 && <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />}
+                        </React.Fragment>
+                      );
+                    })}
+                  </View>
+
+                  {/* Sección: Opciones Avanzadas */}
+                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>OPCIONES DE EXCEL</Text>
+                  <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                    <View style={styles.switchRow}>
+                      <View style={{ flex: 1, marginRight: 10 }}>
+                        <Text style={[styles.switchTitle, { color: currentTheme.text }]}>Separar por Hojas</Text>
+                        <Text style={[styles.switchSubtitle, { color: currentTheme.textSecondary }]}>
+                          Crea una pestaña individual en el archivo Excel por cada caja
+                        </Text>
+                      </View>
+                      <Switch
+                        value={separateBySheet}
+                        onValueChange={setSeparateBySheet}
+                        trackColor={{ false: currentTheme.border, true: currentTheme.primary + '80' }}
+                        thumbColor={separateBySheet ? currentTheme.primary : '#F4F3F4'}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Botón de Generar Reporte */}
+                  <TouchableOpacity
+                    style={[
+                      styles.exportBtn,
+                      {
+                        backgroundColor: availableBoxes.length > 0 && selectedBoxes.length > 0 ? currentTheme.primary : currentTheme.border,
+                      },
+                    ]}
+                    onPress={handleExport}
+                    disabled={availableBoxes.length === 0 || selectedBoxes.length === 0}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="stats-chart-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.exportBtnText}>Generar Reporte Excel</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              )}
             </View>
-        </Modal>
-    );
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
 };
 
-
-
 const styles = StyleSheet.create({
-    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-    card: { width: width * 0.9, maxHeight: height * 0.8, borderRadius: 12, padding: 20, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    title: { fontSize: 18, fontWeight: '800' },
-    section: { marginBottom: 20 },
-    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-    sectionTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 1 },
-    chipsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
-    chipText: { fontSize: 12, fontWeight: '600' },
-    checkRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
-    checkLabel: { fontSize: 14, fontWeight: '500' },
-    switchRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, paddingTop: 15 },
-    exportBtn: { height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
-    exportBtnText: { fontWeight: '800', fontSize: 16 }
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheetContainer: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderWidth: 1,
+    elevation: 10,
+  },
+  dragIndicator: {
+    width: 36,
+    height: 4,
+    backgroundColor: '#CCCCCC',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  closeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollContent: {
+    paddingBottom: 10,
+  },
+  loadingContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 13,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  sectionSubtitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  selectAllText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyBoxCard: {
+    padding: 20,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  emptyBoxText: {
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  chipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  chipText: {
+    fontSize: 13,
+  },
+  menuGroup: {
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  menuIcon: {
+    marginRight: 12,
+    width: 22,
+  },
+  checkLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  divider: {
+    height: 1,
+    width: '100%',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  switchTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  switchSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  exportBtn: {
+    flexDirection: 'row',
+    height: 50,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  exportBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
 });
-

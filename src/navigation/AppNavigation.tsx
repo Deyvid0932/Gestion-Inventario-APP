@@ -16,7 +16,7 @@ const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
 
 const MainStack = () => {
-  const { currentTheme } = useAppStore();
+  const currentTheme = useAppStore(state => state.currentTheme);
 
   return (
     <Stack.Navigator 
@@ -56,7 +56,7 @@ const MainStack = () => {
 };
 
 const TabNavigator = () => {
-  const { currentTheme } = useAppStore();
+  const currentTheme = useAppStore(state => state.currentTheme);
 
   return (
     <Tab.Navigator

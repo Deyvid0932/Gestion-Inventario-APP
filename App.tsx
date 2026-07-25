@@ -8,10 +8,60 @@ import { migrateDbIfNeeded } from './src/database/database';
 import { useAppStore } from './src/store/useAppStore';
 import { RootStackParamList } from './src/types';
 
+import { Text, TextInput } from 'react-native';
+
+// Garantizar accesibilidad de fuente grande sin romper el diseño en pantallas pequeñas
+if ((Text as any).defaultProps == null) (Text as any).defaultProps = {};
+(Text as any).defaultProps.maxFontSizeMultiplier = 1.35;
+
+if ((TextInput as any).defaultProps == null) (TextInput as any).defaultProps = {};
+(TextInput as any).defaultProps.maxFontSizeMultiplier = 1.35;
+
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
+import { useSQLiteContext } from 'expo-sqlite';
+import { supabase } from './src/database/supabase';
+import { SyncService } from './src/services/SyncService';
+
+const ThemeInitializer = () => {
+  const db = useSQLiteContext();
+  const loadThemeFromDb = useAppStore(state => state.loadThemeFromDb);
+
+  useEffect(() => {
+    if (db) {
+      loadThemeFromDb(db);
+    }
+  }, [db, loadThemeFromDb]);
+
+  return null;
+};
+
+const AuthInitializer = () => {
+  const setSession = useAppStore(state => state.setSession);
+  const setLastSyncTime = useAppStore(state => state.setLastSyncTime);
+
+  useEffect(() => {
+    SyncService.getLastSyncTime().then(time => {
+      if (time) setLastSyncTime(time);
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [setSession, setLastSyncTime]);
+
+  return null;
+};
+
 export default function App() {
-  const { themeMode, currentTheme } = useAppStore();
+  const themeMode = useAppStore(state => state.themeMode);
+  const currentTheme = useAppStore(state => state.currentTheme);
 
   useEffect(() => {
     // Listener para cuando el usuario toca una notificación (abierta, en segundo plano o cerrada)
@@ -41,6 +91,8 @@ export default function App() {
   return (
     <SafeAreaProvider style={{ backgroundColor: currentTheme.background }}>
       <SQLiteProvider databaseName="inventario.db" onInit={migrateDbIfNeeded}>
+        <ThemeInitializer />
+        <AuthInitializer />
         <NavigationContainer ref={navigationRef} theme={navigationTheme}>
           <AppNavigation />
         </NavigationContainer>

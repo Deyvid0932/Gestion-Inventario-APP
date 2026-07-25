@@ -5,12 +5,10 @@ import { Prenda } from "../types";
 
 export const usePrenda = () => {
     const db = useSQLiteContext();
-    const {
-        prendas,
-        addPrendaToState,
-        updatePrendaInState,
-        setPrendas
-    } = useAppStore();
+    const prendas = useAppStore(state => state.prendas);
+  const addPrendaToState = useAppStore(state => state.addPrendaToState);
+  const updatePrendaInState = useAppStore(state => state.updatePrendaInState);
+  const setPrendas = useAppStore(state => state.setPrendas);;
 
     const fetchPrendas = async (cajaId: string) => {
         const data = await PrendaService.getAllPrendasByCaja(db, cajaId);

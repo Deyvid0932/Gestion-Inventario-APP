@@ -1,11 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity, Image,
+  TouchableOpacity,
   Animated as RNAnimated,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import Animated, {
@@ -18,6 +19,7 @@ import Animated, {
 import { Prenda } from '../types';
 import { getColorHex } from '../utils/colorUtils';
 import { clayStyles } from '../style/theme';
+import { moderateScale } from '../utils/responsive';
 
 
 interface PrendaCardProps {
@@ -92,7 +94,7 @@ export const PrendaCard = React.memo(({
 
   const containerWidth = 160;
 
-  const renderRightActions = (
+  const renderRightActions = useCallback((
     progress: RNAnimated.AnimatedInterpolation<number>
   ) => {
     const trans = progress.interpolate({
@@ -130,7 +132,7 @@ export const PrendaCard = React.memo(({
         )}
       </View>
     );
-  };
+  }, [onMove, onDelete]);
 
   return (
     <Swipeable
@@ -153,22 +155,24 @@ export const PrendaCard = React.memo(({
           <View style={styles.innerCard}>
             <View style={[styles.colorBar, { backgroundColor: colorHex }]} />
             <View style={styles.itemContent}>
+              {/* Fila 1 (Superior): Estilo + Estado */}
               <View style={styles.itemHeader}>
-                <View style={styles.titleRow}>
-                  <View style={[styles.compactBadge, { borderWidth: 1, borderColor: theme.border }]}>
-                    <Text style={[styles.itemStyle, { color: theme.text, fontSize: historyMode ? 14 : 17 }]} numberOfLines={1}>
-                      {item.estilo}
-                    </Text>
-                  </View>
+                <View style={[styles.compactBadge, { borderWidth: 1, borderColor: theme.border, alignSelf: 'center' }]}>
+                  <Text style={[styles.itemStyle, { color: theme.text, fontSize: historyMode ? 14 : 17 }]} numberOfLines={1} allowFontScaling={true}>
+                    {item.estilo}
+                  </Text>
                 </View>
+
                 {!historyMode && onToggleStatus && (
                   <TouchableOpacity
                     onPress={onToggleStatus}
                     activeOpacity={0.8}
                     style={[styles.statusBadge, { backgroundColor: estado === 1 ? '#2ecc7120' : '#8E8E9320' }]}
+                    accessibilityLabel={`Estado: ${estado === 1 ? 'Activo' : 'Inactivo'}`}
+                    accessibilityRole="button"
                   >
                     <View style={[styles.statusIndicator, { backgroundColor: estado === 1 ? '#2ecc71' : '#8E8E93' }]} />
-                    <Text style={[styles.statusText, { color: estado === 1 ? '#2ecc71' : '#8E8E93' }]}>
+                    <Text style={[styles.statusText, { color: estado === 1 ? '#2ecc71' : '#8E8E93' }]} allowFontScaling={true}>
                       {estado === 1 ? 'Activo' : 'Inactivo'}
                     </Text>
                   </TouchableOpacity>
@@ -177,22 +181,49 @@ export const PrendaCard = React.memo(({
                   <View style={[styles.colorSwatch, { backgroundColor: colorHex, borderColor: theme.border }]} />
                 )}
               </View>
+
+              {/* Fila 2 (Centro): OP + Color */}
+              {!historyMode && (
+                <View style={styles.infoRow}>
+                  <View style={styles.infoGroup}>
+                    <Ionicons name="pricetag-outline" size={13} color={theme.textSecondary} />
+                    <Text style={[styles.infoText, { color: theme.textSecondary }]} allowFontScaling={true}>
+                      {item.op || 'Sin OP'}
+                    </Text>
+                  </View>
+                  <View style={styles.infoGroup}>
+                    <Ionicons name="color-palette-outline" size={13} color={theme.textSecondary} />
+                    <Text style={[styles.infoText, { color: theme.textSecondary }]} allowFontScaling={true}>
+                      {item.color}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Fila 3 (Pie Inferior): Alarma (Izquierda) + Fotos (Derecha) */}
               <View style={styles.itemFooter}>
                 {historyMode ? (
-                  <Text style={[styles.locationText, { color: theme.textSecondary }]}>
+                  <Text style={[styles.locationText, { color: theme.textSecondary }]} allowFontScaling={true}>
                     {item.inventarioNombre} • {item.cajaNombre} • {item.color}
                   </Text>
                 ) : (
                   <>
-                    <View style={styles.infoRow}>
-                      <View style={styles.infoGroup}>
-                        <Ionicons name="pricetag-outline" size={14} color={theme.textSecondary} />
-                        <Text style={[styles.infoText, { color: theme.textSecondary }]}>{item.op || 'Sin OP'}</Text>
-                      </View>
-                      <View style={styles.infoGroup}>
-                        <Ionicons name="color-palette-outline" size={14} color={theme.textSecondary} />
-                        <Text style={[styles.infoText, { color: theme.textSecondary }]}>{item.color}</Text>
-                      </View>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      {item.alarmaFechaHora ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAB30815', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start' }}>
+                          <Ionicons name="time-outline" size={12} color="#EAB308" style={{ marginRight: 3 }} />
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: '#EAB308' }} allowFontScaling={true}>
+                            {new Date(item.alarmaFechaHora).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} {new Date(item.alarmaFechaHora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.border + '40', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start' }}>
+                          <Ionicons name="calendar-outline" size={11} color={theme.textSecondary} style={{ marginRight: 3 }} />
+                          <Text style={{ fontSize: 10, fontWeight: '600', color: theme.textSecondary }} allowFontScaling={true}>
+                            {new Date(item.fechaCreacion || Date.now()).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                          </Text>
+                        </View>
+                      )}
                     </View>
 
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -200,12 +231,15 @@ export const PrendaCard = React.memo(({
                         <TouchableOpacity
                           onPress={() => onImagePress(item.fotoUri)}
                           activeOpacity={0.85}
-                          style={[styles.thumbnailContainer, { borderColor: theme.border }]}
+                          style={[styles.thumbnailContainer, { borderColor: theme.border, marginRight: item.fotoUri2 ? 6 : 0 }]}
+                          accessibilityLabel="Ver primera fotografía"
                         >
                           <Image
                             source={{ uri: item.fotoUri }}
                             style={styles.thumbnail}
-                            resizeMode="cover"
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            transition={200}
                           />
                         </TouchableOpacity>
                       )}
@@ -214,11 +248,14 @@ export const PrendaCard = React.memo(({
                           onPress={() => onImagePress(item.fotoUri2)}
                           activeOpacity={0.85}
                           style={[styles.thumbnailContainer, { borderColor: theme.border }]}
+                          accessibilityLabel="Ver segunda fotografía"
                         >
                           <Image
                             source={{ uri: item.fotoUri2 }}
                             style={styles.thumbnail}
-                            resizeMode="cover"
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            transition={200}
                           />
                         </TouchableOpacity>
                       )}
@@ -226,15 +263,6 @@ export const PrendaCard = React.memo(({
                   </>
                 )}
               </View>
-
-              {item.alarmaFechaHora && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAB30815', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 6, alignSelf: 'flex-start' }}>
-                  <Ionicons name="time-outline" size={12} color="#EAB308" style={{ marginRight: 4 }} />
-                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#EAB308' }}>
-                    Alarma: {new Date(item.alarmaFechaHora).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} {new Date(item.alarmaFechaHora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
-                </View>
-              )}
             </View>
             {isSelected && (
               <View style={[styles.selectionCheck, { backgroundColor: theme.text }]}>
@@ -263,13 +291,14 @@ export const PrendaCard = React.memo(({
 
 const styles = StyleSheet.create({
   shadowWrapper: {
-    minHeight: 104,
+    height: 126,
     marginBottom: 16,
+    justifyContent: 'center',
     // Estilos manejados por animatedStyle
   },
   innerCard: {
     flexDirection: 'row',
-    borderRadius: 26, // Ligeramente menor que el padre
+    borderRadius: 24, // Ligeramente menor que el padre
     overflow: 'hidden',
     flex: 1,
   },
@@ -278,19 +307,19 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   historyCard: { marginBottom: 15 },
-  itemContent: { flex: 1, padding: 15, justifyContent: 'center' },
-  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  itemContent: { flex: 1, paddingHorizontal: 16, paddingVertical: 10, justifyContent: 'space-between' },
+  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 32 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  compactBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  itemStyle: { fontWeight: '800' },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 5, marginRight: 8 },
+  compactBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, justifyContent: 'center' },
+  itemStyle: { fontWeight: '800', includeFontPadding: false },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 5 },
   statusIndicator: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   colorSwatch: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5 },
-  itemFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 15 },
-  infoRow: { flexDirection: 'row', gap: 15, flex: 1 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 22 },
   infoGroup: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  infoText: { fontSize: 13, fontWeight: '600' },
+  infoText: { fontSize: 13, fontWeight: '600', includeFontPadding: false },
+  itemFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 32 },
   locationText: { fontSize: 11, fontWeight: '500', fontStyle: 'italic' },
   selectionCheck: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   swipeActionsContainer: {
@@ -311,11 +340,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     borderWidth: 1,
-    marginRight: 8,
   },
   thumbnail: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: 8,
     backgroundColor: '#eee',
   },

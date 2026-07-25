@@ -9,6 +9,29 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     CREATE TABLE IF NOT EXISTS user_version (id INTEGER PRIMARY KEY DEFAULT 1, version INTEGER);
   `);
 
+  // Auto-corrección garantizada de tablas de Chat, ajustes y doble entrada para prendas
+  try {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id TEXT PRIMARY KEY NOT NULL,
+        title TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+      );
+    `);
+    await db.runAsync('ALTER TABLE chat_history ADD COLUMN sessionId TEXT;').catch(() => {});
+    await db.runAsync('ALTER TABLE chat_history ADD COLUMN engineUsed TEXT;').catch(() => {});
+    await db.runAsync('ALTER TABLE prendas ADD COLUMN op2 TEXT;').catch(() => {});
+    await db.runAsync('ALTER TABLE prendas ADD COLUMN color2 TEXT;').catch(() => {});
+  } catch (e) {
+    console.error('Error auto-corrigiendo esquema:', e);
+  }
+
   const result = await db.getFirstAsync<{ version: number }>('SELECT version FROM user_version');
   let currentDbVersion = result ? result.version : 0;
 
@@ -18,6 +41,14 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
 
   if (currentDbVersion === 0) {
     await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+      );
+
+      INSERT OR IGNORE INTO app_settings (key, value) VALUES ('themeMode', 'light');
+      INSERT OR IGNORE INTO app_settings (key, value) VALUES ('colorScheme', 'morado');
+
       CREATE TABLE IF NOT EXISTS inventarios (
         id TEXT PRIMARY KEY NOT NULL,
         nombre TEXT NOT NULL,
@@ -39,8 +70,10 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         id TEXT PRIMARY KEY NOT NULL,
         cajaId TEXT NOT NULL,
         op TEXT,
+        op2 TEXT,
         estilo TEXT NOT NULL,
         color TEXT NOT NULL,
+        color2 TEXT,
         fotoUri TEXT,
         fotoUri2 TEXT,
         estado INTEGER NOT NULL DEFAULT 1,
@@ -57,12 +90,22 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       CREATE INDEX IF NOT EXISTS idx_prendas_fecha ON prendas(fechaCreacion);
       CREATE INDEX IF NOT EXISTS idx_cajas_orden ON cajas(orden);
 
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id TEXT PRIMARY KEY NOT NULL,
+        title TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS chat_history (
         id TEXT PRIMARY KEY NOT NULL,
+        sessionId TEXT,
         sender TEXT NOT NULL,
         text TEXT NOT NULL,
         matches_json TEXT,
-        timestamp INTEGER NOT NULL
+        engineUsed TEXT,
+        timestamp INTEGER NOT NULL,
+        FOREIGN KEY (sessionId) REFERENCES chat_sessions (id) ON DELETE CASCADE
       );
 
       INSERT OR REPLACE INTO user_version (id, version) VALUES (1, ${DATABASE_VERSION});

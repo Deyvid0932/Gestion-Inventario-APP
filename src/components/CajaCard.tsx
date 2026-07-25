@@ -1,4 +1,4 @@
-import React, { memo, useRef } from 'react';
+import React, { memo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -33,7 +33,7 @@ const CajaCard = memo(({
 }: CajaCardProps) => {
   const swipeableRef = useRef<Swipeable>(null);
 
-  const renderRightActions = (
+  const renderRightActions = useCallback((
     progress: Animated.AnimatedInterpolation<number>
   ) => {
     const trans = progress.interpolate({
@@ -67,7 +67,7 @@ const CajaCard = memo(({
         </Animated.View>
       </View>
     );
-  };
+  }, [onEdit, onDelete, item.id, item.nombre]);
 
   return (
     <ScaleDecorator>
@@ -119,6 +119,12 @@ const CajaCard = memo(({
       </Swipeable>
     </ScaleDecorator>
   );
+}, (prev, next) => {
+  return prev.item.id === next.item.id &&
+    prev.item.nombre === next.item.nombre &&
+    prev.item.itemCount === next.item.itemCount &&
+    prev.isActive === next.isActive &&
+    prev.theme === next.theme;
 });
 
 const styles = StyleSheet.create({
@@ -183,4 +189,4 @@ const styles = StyleSheet.create({
 });
 
 
-export default React.memo(CajaCard);
+export default CajaCard;
