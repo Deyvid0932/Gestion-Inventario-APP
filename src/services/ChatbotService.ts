@@ -59,51 +59,50 @@ const searchLocal = async (
   // 1. OP (única)
   const op = extractOP(input);
   if (op) {
-    const results = await db.getAllAsync<SearchResult>(
-      `${BASE_QUERY} WHERE UPPER(trim(p.op)) = ?`, [op]
+    const rows = await db.getAllAsync<SearchResult>(
+      `${BASE_QUERY} WHERE p.op LIKE ? LIMIT 20`,
+      [`%${op}%`]
     );
-    if (results.length > 0) {
-      return { text: `✅ Se encontró la prenda con OP ${op}:`, matches: results };
+
+    if (rows.length === 0) {
+      return { text: `No se encontraron prendas con la OP "${op}".`, matches: [] };
     }
-    return { text: `❌ No se encontró ninguna prenda con OP "${op}".`, matches: [] };
+    return {
+      text: `Se encontraron ${rows.length} prendas asociadas a la OP "${op}":`,
+      matches: rows
+    };
   }
 
-  // 2. Color (máx 5)
+  // 2. Color
   const color = extractColor(input);
   if (color) {
-    const results = await db.getAllAsync<SearchResult>(
-      `${BASE_QUERY} WHERE UPPER(trim(p.color)) LIKE ? LIMIT 5`, [`%${color}%`]
+    const rows = await db.getAllAsync<SearchResult>(
+      `${BASE_QUERY} WHERE UPPER(p.color) LIKE ? LIMIT 20`,
+      [`%${color}%`]
     );
-    if (results.length > 0) {
-      return { text: `🎨 Encontré ${results.length} prenda(s) de color "${color}" (máx. 5):`, matches: results };
+
+    if (rows.length === 0) {
+      return { text: `No se encontraron prendas con el color "${color}".`, matches: [] };
     }
-    return { text: `❌ No se encontraron prendas de color "${color}".`, matches: [] };
+    return {
+      text: `Se encontraron ${rows.length} prendas del color "${color}":`,
+      matches: rows
+    };
   }
 
-  const estilo = input.toUpperCase().trim();
-  const exactResults = await db.getAllAsync<SearchResult>(
-    `${BASE_QUERY} WHERE UPPER(trim(p.estilo)) = ?`, [estilo]
+  // 3. Estilo por defecto
+  const rows = await db.getAllAsync<SearchResult>(
+    `${BASE_QUERY} WHERE UPPER(p.estilo) LIKE ? LIMIT 20`,
+    [`%${input.toUpperCase()}%`]
   );
-  if (exactResults.length > 0) {
-    return { text: `✅ Se encontraron ${exactResults.length} prenda(s) con estilo "${estilo}":`, matches: exactResults };
-  }
 
-  const partialResults = await db.getAllAsync<SearchResult>(
-    `${BASE_QUERY} WHERE UPPER(p.estilo) LIKE ? LIMIT 15`, [`%${estilo}%`]
-  );
-  if (partialResults.length > 0) {
-    return { text: `🔍 No encontré coincidencia exacta para "${estilo}", pero encontré ${partialResults.length} resultado(s) similares:`, matches: partialResults };
+  if (rows.length === 0) {
+    return { text: `No encontré coincidencias para "${input}". Intenta buscando por estilo (ej: KHM 030 001), OP o color.`, matches: [] };
   }
-
-  const generalResults = await db.getAllAsync<SearchResult>(
-    `${BASE_QUERY} WHERE UPPER(p.estilo) LIKE ? OR UPPER(p.op) LIKE ? OR UPPER(p.color) LIKE ? LIMIT 10`,
-    [`%${estilo}%`, `%${estilo}%`, `%${estilo}%`]
-  );
-  if (generalResults.length > 0) {
-    return { text: `🔍 Resultados relacionados con "${input}":`, matches: generalResults };
-  }
-
-  return { text: `❌ No se encontró nada para "${input}". Intenta con otro estilo, OP o color.`, matches: [] };
+  return {
+    text: `Se encontraron ${rows.length} prendas asociadas al estilo "${input}":`,
+    matches: rows
+  };
 };
 
 const executeSearch = async (
@@ -111,41 +110,38 @@ const executeSearch = async (
   tipo: string,
   valor: string
 ): Promise<{ text: string; matches: SearchResult[] }> => {
-  const term = valor.toUpperCase().trim();
-
   if (tipo === 'OP') {
-    const results = await db.getAllAsync<SearchResult>(
-      `${BASE_QUERY} WHERE UPPER(trim(p.op)) = ?`, [term]
+    const opVal = valor.replace(/\D/g, '') || valor;
+    const rows = await db.getAllAsync<SearchResult>(
+      `${BASE_QUERY} WHERE p.op LIKE ? LIMIT 20`,
+      [`%${opVal}%`]
     );
-    if (results.length > 0) return { text: `✅ Se encontró la prenda con OP ${term}:`, matches: results };
-    return { text: `❌ No se encontró ninguna prenda con OP "${term}".`, matches: [] };
+    if (rows.length === 0) return { text: `No se encontraron prendas para la OP "${valor}".`, matches: [] };
+    return { text: `Encontré ${rows.length} prendas para la OP "${valor}":`, matches: rows };
   }
 
   if (tipo === 'COLOR') {
-    const results = await db.getAllAsync<SearchResult>(
-      `${BASE_QUERY} WHERE UPPER(trim(p.color)) LIKE ? LIMIT 5`, [`%${term}%`]
+    const rows = await db.getAllAsync<SearchResult>(
+      `${BASE_QUERY} WHERE UPPER(p.color) LIKE ? LIMIT 20`,
+      [`%${valor.toUpperCase()}%`]
     );
-    if (results.length > 0) return { text: `🎨 Encontré ${results.length} prenda(s) de color "${term}" (máx. 5):`, matches: results };
-    return { text: `❌ No se encontraron prendas de color "${term}".`, matches: [] };
+    if (rows.length === 0) return { text: `No se encontraron prendas del color "${valor}".`, matches: [] };
+    return { text: `Encontré ${rows.length} prendas del color "${valor}":`, matches: rows };
   }
 
   if (tipo === 'ESTILO') {
-    const exact = await db.getAllAsync<SearchResult>(
-      `${BASE_QUERY} WHERE UPPER(trim(p.estilo)) = ?`, [term]
+    const rows = await db.getAllAsync<SearchResult>(
+      `${BASE_QUERY} WHERE UPPER(p.estilo) LIKE ? LIMIT 20`,
+      [`%${valor.toUpperCase()}%`]
     );
-    if (exact.length > 0) return { text: `✅ Se encontraron ${exact.length} prenda(s) con estilo "${term}":`, matches: exact };
-
-    const partial = await db.getAllAsync<SearchResult>(
-      `${BASE_QUERY} WHERE UPPER(p.estilo) LIKE ? LIMIT 15`, [`%${term}%`]
-    );
-    if (partial.length > 0) return { text: `🔍 Resultados similares a "${term}":`, matches: partial };
-    return { text: `❌ No se encontró ninguna prenda con estilo "${term}".`, matches: [] };
+    if (rows.length === 0) return { text: `No se encontraron prendas con el estilo "${valor}".`, matches: [] };
+    return { text: `Encontré ${rows.length} prendas para el estilo "${valor}":`, matches: rows };
   }
 
   if (tipo === 'CAJA') {
     const result = await db.getFirstAsync<{ total: number }>(
-      `SELECT count(*) as total FROM prendas p JOIN cajas c ON p.cajaId = c.id WHERE UPPER(trim(c.nombre)) LIKE ?`,
-      [`%${term}%`]
+      `SELECT count(*) as total FROM prendas p JOIN cajas c ON p.cajaId = c.id WHERE UPPER(c.nombre) LIKE ?`,
+      [`%${valor.toUpperCase()}%`]
     );
     return { text: `📦 La ${valor} actualmente tiene ${result?.total || 0} prendas.`, matches: [] };
   }
@@ -185,13 +181,13 @@ ${conversationContext || '(No hay mensajes anteriores)'}
 Analiza la siguiente frase nueva de un usuario de una app de inventario de ropa: "${message}"
 
 Clasifícala en uno de estos tipos:
-- OP: el usuario menciona un número de OP: código respondes .
-- COLOR: el usuario busca por un color específico.
-- ESTILO: el usuario busca por nombre que empieza con KH asumes que es estilo de prenda .
+- OP: el usuario busca explícitamente por número de OP (ej: "OP 101", "op 5") o escribe exclusivamente un número sin letras (ej: "123").
+- ESTILO: el usuario busca por un estilo de prenda. IMPORTANTE: Los estilos en esta app suelen ser códigos alfanuméricos como "khm 030 001", "KHM 030", "KH 12", "polo slim". Si la consulta contiene letras (como KHM, POLO, CAMISA, etc.), SIEMPRE debes clasificarla como ESTILO, NUNCA como OP.
+- COLOR: el usuario busca por un color específico (ej: "rojo", "azul", "negro").
 - CAJA: el usuario pregunta cuántas prendas hay en una caja específica.
 - INVENTARIO: el usuario pide un resumen general del inventario.
 - SALUDO: el usuario solo saluda (hola, buenos días, etc).
-- LIBRE: cualquier otra cosa que NO sea una búsqueda en la base de datos: preguntas generales, charla casual, dudas sobre cómo usar la app, sugerencias, quejas, agradecimientos, preguntas sobre ti mismo, etc.
+- LIBRE: cualquier otra cosa que NO sea una búsqueda en la base de datos.
 
 Si el tipo es LIBRE, responde directamente la conversación en el campo "valor" (breve, directo, en español). Si es cualquier otro tipo, en "valor" pon el término extraído para buscar en la base de datos.
 
@@ -199,7 +195,6 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto, sin explicacion
 {"tipo": "ESTILO", "valor": "CAMISA001"}
 {"tipo": "LIBRE", "valor": "¡De nada! Si necesitas algo más, aquí estoy."}`;
 
-    // console.log('[Groq] Enviando solicitud al modelo llama-3.3-70b-versatile.');
     const response = await fetch(
       'https://api.groq.com/openai/v1/chat/completions',
       {
@@ -217,12 +212,8 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto, sin explicacion
       }
     );
 
-
-
     const responseText = await response.text();
     let data: any;
-
-
 
     try {
       data = JSON.parse(responseText);
@@ -231,22 +222,7 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto, sin explicacion
       return null;
     }
 
-    if (!response.ok || data.error) {
-      console.error('[Groq] Error de API:', JSON.stringify({
-        status: response.status,
-        statusText: response.statusText,
-        error: data.error || data
-      }, null, 2));
-      return null;
-    }
-
-    const rawText = data.choices?.[0]?.message?.content || '';
-    //console.log("📥 Texto crudo recibido de Groq:", rawText);
-
-    if (!rawText.trim()) {
-      return { tipo: 'LIBRE', valor: 'No pude interpretar tu mensaje. ¿Puedes reformularlo?' };
-    }
-
+    const rawText = data.choices?.[0]?.message?.content?.trim() || '';
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return null;
@@ -266,21 +242,37 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto, sin explicacion
 
 
 export const ChatbotService = {
-  getSessions: async (db: SQLiteDatabase): Promise<ChatSession[]> => {
+  getSessions: async (db: SQLiteDatabase, userId?: string | null): Promise<ChatSession[]> => {
     try {
-      return await db.getAllAsync<ChatSession>('SELECT * FROM chat_sessions ORDER BY updatedAt DESC');
+      if (userId) {
+        // Adoptar cualquier sesión de invitado huérfana al usuario actual
+        await db.runAsync(
+          `UPDATE chat_sessions SET user_id = ?, sync_status = 'PENDING' WHERE user_id IS NULL OR user_id = ''`,
+          [userId]
+        );
+        return await db.getAllAsync<ChatSession>(
+          'SELECT * FROM chat_sessions WHERE deleted_at IS NULL AND user_id = ? ORDER BY updatedAt DESC',
+          [userId]
+        );
+      } else {
+        return await db.getAllAsync<ChatSession>(
+          'SELECT * FROM chat_sessions WHERE deleted_at IS NULL AND (user_id IS NULL OR user_id = "") ORDER BY updatedAt DESC'
+        );
+      }
     } catch (e) {
       console.error('Error fetching chat sessions', e);
       return [];
     }
   },
 
-  createSession: async (db: SQLiteDatabase, title: string = 'Nueva sesión'): Promise<string> => {
+  createSession: async (db: SQLiteDatabase, title: string = 'Nueva conversación', userId?: string | null): Promise<string> => {
     try {
       const id = Date.now().toString();
+      const now = new Date().toISOString();
       await db.runAsync(
-        'INSERT INTO chat_sessions (id, title, createdAt, updatedAt) VALUES (?, ?, ?, ?)',
-        [id, title, Date.now(), Date.now()]
+        `INSERT INTO chat_sessions (id, user_id, title, createdAt, updatedAt, updated_at, sync_status) 
+         VALUES (?, ?, ?, ?, ?, ?, 'PENDING')`,
+        [id, userId || null, title, Date.now(), Date.now(), now]
       );
       return id;
     } catch (e) {
@@ -291,8 +283,9 @@ export const ChatbotService = {
 
   deleteSession: async (db: SQLiteDatabase, sessionId: string): Promise<void> => {
     try {
-      await db.runAsync('DELETE FROM chat_history WHERE sessionId = ?', [sessionId]);
-      await db.runAsync('DELETE FROM chat_sessions WHERE id = ?', [sessionId]);
+      const now = new Date().toISOString();
+      await db.runAsync('UPDATE chat_history SET deleted_at = ?, sync_status = "PENDING" WHERE sessionId = ?', [now, sessionId]);
+      await db.runAsync('UPDATE chat_sessions SET deleted_at = ?, sync_status = "PENDING" WHERE id = ?', [now, sessionId]);
     } catch (e) {
       console.error('Error deleting chat session', e);
     }
@@ -300,7 +293,11 @@ export const ChatbotService = {
 
   updateSessionTitle: async (db: SQLiteDatabase, sessionId: string, title: string): Promise<void> => {
     try {
-      await db.runAsync('UPDATE chat_sessions SET title = ?, updatedAt = ? WHERE id = ?', [title, Date.now(), sessionId]);
+      const now = new Date().toISOString();
+      await db.runAsync(
+        'UPDATE chat_sessions SET title = ?, updatedAt = ?, updated_at = ?, sync_status = "PENDING" WHERE id = ?',
+        [title, Date.now(), now, sessionId]
+      );
     } catch (e) {
       console.error('Error updating session title', e);
     }
@@ -309,7 +306,7 @@ export const ChatbotService = {
   getHistoryBySession: async (db: SQLiteDatabase, sessionId: string): Promise<ChatMessage[]> => {
     try {
       const history = await db.getAllAsync<{ id: string, sender: string, text: string, matches_json: string, engineUsed?: string, timestamp: number }>(
-        'SELECT * FROM chat_history WHERE sessionId = ? ORDER BY timestamp DESC LIMIT 50',
+        'SELECT * FROM chat_history WHERE sessionId = ? AND deleted_at IS NULL ORDER BY timestamp DESC LIMIT 100',
         [sessionId]
       );
       return history.map(row => {
@@ -337,22 +334,27 @@ export const ChatbotService = {
 
   saveMessage: async (db: SQLiteDatabase, msg: ChatMessage, sessionId: string): Promise<void> => {
     try {
+      const now = new Date().toISOString();
       const matchesStr = msg.matches ? JSON.stringify(msg.matches) : null;
       await db.runAsync(
-        'INSERT INTO chat_history (id, sender, text, matches_json, timestamp, sessionId, engineUsed) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [msg.id, msg.sender, msg.text, matchesStr, msg.timestamp, sessionId, msg.engineUsed || null]
+        `INSERT INTO chat_history (id, sender, text, matches_json, timestamp, sessionId, engineUsed, updated_at, sync_status) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+        [msg.id, msg.sender, msg.text, matchesStr, msg.timestamp, sessionId, msg.engineUsed || null, now]
       );
-      await db.runAsync('UPDATE chat_sessions SET updatedAt = ? WHERE id = ?', [Date.now(), sessionId]);
+      await db.runAsync(
+        `UPDATE chat_sessions SET updatedAt = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
+        [Date.now(), now, sessionId]
+      );
     } catch (e) {
       console.error('Error saving chat message', e);
     }
   },
 
   clearHistory: async (db: SQLiteDatabase): Promise<void> => {
-    await db.runAsync('DELETE FROM chat_history');
-    await db.runAsync('DELETE FROM chat_sessions');
+    const now = new Date().toISOString();
+    await db.runAsync('UPDATE chat_history SET deleted_at = ?, sync_status = "PENDING"', [now]);
+    await db.runAsync('UPDATE chat_sessions SET deleted_at = ?, sync_status = "PENDING"', [now]);
   },
-
 
   searchAndRespond: async (db: SQLiteDatabase, message: string, sessionId: string): Promise<{ text: string, matches: SearchResult[], engineUsed: 'ia' | 'local' }> => {
     const history = await ChatbotService.getHistoryBySession(db, sessionId);

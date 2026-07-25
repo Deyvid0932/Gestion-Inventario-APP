@@ -1,14 +1,12 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import { Prenda } from '../types';
-import { AuthService } from './AuthService';
 import { supabase } from '../database/supabase';
 
 export const PrendaService = {
   addPrenda: async (db: SQLiteDatabase, prenda: Prenda) => {
-    const isGuest = await AuthService.isGuestMode();
     try {
       if (prenda.op && prenda.op.trim() !== '') {
-        const existing = await db.getFirstAsync<{ id: string; op: string; }>(
+        const existing = await db.getFirstAsync<{ id: string; op: string }>(
           'SELECT id, op FROM prendas WHERE op = ? AND cajaId = ?',
           [prenda.op, prenda.cajaId]
         );
@@ -23,8 +21,10 @@ export const PrendaService = {
         }
       }
 
+      const now = new Date().toISOString();
       await db.runAsync(
-        'INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, fechaCreacion, alarmaFechaHora, alarmaNotificationId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        `INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, estado, fechaCreacion, alarmaFechaHora, alarmaNotificationId, updated_at, sync_status) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
         [
           prenda.id,
           prenda.cajaId,
@@ -33,30 +33,17 @@ export const PrendaService = {
           prenda.color,
           prenda.fotoUri || null,
           prenda.fotoUri2 || null,
-          prenda.fechaCreacion || new Date().toISOString(),
+          prenda.estado ?? 1,
+          prenda.fechaCreacion || now,
           prenda.alarmaFechaHora || null,
-          prenda.alarmaNotificationId || null
+          prenda.alarmaNotificationId || null,
+          now,
         ]
       );
 
-      if (!isGuest) {
-        await supabase.from('prendas').upsert({
-          id: prenda.id,
-          cajaId: prenda.cajaId,
-          op: prenda.op || '',
-          estilo: prenda.estilo,
-          color: prenda.color,
-          fotoUri: prenda.fotoUri || null,
-          fotoUri2: prenda.fotoUri2 || null,
-          fechaCreacion: prenda.fechaCreacion || new Date().toISOString(),
-          alarmaFechaHora: prenda.alarmaFechaHora || null,
-          alarmaNotificationId: prenda.alarmaNotificationId || null
-        })
-      }
-
       return { success: true };
     } catch (e) {
-      console.error(e);
+      console.error('Error al agregar prenda:', e);
       return { success: false, error: 'Error al guardar en la base de datos.' };
     }
   },
@@ -77,8 +64,9 @@ export const PrendaService = {
         }
       }
 
+      const now = new Date().toISOString();
       await db.runAsync(
-        'UPDATE prendas SET op = ?, estilo = ?, color = ?, fotoUri = ?, fotoUri2 = ?, alarmaFechaHora = ?, alarmaNotificationId = ? WHERE id = ?',
+        `UPDATE prendas SET op = ?, estilo = ?, color = ?, fotoUri = ?, fotoUri2 = ?, alarmaFechaHora = ?, alarmaNotificationId = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
         [
           prenda.op || '',
           prenda.estilo,
@@ -87,19 +75,24 @@ export const PrendaService = {
           prenda.fotoUri2 || null,
           prenda.alarmaFechaHora || null,
           prenda.alarmaNotificationId || null,
-          prenda.id
+          now,
+          prenda.id,
         ]
       );
       return { success: true };
     } catch (e) {
-      console.error(e);
+      console.error('Error al actualizar prenda:', e);
       return { success: false, error: 'Error al actualizar la prenda.' };
     }
   },
 
   updatePrendaStatus: async (db: SQLiteDatabase, id: string, newStatus: number) => {
     try {
-      await db.runAsync('UPDATE prendas SET estado = ? WHERE id = ?', [newStatus, id]);
+      const now = new Date().toISOString();
+      await db.runAsync(
+        `UPDATE prendas SET estado = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
+        [newStatus, now, id]
+      );
       return { success: true };
     } catch (error) {
       console.error('Error al actualizar estado:', error);
@@ -110,7 +103,10 @@ export const PrendaService = {
   movePrenda: async (db: SQLiteDatabase, prendaId: string, newCajaId: string) => {
     try {
       const now = new Date().toISOString();
-      await db.runAsync('UPDATE prendas SET cajaId = ?, fechaCreacion = ? WHERE id = ?', [newCajaId, now, prendaId]);
+      await db.runAsync(
+        `UPDATE prendas SET cajaId = ?, fechaCreacion = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
+        [newCajaId, now, now, prendaId]
+      );
       return { success: true };
     } catch (error) {
       console.error('Error al mover prenda:', error);
@@ -118,10 +114,31 @@ export const PrendaService = {
     }
   },
 
+  hardDelete: async (db: SQLiteDatabase, id: string, userId?: string | null) => {
+    try {
+      if (userId) {
+        const { error } = await supabase.from('prendas').delete().eq('id', id);
+        if (error) {
+          console.error('Error al eliminar prenda en Supabase:', error);
+          return { success: false, error: 'No se pudo eliminar en la nube. Verifica tu conexión.' };
+        }
+      }
+
+      await db.runAsync(`DELETE FROM prendas WHERE id = ?`, [id]);
+      return { success: true };
+    } catch (e: any) {
+      console.error('Error en hardDelete de prenda:', e);
+      return { success: false, error: e.message || 'Error al eliminar la prenda.' };
+    }
+  },
+
   getAllPrendasByCaja: async (db: SQLiteDatabase, cajaId: string, search: string = '') => {
     try {
       if (search.trim() === '') {
-        return await db.getAllAsync<Prenda>('SELECT * FROM prendas WHERE cajaId = ? ORDER BY fechaCreacion DESC', [cajaId]);
+        return await db.getAllAsync<Prenda>(
+          'SELECT * FROM prendas WHERE cajaId = ? ORDER BY fechaCreacion DESC',
+          [cajaId]
+        );
       }
 
       const startParam = `${search}%`;
@@ -138,9 +155,16 @@ export const PrendaService = {
             ELSE 2
           END), fechaCreacion DESC`,
         [
-          cajaId, searchParam, searchParam, searchParam,
-          exactParam, exactParam, exactParam,
-          startParam, startParam, startParam
+          cajaId,
+          searchParam,
+          searchParam,
+          searchParam,
+          exactParam,
+          exactParam,
+          exactParam,
+          startParam,
+          startParam,
+          startParam,
         ]
       );
     } catch (error) {
@@ -151,10 +175,12 @@ export const PrendaService = {
 
   bulkAddPrendas: async (db: SQLiteDatabase, prendas: Prenda[]) => {
     try {
+      const now = new Date().toISOString();
       await db.withTransactionAsync(async () => {
         for (const prenda of prendas) {
           await db.runAsync(
-            'INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, fechaCreacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            `INSERT INTO prendas (id, cajaId, op, estilo, color, fotoUri, fotoUri2, estado, fechaCreacion, updated_at, sync_status) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
             [
               prenda.id,
               prenda.cajaId,
@@ -163,7 +189,9 @@ export const PrendaService = {
               prenda.color,
               prenda.fotoUri || null,
               prenda.fotoUri2 || null,
-              prenda.fechaCreacion || new Date().toISOString()
+              prenda.estado ?? 1,
+              prenda.fechaCreacion || now,
+              now,
             ]
           );
         }
@@ -173,5 +201,5 @@ export const PrendaService = {
       console.error('Error in bulkAddPrendas:', e);
       return { success: false, error: 'Error al realizar la carga masiva.' };
     }
-  }
+  },
 };

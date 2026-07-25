@@ -64,6 +64,9 @@ export const HistoryScreen = () => {
       const startParam = `${search}%`;
       const exactParam = search;
 
+      const user = useAppStore.getState().user;
+      const userClause = user?.id ? `AND (i.user_id = '${user.id}' OR i.user_id IS NULL OR i.user_id = '')` : `AND (i.user_id IS NULL OR i.user_id = '')`;
+
       let query = '';
       let params: any[] = [];
 
@@ -74,7 +77,8 @@ export const HistoryScreen = () => {
           FROM prendas p
           JOIN cajas c ON p.cajaId = c.id
           JOIN inventarios i ON c.inventarioId = i.id
-          WHERE p.alarmaFechaHora IS NOT NULL AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?)
+          WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL AND i.deleted_at IS NULL ${userClause}
+            AND p.alarmaFechaHora IS NOT NULL AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?)
           ORDER BY p.alarmaFechaHora ASC
         `;
         params = [searchParam, searchParam, searchParam];
@@ -86,7 +90,8 @@ export const HistoryScreen = () => {
           FROM prendas p
           JOIN cajas c ON p.cajaId = c.id
           JOIN inventarios i ON c.inventarioId = i.id
-          WHERE p.estado = ? AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?)
+          WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL AND i.deleted_at IS NULL ${userClause}
+            AND p.estado = ? AND (p.op LIKE ? OR p.estilo LIKE ? OR p.color LIKE ?)
           ORDER BY 
             (CASE 
               WHEN p.op = ? OR p.estilo = ? OR p.color = ? THEN 0
@@ -103,7 +108,6 @@ export const HistoryScreen = () => {
 
       const rows = await db.getAllAsync<HistoryItem>(query, params);
       setResults(rows);
-
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 400,

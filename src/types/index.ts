@@ -1,9 +1,15 @@
+export type SyncStatus = 'PENDING' | 'SYNCING' | 'SYNCED' | 'FAILED';
+
 export interface Inventario {
   id: string;
+  user_id?: string | null;
   nombre: string;
   descripcion: string;
   fechaCreacion: string;
   estado: 'Activo' | 'Inactivo';
+  updated_at?: string;
+  deleted_at?: string | null;
+  sync_status?: SyncStatus;
 }
 
 export interface InventarioStats extends Inventario {
@@ -17,6 +23,9 @@ export interface Caja {
   nombre: string;
   fechaCreacion: string;
   orden?: number;
+  updated_at?: string;
+  deleted_at?: string | null;
+  sync_status?: SyncStatus;
 }
 
 export interface CajaWithStats extends Caja {
@@ -35,6 +44,9 @@ export interface Prenda {
   fechaCreacion?: string;
   alarmaFechaHora?: string | null;
   alarmaNotificationId?: string | null;
+  updated_at?: string;
+  deleted_at?: string | null;
+  sync_status?: SyncStatus;
 }
 
 export interface HistoryItem extends Prenda {
@@ -45,7 +57,7 @@ export interface HistoryItem extends Prenda {
 export type RootStackParamList = {
   MainTabs: undefined;
   Cajas: { inventarioId: string; nombreInventario: string };
-  ExcelGrid: { cajaId: string; nombreCaja: string, targetPrendaId?: string };
+  ExcelGrid: { cajaId: string; nombreCaja: string; targetPrendaId?: string };
   Form: {
     mode: 'BASIC' | 'NAME_ONLY' | 'ADVANCED';
     entityType: 'inventario' | 'caja' | 'prenda';

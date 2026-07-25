@@ -1,13 +1,15 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
+  RefreshControl,
+  Alert,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useSQLiteContext } from 'expo-sqlite';
-import { RootStackParamList, InventarioStats } from '../types';
+import { RootStackParamList } from '../types';
 import { Navbar } from '../components/Navbar';
 import { FloatingButton } from '../components/FloatingButton';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +18,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import InventarioCard from '../components/InventarioCard';
+import { InventarioService } from '../services/InventarioService';
+import { SynchronizationEngine } from '../sync/SynchronizationEngine';
+import { AuthManager } from '../services/AuthManager';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -24,38 +29,53 @@ export const InventariosScreen = () => {
   const db = useSQLiteContext();
   const currentTheme = useAppStore(state => state.currentTheme);
   const setPrendas = useAppStore(state => state.setPrendas);
-  const themeMode = useAppStore(state => state.themeMode);;
-  const [inventarios, setInventarios] = useState<InventarioStats[]>([]);
-  const [loading, setLoading] = useState(true);
-  const lastNavTime = React.useRef(0);
+  const themeMode = useAppStore(state => state.themeMode);
+  const user = useAppStore(state => state.user);
 
-  const fetchInventarios = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
+  // Suscripción reactiva pura a Zustand
+  const inventarios = useAppStore(state => state.inventarios);
+
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const lastNavTime = useRef(0);
+
+  const loadAppState = useCallback(async (showSkeleton = false) => {
+    if (!db) return;
+    if (showSkeleton) setLoading(true);
     try {
-      const query = `
-        SELECT i.*, 
-               COUNT(p.id) as totalPrendas,
-               SUM(CASE WHEN p.estado = 1 THEN 1 ELSE 0 END) as prendasEscaneadas
-        FROM inventarios i 
-        LEFT JOIN cajas c ON c.inventarioId = i.id
-        LEFT JOIN prendas p ON p.cajaId = c.id
-        GROUP BY i.id
-        ORDER BY i.fechaCreacion DESC
-      `;
-      const result = await db.getAllAsync<InventarioStats>(query);
-      setInventarios(result);
-    } catch (error) {
-      console.error("Error fetching inventarios:", error);
+      await AuthManager.refreshAllAppState(db);
+    } catch (e) {
+      console.error('Error al cargar inventarios:', e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [db]);
 
+  useEffect(() => {
+    loadAppState(inventarios.length === 0);
+  }, [loadAppState]);
+
   useFocusEffect(
     useCallback(() => {
-      fetchInventarios(inventarios.length === 0);
-    }, [fetchInventarios, inventarios.length])
+      if (db) loadAppState(false);
+    }, [db, loadAppState])
   );
+
+  const handleRefreshOrSync = async () => {
+    if (!db) return;
+    setRefreshing(true);
+    try {
+      if (user?.id) {
+        await SynchronizationEngine.fullSync(db, user.id);
+      }
+      await AuthManager.refreshAllAppState(db);
+    } catch (e) {
+      console.error('Error en sincronización manual:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const navigateSafe = useCallback((routeName: keyof RootStackParamList, params?: any) => {
     const now = Date.now();
@@ -72,16 +92,21 @@ export const InventariosScreen = () => {
     setPrendas([]);
     navigation.navigate('Cajas', {
       inventarioId: id,
-      nombreInventario: nombre
+      nombreInventario: nombre,
     });
   };
 
   const deleteInventario = async (id: string) => {
     try {
-      await db.runAsync('DELETE FROM inventarios WHERE id = ?', [id]);
-      fetchInventarios(false);
+      const result = await InventarioService.hardDelete(db, id, user?.id);
+      if (!result.success) {
+        Alert.alert('Error al eliminar', result.error || 'No se pudo eliminar el lote.');
+        return;
+      }
+      await AuthManager.refreshAllAppState(db);
     } catch (error) {
-      console.error("Error deleting inventario:", error);
+      console.error('Error deleting inventario:', error);
+      Alert.alert('Error', 'Ocurrió un error al eliminar el lote.');
     }
   };
 
@@ -99,6 +124,14 @@ export const InventariosScreen = () => {
               extraData={themeMode}
               data={inventarios}
               itemLayoutAnimation={LinearTransition.springify()}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefreshOrSync}
+                  tintColor={currentTheme.primary}
+                  colors={[currentTheme.primary]}
+                />
+              }
               renderItem={({ item }) => (
                 <Reanimated.View exiting={FadeOut.duration(300)}>
                   <InventarioCard
@@ -112,10 +145,10 @@ export const InventariosScreen = () => {
               )}
               keyExtractor={item => item.id.toString()}
               contentContainerStyle={styles.listContent}
-            initialNumToRender={10}
-            maxToRenderPerBatch={10}
-            windowSize={5}
-            removeClippedSubviews={true}
+              initialNumToRender={10}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              removeClippedSubviews={true}
               ListEmptyComponent={
                 <Reanimated.View
                   style={styles.emptyContainer}
@@ -161,24 +194,16 @@ const styles = StyleSheet.create({
     borderRadius: 80,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 24,
-    fontWeight: '900',
-    marginBottom: 12,
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 8,
   },
   emptySubtitle: {
-    fontSize: 15,
+    fontSize: 14,
     textAlign: 'center',
-    lineHeight: 22,
-    opacity: 0.8,
+    lineHeight: 20,
   },
 });
-
-export default InventariosScreen;

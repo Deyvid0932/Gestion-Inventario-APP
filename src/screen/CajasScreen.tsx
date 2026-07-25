@@ -18,19 +18,20 @@ import { SkeletonLoader } from '../components/SkeletonLoader';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CajaService } from '../services/CajaService';
+import { AuthManager } from '../services/AuthManager';
 import CajaCard from '../components/CajaCard';
-
 
 type CajasRouteProp = RouteProp<RootStackParamList, 'Cajas'>;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
-const CajasScreen = () => {
+export const CajasScreen = () => {
   const route = useRoute<CajasRouteProp>();
   const navigation = useNavigation<NavigationProp>();
   const { inventarioId, nombreInventario } = route.params;
   const db = useSQLiteContext();
   const currentTheme = useAppStore(state => state.currentTheme);
-  const themeMode = useAppStore(state => state.themeMode);;
+  const themeMode = useAppStore(state => state.themeMode);
+  const user = useAppStore(state => state.user);
 
   const [cajas, setCajas] = useState<CajaWithStats[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,7 +113,7 @@ const CajasScreen = () => {
   const deleteCaja = useCallback(async (id: string, nombre: string) => {
     Alert.alert(
       "Eliminar Caja",
-      `¿Eliminar "${nombre}"? Esta acción borrará prendas.`,
+      `¿Eliminar "${nombre}"? Esta acción borrará todas las prendas dentro de ella.`,
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -120,16 +121,22 @@ const CajasScreen = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              await db.runAsync('DELETE FROM cajas WHERE id = ?', [id]);
+              const res = await CajaService.hardDelete(db, id, user?.id);
+              if (!res.success) {
+                Alert.alert('Error al eliminar', res.error || 'No se pudo eliminar la caja.');
+                return;
+              }
               fetchCajas(false);
+              AuthManager.refreshAllAppState(db);
             } catch (error) {
-              console.error(error);
+              console.error('Error al borrar caja:', error);
+              Alert.alert('Error', 'Ocurrió un error al eliminar la caja.');
             }
           }
         }
       ]
     );
-  }, [db, fetchCajas]);
+  }, [db, fetchCajas, user?.id]);
 
   const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<CajaWithStats>) => (
     <View>
@@ -149,79 +156,78 @@ const CajasScreen = () => {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: currentTheme.background }}>
-      <Navbar title={nombreInventario} showBackButton isLoading={isUpdatingOrder} />
+      <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
+        <Navbar title={nombreInventario} showBackButton isLoading={isUpdatingOrder} />
 
-      <View style={{ flex: 1 }}>
-        {showSkeleton ? (
-          <SkeletonLoader theme={currentTheme} />
-        ) : (
-          <DraggableFlatList
-            key={`cajas-${themeMode}`}
-            extraData={themeMode}
-            data={cajas}
-            renderItem={renderItem}
-            keyExtractor={item => item.id}
-            onDragEnd={handleDragEnd}
-            contentContainerStyle={styles.listContent}
-            activationDistance={10}
-            containerStyle={{ flex: 1 }}
-            initialNumToRender={10}
-            maxToRenderPerBatch={10}
-            windowSize={5}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={currentTheme.primary}
-                colors={[currentTheme.primary]}
-              />
-            }
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Ionicons name="cube-outline" size={100} color={currentTheme.border} />
-                <Text style={[styles.emptyTitle, { color: currentTheme.textSecondary }]}>No hay cajas</Text>
-                <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
-                  Toca el botón + para comenzar.
-                </Text>
-              </View>
-            }
-          />
-        )}
+        <View style={{ flex: 1 }}>
+          {showSkeleton ? (
+            <SkeletonLoader theme={currentTheme} />
+          ) : (
+            <DraggableFlatList
+              key={`cajas-${themeMode}`}
+              extraData={themeMode}
+              data={cajas}
+              renderItem={renderItem}
+              keyExtractor={item => item.id}
+              onDragEnd={handleDragEnd}
+              contentContainerStyle={[
+                styles.listContent,
+                cajas.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+              ]}
+              activationDistance={10}
+              containerStyle={{ flex: 1 }}
+              initialNumToRender={10}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={currentTheme.primary}
+                  colors={[currentTheme.primary]}
+                />
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="cube-outline" size={80} color={currentTheme.primary} />
+                  <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>No hay cajas</Text>
+                  <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
+                    Toca el botón + para agregar una caja a este lote.
+                  </Text>
+                </View>
+              }
+            />
+          )}
+        </View>
+
+        <FloatingButton
+          onPress={() => navigateSafe('Form', { mode: 'NAME_ONLY', entityType: 'caja', parentId: inventarioId })}
+        />
       </View>
-
-      <FloatingButton
-        onPress={() => navigateSafe('Form', { mode: 'NAME_ONLY', entityType: 'caja', parentId: inventarioId })}
-        style={styles.floatingButton}
-      />
-
     </GestureHandlerRootView>
   );
 };
 
 const styles = StyleSheet.create({
   listContent: {
-    padding: 18,
+    padding: 16,
     paddingBottom: 100,
-    flexGrow: 1,
-  },
-  floatingButton: {
-    bottom: 80,
   },
   emptyContainer: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 15,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 16,
   },
   emptySubtitle: {
     fontSize: 14,
+    marginTop: 8,
     textAlign: 'center',
-    marginTop: 5,
   },
 });
 

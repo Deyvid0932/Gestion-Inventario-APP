@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { SQLiteDatabase } from 'expo-sqlite';
 import { User, Session } from '@supabase/supabase-js';
 import { getTheme, ColorSchemeType, theme } from '../style/theme';
-import { Prenda } from '../types';
+import { Prenda, InventarioStats } from '../types';
 import { SettingsService } from '../services/SettingsService';
 
 interface AppState {
@@ -17,22 +17,29 @@ interface AppState {
   user: User | null;
   session: Session | null;
   isAuthLoading: boolean;
+  isSyncing: boolean;
+  syncMessage: string;
   lastSyncTime: string | null;
   setUser: (user: User | null) => void;
   setSession: (session: Session | null) => void;
   setIsAuthLoading: (loading: boolean) => void;
+  setSyncing: (isSyncing: boolean, message?: string) => void;
   setLastSyncTime: (time: string | null) => void;
   logout: () => void;
 
+  // Estado Reactivo de Datos
+  inventarios: InventarioStats[];
   prendas: Prenda[];
   selectedPrendas: Record<string, boolean>;
   
+  setInventarios: (inventarios: InventarioStats[]) => void;
   setPrendas: (prendas: Prenda[]) => void;
   addPrendaToState: (prenda: Prenda) => void;
   updatePrendaInState: (id: string, updates: Partial<Prenda>) => void;
   toggleSelectPrenda: (id: string) => void;
   clearSelectedPrendas: () => void;
   selectAllPrendas: (ids: string[]) => void;
+  clearAllState: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -78,15 +85,21 @@ export const useAppStore = create<AppState>((set) => ({
   user: null,
   session: null,
   isAuthLoading: false,
+  isSyncing: false,
+  syncMessage: '',
   lastSyncTime: null,
   setUser: (user) => set({ user }),
   setSession: (session) => set({ session, user: session?.user ?? null }),
   setIsAuthLoading: (isAuthLoading) => set({ isAuthLoading }),
+  setSyncing: (isSyncing, message) => set({ isSyncing, syncMessage: message || '' }),
   setLastSyncTime: (lastSyncTime) => set({ lastSyncTime }),
-  logout: () => set({ user: null, session: null }),
+  logout: () => set({ user: null, session: null, isSyncing: false }),
 
+  // Reactivity State
+  inventarios: [],
   prendas: [],
   selectedPrendas: {},
+  setInventarios: (inventarios) => set({ inventarios }),
   setPrendas: (prendas) => set({ prendas }),
   addPrendaToState: (prenda) => set((state) => ({ 
     prendas: [prenda, ...state.prendas] 
@@ -116,4 +129,16 @@ export const useAppStore = create<AppState>((set) => ({
     ids.forEach(id => record[id] = true);
     set({ selectedPrendas: record });
   },
+
+  // Reset instantáneo de UI al cerrar sesión
+  clearAllState: () => set({
+    user: null,
+    session: null,
+    lastSyncTime: null,
+    isSyncing: false,
+    syncMessage: '',
+    inventarios: [],
+    prendas: [],
+    selectedPrendas: {}
+  })
 }));

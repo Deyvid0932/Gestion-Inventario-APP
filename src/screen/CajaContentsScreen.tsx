@@ -30,6 +30,8 @@ import { SkeletonLoader } from '../components/SkeletonLoader';
 import { MovePrendaModal } from '../components/MovePrendaModal';
 import { SuccessModal } from '../components/SuccessModal';
 
+import { AuthManager } from '../services/AuthManager';
+
 type ExcelGridRouteProp = RouteProp<RootStackParamList, 'ExcelGrid'>;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -38,6 +40,7 @@ const CajaContentsScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const { cajaId, nombreCaja } = route.params;
   const db = useSQLiteContext();
+  const user = useAppStore(state => state.user);
   const { processImage, loading: ocrLoading } = useOCRManager();
 
   const [search, setSearch] = useState('');
@@ -239,18 +242,26 @@ const CajaContentsScreen = () => {
   };
 
   const deletePrenda = useCallback(async (id: string) => {
-    Alert.alert("Eliminar", "¿Eliminar registro?", [
+    Alert.alert("Eliminar", "¿Eliminar registro de prenda?", [
       { text: "Cancelar" },
       {
         text: "Eliminar", style: "destructive", onPress: async () => {
           try {
-            await db.runAsync('DELETE FROM prendas WHERE id = ?', [id]);
+            const res = await PrendaService.hardDelete(db, id, user?.id);
+            if (!res.success) {
+              Alert.alert('Error al eliminar', res.error || 'No se pudo eliminar la prenda.');
+              return;
+            }
             fetchPrendas(false);
-          } catch (e) { console.error(e); }
+            AuthManager.refreshAllAppState(db);
+          } catch (e) {
+            console.error('Error al eliminar prenda:', e);
+            Alert.alert('Error', 'Ocurrió un error al eliminar la prenda.');
+          }
         }
       }
     ]);
-  }, [db, fetchPrendas]);
+  }, [db, fetchPrendas, user?.id]);
 
 
   const renderItem = useCallback(({ item }: { item: Prenda }) => (

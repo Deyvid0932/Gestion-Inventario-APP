@@ -1,14 +1,18 @@
 import React, { useEffect } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { SQLiteProvider } from 'expo-sqlite';
+import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 import * as Notifications from 'expo-notifications';
+import { Text, TextInput } from 'react-native';
+
 import { AppNavigation } from './src/navigation/AppNavigation';
 import { migrateDbIfNeeded } from './src/database/database';
 import { useAppStore } from './src/store/useAppStore';
 import { RootStackParamList } from './src/types';
-
-import { Text, TextInput } from 'react-native';
+import { supabase } from './src/database/supabase';
+import { AuthManager } from './src/services/AuthManager';
+import { SynchronizationEngine } from './src/sync/SynchronizationEngine';
+import { LoadingModal } from './src/components/LoadingModal';
 
 // Garantizar accesibilidad de fuente grande sin romper el diseño en pantallas pequeñas
 if ((Text as any).defaultProps == null) (Text as any).defaultProps = {};
@@ -18,10 +22,6 @@ if ((TextInput as any).defaultProps == null) (TextInput as any).defaultProps = {
 (TextInput as any).defaultProps.maxFontSizeMultiplier = 1.35;
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
-
-import { useSQLiteContext } from 'expo-sqlite';
-import { supabase } from './src/database/supabase';
-import { SyncService } from './src/services/SyncService';
 
 const ThemeInitializer = () => {
   const db = useSQLiteContext();
@@ -37,24 +37,31 @@ const ThemeInitializer = () => {
 };
 
 const AuthInitializer = () => {
+  const db = useSQLiteContext();
   const setSession = useAppStore(state => state.setSession);
   const setLastSyncTime = useAppStore(state => state.setLastSyncTime);
 
   useEffect(() => {
-    SyncService.getLastSyncTime().then(time => {
+    SynchronizationEngine.getLastSyncTime().then(time => {
       if (time) setLastSyncTime(time);
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      if (db) {
+        AuthManager.handleAuthChange(db, session?.user ?? null);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (db) {
+        AuthManager.handleAuthChange(db, session?.user ?? null);
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, [setSession, setLastSyncTime]);
+  }, [db, setSession, setLastSyncTime]);
 
   return null;
 };
@@ -62,6 +69,8 @@ const AuthInitializer = () => {
 export default function App() {
   const themeMode = useAppStore(state => state.themeMode);
   const currentTheme = useAppStore(state => state.currentTheme);
+  const isSyncing = useAppStore(state => state.isSyncing);
+  const syncMessage = useAppStore(state => state.syncMessage);
 
   useEffect(() => {
     // Listener para cuando el usuario toca una notificación (abierta, en segundo plano o cerrada)
@@ -96,6 +105,7 @@ export default function App() {
         <NavigationContainer ref={navigationRef} theme={navigationTheme}>
           <AppNavigation />
         </NavigationContainer>
+        <LoadingModal visible={isSyncing} message={syncMessage} />
       </SQLiteProvider>
     </SafeAreaProvider>
   );

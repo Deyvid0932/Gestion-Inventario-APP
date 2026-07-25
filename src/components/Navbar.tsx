@@ -48,7 +48,7 @@ export const Navbar = ({ title, showBackButton, isLoading }: NavbarProps) => {
             {title}
           </Text>
           {isLoading && (
-            <ActivityIndicator size="small" color={currentTheme.text} style={{ marginLeft: 10 }} />
+            <ActivityIndicator size="small" color={currentTheme.primary} style={{ marginLeft: 10 }} />
           )}
         </View>
 

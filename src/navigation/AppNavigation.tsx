@@ -9,7 +9,7 @@ import { StatsScreen } from '../screen/StatsScreen';
 import { ChatbotScreen } from '../screen/ChatbotScreen';
 import { RootStackParamList, BottomTabParamList } from '../types';
 import { useAppStore } from '../store/useAppStore';
-import CajasScreen from '../screen/CajasScreen';
+import { CajasScreen } from '../screen/CajasScreen';
 import { FormScreen } from '../screen/FormScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();

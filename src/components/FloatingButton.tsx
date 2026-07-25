@@ -35,7 +35,7 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
       onPressIn={onPressIn}
       onPressOut={onPressOut}
       onPress={onPress}
-      style={[{ position: 'absolute', bottom: 30, right: 30, zIndex: 999 }, style]}
+      style={[{ position: 'absolute', bottom: 90, right: 24, zIndex: 999 }, style]}
     >
       <Animated.View
         style={[

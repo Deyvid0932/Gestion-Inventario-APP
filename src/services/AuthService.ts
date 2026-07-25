@@ -24,6 +24,7 @@ export const AuthService = {
         },
       });
 
+
       if (error) throw error;
       if (!data?.url) throw new Error('No se pudo generar la URL de autenticación');
 
@@ -32,7 +33,7 @@ export const AuthService = {
       if (res.type === 'success' && res.url) {
         // Extraer token o código desde la URL de retorno
         const urlStr = res.url;
-        
+
         let code: string | null = null;
         let accessToken: string | null = null;
         let refreshToken: string | null = null;
@@ -68,6 +69,41 @@ export const AuthService = {
     } catch (err) {
       console.error('Error durante la autenticación con Google:', err);
       throw err;
+    }
+  },
+
+  // Crear el perfil si aún no existe
+  createProfileIfNeeded: async (user: User) => {
+    try {
+      const { data: existingProfile, error: selectError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (selectError) throw selectError;
+
+      if (!existingProfile) {
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            name:
+              user.user_metadata?.full_name ||
+              user.user_metadata?.name ||
+              '',
+            email: user.email,
+            avatar_url:
+              user.user_metadata?.avatar_url ||
+              user.user_metadata?.picture ||
+              '',
+          });
+
+        if (insertError) throw insertError;
+      }
+    } catch (error) {
+      console.error('Error creando perfil:', error);
+      throw error;
     }
   },
 

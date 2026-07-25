@@ -76,11 +76,11 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
   // Cargar estadísticas cuando el modal abre
   useEffect(() => {
     if (visible && db) {
-      StatsService.getStats(db).then(data => {
+      StatsService.getStats(db, user?.id).then(data => {
         setStats(data);
       }).catch(e => console.error(e));
     }
-  }, [visible, db]);
+  }, [visible, db, user?.id]);
 
   // Extraer datos del usuario de Google
   const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
@@ -217,42 +217,50 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
   return (
     <>
       <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-        <TouchableWithoutFeedback onPress={onClose}>
-          <View style={styles.overlay}>
-            <TouchableWithoutFeedback>
-              <View
-                style={[
-                  styles.sheetContainer,
-                  clayStyles,
-                  {
-                    backgroundColor: currentTheme.card,
-                    borderColor: currentTheme.border,
-                    shadowColor: currentTheme.borderShadow || '#000',
-                    maxHeight: '90%',
-                    paddingBottom: Math.max(insets.bottom + 20, 28),
-                  },
-                ]}
+        <View style={styles.overlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={onClose}
+          />
+          <View
+            style={[
+              styles.sheetContainer,
+              clayStyles,
+              {
+                backgroundColor: currentTheme.card,
+                borderColor: currentTheme.border,
+                shadowColor: currentTheme.borderShadow || '#000',
+                maxHeight: '88%',
+                paddingBottom: Math.max(insets.bottom + 20, 28),
+              },
+            ]}
+          >
+            <View style={styles.dragIndicator} />
+
+            {/* Header */}
+            <View style={styles.headerRow}>
+              <View style={styles.titleContainer}>
+                <Ionicons name="person-circle-outline" size={24} color={currentTheme.primary} style={{ marginRight: 8 }} />
+                <Text style={[styles.modalTitle, { color: currentTheme.text }]} allowFontScaling={true}>
+                  Cuenta y Ajustes
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={onClose}
+                style={[styles.closeBtn, { backgroundColor: currentTheme.border + '30' }]}
+                accessibilityLabel="Cerrar menú de cuenta"
               >
-                <View style={styles.dragIndicator} />
+                <Ionicons name="close" size={20} color={currentTheme.text} />
+              </TouchableOpacity>
+            </View>
 
-                {/* Header */}
-                <View style={styles.headerRow}>
-                  <View style={styles.titleContainer}>
-                    <Ionicons name="person-circle-outline" size={24} color={currentTheme.primary} style={{ marginRight: 8 }} />
-                    <Text style={[styles.modalTitle, { color: currentTheme.text }]} allowFontScaling={true}>
-                      Cuenta y Ajustes
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={onClose}
-                    style={[styles.closeBtn, { backgroundColor: currentTheme.border + '30' }]}
-                    accessibilityLabel="Cerrar menú de cuenta"
-                  >
-                    <Ionicons name="close" size={20} color={currentTheme.text} />
-                  </TouchableOpacity>
-                </View>
-
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.scrollContent}
+            >
                   {/* Tarjeta de Perfil Hero */}
                   {!user ? (
                     <View style={[styles.profileCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
@@ -430,7 +438,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
                   {/* Sección: Contacto */}
                   <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>CONTACTO</Text>
                   <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                    <TouchableOpacity style={styles.menuRow} onPress={() => openLink('https://linkedin.com')}>
+                    <TouchableOpacity style={styles.menuRow} onPress={() => openLink('https://www.linkedin.com/in/deyvid-jair-chupillon-silva')}>
                       <Ionicons name="logo-linkedin" size={20} color="#0A66C2" style={styles.menuIcon} />
                       <Text style={[styles.menuLabel, { color: currentTheme.text }]}>LinkedIn</Text>
                       <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
@@ -446,7 +454,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
 
                     <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
 
-                    <TouchableOpacity style={styles.menuRow} onPress={() => openLink('https://wa.me/')}>
+                    <TouchableOpacity style={styles.menuRow} onPress={() => openLink('https://wa.me/51980709494')}>
                       <Ionicons name="logo-whatsapp" size={20} color="#25D366" style={styles.menuIcon} />
                       <Text style={[styles.menuLabel, { color: currentTheme.text }]}>WhatsApp</Text>
                       <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
@@ -485,10 +493,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
                   )}
                 </ScrollView>
               </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+            </View>
+          </Modal>
 
       {/* Modales Especializados */}
       <ProfileModal visible={profileModalVisible} onClose={() => setProfileModalVisible(false)} />

@@ -18,7 +18,7 @@ export interface DashboardStats {
 }
 
 export const StatsService = {
-  getStats: async (db: SQLiteDatabase): Promise<DashboardStats> => {
+  getStats: async (db: SQLiteDatabase, userId?: string | null): Promise<DashboardStats> => {
     try {
       const stats: DashboardStats = {
         totalInventarios: 0,
@@ -32,14 +32,18 @@ export const StatsService = {
         top5Cajas: [],
       };
 
+      const userFilter = userId
+        ? `(i.user_id = '${userId}' OR i.user_id IS NULL OR i.user_id = '')`
+        : `(i.user_id IS NULL OR i.user_id = '')`;
+
       const combinedQuery = `
         SELECT 
-          (SELECT COUNT(*) FROM inventarios) as totalInventarios,
-          (SELECT COUNT(*) FROM cajas) as totalCajas,
-          (SELECT COUNT(*) FROM prendas) as totalPrendas,
-          (SELECT COUNT(*) FROM prendas WHERE estado = 1) as prendasActivas,
-          (SELECT COUNT(*) FROM prendas WHERE estado = 0) as prendasInactivas,
-          (SELECT COUNT(*) FROM prendas WHERE (fotoUri IS NOT NULL AND fotoUri != '') OR (fotoUri2 IS NOT NULL AND fotoUri2 != '')) as prendasConFoto
+          (SELECT COUNT(*) FROM inventarios i WHERE i.deleted_at IS NULL AND ${userFilter}) as totalInventarios,
+          (SELECT COUNT(*) FROM cajas c JOIN inventarios i ON c.inventarioId = i.id WHERE c.deleted_at IS NULL AND i.deleted_at IS NULL AND ${userFilter}) as totalCajas,
+          (SELECT COUNT(*) FROM prendas p JOIN cajas c ON p.cajaId = c.id JOIN inventarios i ON c.inventarioId = i.id WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL AND i.deleted_at IS NULL AND ${userFilter}) as totalPrendas,
+          (SELECT COUNT(*) FROM prendas p JOIN cajas c ON p.cajaId = c.id JOIN inventarios i ON c.inventarioId = i.id WHERE p.estado = 1 AND p.deleted_at IS NULL AND c.deleted_at IS NULL AND i.deleted_at IS NULL AND ${userFilter}) as prendasActivas,
+          (SELECT COUNT(*) FROM prendas p JOIN cajas c ON p.cajaId = c.id JOIN inventarios i ON c.inventarioId = i.id WHERE p.estado = 0 AND p.deleted_at IS NULL AND c.deleted_at IS NULL AND i.deleted_at IS NULL AND ${userFilter}) as prendasInactivas,
+          (SELECT COUNT(*) FROM prendas p JOIN cajas c ON p.cajaId = c.id JOIN inventarios i ON c.inventarioId = i.id WHERE ((p.fotoUri IS NOT NULL AND p.fotoUri != '') OR (p.fotoUri2 IS NOT NULL AND p.fotoUri2 != '')) AND p.deleted_at IS NULL AND c.deleted_at IS NULL AND i.deleted_at IS NULL AND ${userFilter}) as prendasConFoto
       `;
 
       const counts = await db.getFirstAsync<{
@@ -64,18 +68,20 @@ export const StatsService = {
         SELECT c.nombre, COUNT(*) as total 
         FROM prendas p 
         JOIN cajas c ON p.cajaId = c.id 
+        JOIN inventarios i ON c.inventarioId = i.id
+        WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL AND i.deleted_at IS NULL AND ${userFilter}
         GROUP BY p.cajaId 
         ORDER BY total DESC 
         LIMIT 5
-        `);
+      `);
 
-        if (topResult && topResult.length > 0) {
-          stats.cajaTopNombre = topResult[0].nombre;
-          stats.cajaTopCantidad = topResult[0].total;
-          stats.top5Cajas = topResult;
-        }
+      if (topResult && topResult.length > 0) {
+        stats.cajaTopNombre = topResult[0].nombre;
+        stats.cajaTopCantidad = topResult[0].total;
+        stats.top5Cajas = topResult;
+      }
 
-        return stats;
+      return stats;
     } catch (e) {
       console.error('Error fetching stats:', e);
       return {

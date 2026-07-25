@@ -32,7 +32,7 @@ const PRIVACY_SECTIONS = [
   },
   {
     title: '🚫 Lo que NUNCA compartimos',
-    icon: 'shield-ban-outline',
+    icon: 'shield-checkmark-outline',
     desc: 'Tu información personal, inventarios, imágenes o datos de cuenta NUNCA se venden, alquilan ni comparten con terceros ni empresas anunciantes.',
   },
   {

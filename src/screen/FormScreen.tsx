@@ -27,6 +27,9 @@ import { useAppStore } from '../store/useAppStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrendaService } from '../services/PrendaService';
+import { InventarioService } from '../services/InventarioService';
+import { CajaService } from '../services/CajaService';
+import { SynchronizationEngine } from '../sync/SynchronizationEngine';
 import { AlarmService } from '../services/AlarmService';
 import { usePrenda } from '../hooks/usePrenda';
 import { Ionicons } from '@expo/vector-icons';
@@ -171,16 +174,16 @@ export const FormScreen = () => {
     try {
       if (entityType === 'inventario') {
         if (isUpdate) {
-          await db.runAsync('UPDATE inventarios SET nombre = ?, descripcion = ? WHERE id = ?', [formData.nombre, formData.descripcion || '', id]);
+          await InventarioService.update(db, id, formData.nombre, formData.descripcion || '');
         } else {
-          await db.runAsync('INSERT INTO inventarios (id, nombre, descripcion, fechaCreacion, estado) VALUES (?, ?, ?, ?, ?)', [id, formData.nombre, formData.descripcion || '', fecha, 'Activo']);
+          await InventarioService.create(db, { id, nombre: formData.nombre, descripcion: formData.descripcion || '', fechaCreacion: fecha, estado: 'Activo' });
         }
       }
       else if (entityType === 'caja') {
         if (isUpdate) {
-          await db.runAsync('UPDATE cajas SET nombre = ? WHERE id = ?', [formData.nombre, id]);
+          await CajaService.update(db, id, formData.nombre);
         } else {
-          await db.runAsync('INSERT INTO cajas (id, inventarioId, nombre, fechaCreacion) VALUES (?, ?, ?, ?)', [id, parentId!, formData.nombre, fecha]);
+          await CajaService.create(db, { id, inventarioId: parentId!, nombre: formData.nombre, fechaCreacion: fecha });
         }
       }
       else if (entityType === 'prenda') {
@@ -251,6 +254,12 @@ export const FormScreen = () => {
           }
         }
       }
+
+      const currentUser = useAppStore.getState().user;
+      if (currentUser?.id) {
+        SynchronizationEngine.pushAllPending(db, currentUser.id).catch(() => {});
+      }
+
       navigation.goBack();
     } catch (error) {
       console.error(error);
