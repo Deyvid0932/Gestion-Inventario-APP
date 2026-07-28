@@ -9,6 +9,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { clayStyles } from '../style/theme';
@@ -67,10 +68,7 @@ export const ChatbotScreen = () => {
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      const syncAndLoadSessions = async () => {
-        if (user?.id) {
-          await SynchronizationEngine.fullSync(db, user.id).catch(() => {});
-        }
+      const loadSessions = async () => {
         const allSessions = await ChatbotService.getSessions(db, user?.id);
         if (!isMounted) return;
         setSessions(allSessions);
@@ -88,7 +86,7 @@ export const ChatbotScreen = () => {
         }
       };
 
-      syncAndLoadSessions();
+      loadSessions();
       return () => {
         isMounted = false;
       };
@@ -206,23 +204,33 @@ export const ChatbotScreen = () => {
     }
   };
 
-  const handleDeleteSession = async (sessionId: string) => {
-    await ChatbotService.deleteSession(db, sessionId, user?.id);
-    const updatedSessions = await ChatbotService.getSessions(db, user?.id);
-    setSessions(updatedSessions);
+  const handleDeleteSession = (sessionId: string) => {
+    Alert.alert(
+      '¿Eliminar conversación?',
+      'Se borrará el historial de este chat.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            await ChatbotService.deleteSession(db, sessionId, user?.id);
+            const updatedSessions = await ChatbotService.getSessions(db, user?.id);
+            setSessions(updatedSessions);
 
-    if (currentSessionId === sessionId) {
-      if (updatedSessions.length > 0) {
-        setCurrentSessionId(updatedSessions[0].id);
-      } else {
-        const newId = await ChatbotService.createSession(db, 'Nueva conversación', user?.id);
-        setCurrentSessionId(newId);
-        setSessions(await ChatbotService.getSessions(db, user?.id));
-      }
-    }
-    if (user?.id) {
-      SynchronizationEngine.pushAllPending(db, user.id).catch((e) => console.error('🔴 SYNC PUSH ERROR:', e));
-    }
+            if (currentSessionId === sessionId) {
+              if (updatedSessions.length > 0) {
+                setCurrentSessionId(updatedSessions[0].id);
+              } else {
+                const newId = await ChatbotService.createSession(db, 'Nueva conversación', user?.id);
+                setCurrentSessionId(newId);
+                setSessions(await ChatbotService.getSessions(db, user?.id));
+              }
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderResultCard = (match: SearchResult) => (
@@ -261,7 +269,30 @@ export const ChatbotScreen = () => {
 
       <TouchableOpacity
         style={[styles.redirectBtn, { backgroundColor: currentTheme.primary + '20' }]}
-        onPress={() => navigateSafe('ExcelGrid', { cajaId: match.cajaId, nombreCaja: match.cajaNombre, targetPrendaId: match.id })}
+        onPress={async () => {
+          let targetCajaId = match.cajaId;
+          let targetCajaNombre = match.cajaNombre;
+          if ((!targetCajaId || targetCajaId === '') && match.id && db) {
+            try {
+              const prenda = await db.getFirstAsync<{ cajaId: string; cajaNombre: string }>(
+                'SELECT p.cajaId, c.nombre as cajaNombre FROM prendas p JOIN cajas c ON p.cajaId = c.id WHERE p.id = ?',
+                [match.id]
+              );
+              if (prenda) {
+                targetCajaId = prenda.cajaId;
+                targetCajaNombre = prenda.cajaNombre;
+              }
+            } catch (e) {
+              console.error('Error fetching cajaId for match:', e);
+            }
+          }
+          if (!targetCajaId) {
+            Alert.alert('Aviso', 'No se encontró la caja asociada a esta prenda.');
+            return;
+          }
+          const rootNav = (navigation.getParent() as any) || navigation;
+          rootNav.navigate('ExcelGrid', { cajaId: targetCajaId, nombreCaja: targetCajaNombre || 'Caja', targetPrendaId: match.id });
+        }}
       >
         <Ionicons name="link" size={14} color={currentTheme.primary} />
         <Text style={[styles.redirectBtnText, { color: currentTheme.primary }]}>Ir a la prenda</Text>
@@ -459,7 +490,7 @@ export const ChatbotScreen = () => {
               color: currentTheme.text,
             },
           ]}
-          placeholder={isRecording ? "Grabando..." : "Escribe o usa voz (ej: KHM 030)..."}
+          placeholder={isRecording ? "Grabando..." : "Preguntale a Llama 3.3"}
           placeholderTextColor={currentTheme.textSecondary}
           value={input}
           onChangeText={setInput}
@@ -492,9 +523,7 @@ export const ChatbotScreen = () => {
         <Text style={[styles.disclaimerText, { color: currentTheme.textSecondary }]} allowFontScaling={true}>
           ⚠️ Esta IA puede cometer errores
         </Text>
-        <Text style={[styles.disclaimerText, { color: currentTheme.textSecondary, opacity: 0.6 }]} allowFontScaling={true}>
-          Creador: Deyvid Jair Chupillon Silva
-        </Text>
+
       </View>
 
       {/* MODAL DE CUENTA Y AJUSTES */}
@@ -806,7 +835,7 @@ const styles = StyleSheet.create({
   },
   disclaimerBar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 5,
@@ -814,8 +843,9 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(150,150,150,0.15)',
   },
   disclaimerText: {
-    fontSize: 9,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   sendBtn: {
     width: 44,

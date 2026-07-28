@@ -33,9 +33,13 @@ export const InventarioService = {
       let remoteDeleted = false;
 
       if (userId) {
-        const { error } = await supabase.from('inventarios').delete().eq('id', id);
-        if (!error) {
-          remoteDeleted = true;
+        try {
+          const { error } = await supabase.from('inventarios').delete().eq('id', id);
+          if (!error) {
+            remoteDeleted = true;
+          }
+        } catch (netErr) {
+          console.warn('Fallo eliminación remota de inventario:', netErr);
         }
       }
 

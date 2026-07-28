@@ -38,6 +38,7 @@ export const AuthManager = {
       if (user?.id) {
         freshInventarios = await db.getAllAsync<any>(
           `SELECT i.*, 
+                  (SELECT COUNT(*) FROM cajas WHERE inventarioId = i.id) as totalCajas,
                   COUNT(p.id) as totalPrendas,
                   SUM(CASE WHEN p.estado = 1 THEN 1 ELSE 0 END) as prendasEscaneadas
            FROM inventarios i 
@@ -51,6 +52,7 @@ export const AuthManager = {
       } else {
         freshInventarios = await db.getAllAsync<any>(
           `SELECT i.*, 
+                  (SELECT COUNT(*) FROM cajas WHERE inventarioId = i.id) as totalCajas,
                   COUNT(p.id) as totalPrendas,
                   SUM(CASE WHEN p.estado = 1 THEN 1 ELSE 0 END) as prendasEscaneadas
            FROM inventarios i 

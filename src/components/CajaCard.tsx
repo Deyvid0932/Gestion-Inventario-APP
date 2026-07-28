@@ -11,7 +11,6 @@ import { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import { CajaWithStats } from '../types';
 import { clayStyles } from '../style/theme';
-import { AppCard } from '../design-system/components/AppCard';
 
 interface CajaCardProps {
   item: CajaWithStats;
@@ -85,17 +84,17 @@ const CajaCard = memo(({
           disabled={isActive}
           onPress={() => onPress(item.id, item.nombre)}
           activeOpacity={0.9}
-          style={{ marginBottom: 16 }}
+          style={[
+            styles.card,
+            clayStyles,
+            {
+              backgroundColor: isActive ? theme.card + '90' : theme.card,
+              borderColor: isActive ? theme.text : theme.border,
+              shadowColor: theme.borderShadow || '#000',
+            }
+          ]}
         >
-          <AppCard 
-            variant={isActive ? 'elevated' : 'default'}
-            style={[
-              styles.card,
-              clayStyles,
-              isActive ? { backgroundColor: theme.card + '90', borderColor: theme.text } : {}
-            ]}
-          >
-            <View style={styles.cardMain}>
+          <View style={styles.cardMain}>
             <View style={[styles.iconContainer, { backgroundColor: theme.background === '#000000' ? '#27272A' : '#F4F4F5', borderColor: theme.border }]}>
               <Ionicons name="archive" size={24} color={theme.primary} />
             </View>
@@ -115,16 +114,15 @@ const CajaCard = memo(({
                 </Text>
               </View>
             </View>
-            </View>
-          </AppCard>
+          </View>
         </TouchableOpacity>
       </Swipeable>
     </ScaleDecorator>
   );
 }, (prev, next) => {
   return prev.item.id === next.item.id &&
-    (prev.item as any).estado === (next.item as any).estado &&
-    (prev.item as any).updated_at === (next.item as any).updated_at &&
+    prev.item.nombre === next.item.nombre &&
+    prev.item.itemCount === next.item.itemCount &&
     prev.isActive === next.isActive &&
     prev.theme === next.theme;
 });
@@ -135,7 +133,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 0,
+    padding: 20,
+    marginBottom: 16,
   },
   cardMain: {
     flexDirection: 'row',

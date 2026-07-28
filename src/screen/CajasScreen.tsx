@@ -20,7 +20,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CajaService } from '../services/CajaService';
 import { AuthManager } from '../services/AuthManager';
 import CajaCard from '../components/CajaCard';
-import { EmptyState } from '../design-system/components/EmptyState';
 
 type CajasRouteProp = RouteProp<RootStackParamList, 'Cajas'>;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -69,9 +68,10 @@ export const CajasScreen = () => {
   useFocusEffect(
     useCallback(() => {
       if (db) {
-        fetchCajas(true);
+        fetchCajas(cajas.length === 0);
+        AuthManager.refreshAllAppState(db);
       }
-    }, [fetchCajas])
+    }, [db, fetchCajas, cajas.length])
   );
 
   const navigateSafe = useCallback((routeName: keyof RootStackParamList, params?: any) => {
@@ -84,9 +84,6 @@ export const CajasScreen = () => {
   const handleNavigateToPrendas = useCallback((cajaId: string, nombreCaja: string) => {
     const now = Date.now();
     if (now - lastNavTime.current < 300) return;
-    lastNavTime.current = now;
-
-    useAppStore.getState().setPrendas([]);
     navigation.navigate('ExcelGrid', {
       cajaId,
       nombreCaja
@@ -178,7 +175,7 @@ export const CajasScreen = () => {
               activationDistance={10}
               containerStyle={{ flex: 1 }}
               initialNumToRender={10}
-              maxToRenderPerBatch={8}
+              maxToRenderPerBatch={10}
               windowSize={5}
               refreshControl={
                 <RefreshControl
@@ -189,11 +186,13 @@ export const CajasScreen = () => {
                 />
               }
               ListEmptyComponent={
-                <EmptyState 
-                  icon="cube-outline"
-                  title="No hay cajas"
-                  subtitle="Toca el botón + para agregar una caja a este lote."
-                />
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="cube-outline" size={80} color={currentTheme.primary} />
+                  <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>No hay cajas</Text>
+                  <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
+                    Toca el botón + para agregar una caja a este lote.
+                  </Text>
+                </View>
               }
             />
           )}

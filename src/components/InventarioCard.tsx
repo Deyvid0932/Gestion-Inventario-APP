@@ -11,8 +11,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import { InventarioStats } from '../types';
 import { clayStyles } from '../style/theme';
-import { AppCard } from '../design-system/components/AppCard';
-import { StatusBadge } from '../design-system/components/StatusBadge';
 
 interface InventarioCardProps {
   item: InventarioStats;
@@ -110,11 +108,18 @@ const InventarioCard = memo(({
         activeOpacity={0.8}
         delayPressIn={0}
         pressRetentionOffset={{ top: 20, left: 20, right: 20, bottom: 20 }}
-        style={{ marginBottom: 20 }}
+        style={[
+          styles.card,
+          clayStyles,
+          {
+            backgroundColor: theme.card,
+            borderColor: theme.border,
+            shadowColor: theme.borderShadow || '#000'
+          }
+        ]}
         onPress={onPress}
       >
-        <AppCard style={[styles.card, clayStyles]}>
-          <View style={styles.cardMain}>
+        <View style={styles.cardMain}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.cardTitle, { color: theme.text }]}>{item.nombre}</Text>
             <View style={styles.dateContainer}>
@@ -124,7 +129,11 @@ const InventarioCard = memo(({
               </Text>
             </View>
           </View>
-          <StatusBadge active={item.estado === 'Activo'} activeText="Activo" inactiveText={item.estado} />
+          <View style={[styles.statusBadge, { backgroundColor: item.estado === 'Activo' ? '#2ecc7120' : theme.border }]}>
+            <Text style={[styles.statusText, { color: item.estado === 'Activo' ? '#2ecc71' : theme.textSecondary }]}>
+              {item.estado}
+            </Text>
+          </View>
         </View>
 
         <Text style={[styles.cardDesc, { color: theme.textSecondary }]} numberOfLines={1}>
@@ -150,20 +159,23 @@ const InventarioCard = memo(({
             />
           </View>
         </View>
-        </AppCard>
       </TouchableOpacity>
     </Swipeable>
   );
 }, (prev, next) => {
   return prev.item.id === next.item.id &&
+    prev.item.nombre === next.item.nombre &&
+    prev.item.descripcion === next.item.descripcion &&
     prev.item.estado === next.item.estado &&
-    (prev.item as any).updated_at === (next.item as any).updated_at &&
+    prev.item.totalPrendas === next.item.totalPrendas &&
+    prev.item.prendasEscaneadas === next.item.prendasEscaneadas &&
     prev.theme === next.theme;
 });
 
 const styles = StyleSheet.create({
   card: {
-    padding: 0,
+    padding: 24,
+    marginBottom: 20,
     // Claymorphism properties applied via spread from clayStyles
   },
   cardMain: {

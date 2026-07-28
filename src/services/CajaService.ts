@@ -25,9 +25,13 @@ export const CajaService = {
       let remoteDeleted = false;
 
       if (userId) {
-        const { error } = await supabase.from('cajas').delete().eq('id', id);
-        if (!error) {
-          remoteDeleted = true;
+        try {
+          const { error } = await supabase.from('cajas').delete().eq('id', id);
+          if (!error) {
+            remoteDeleted = true;
+          }
+        } catch (netErr) {
+          console.warn('Fallo eliminación remota de caja:', netErr);
         }
       }
 

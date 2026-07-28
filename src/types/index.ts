@@ -13,6 +13,7 @@ export interface Inventario {
 }
 
 export interface InventarioStats extends Inventario {
+  totalCajas?: number;
   totalPrendas: number;
   prendasEscaneadas: number;
 }
@@ -42,6 +43,8 @@ export interface Prenda {
   estado: 1 | 0;
   fotoUri?: string | null;
   fotoUri2?: string | null;
+  r2Key?: string | null;
+  r2Key2?: string | null;
   fechaCreacion?: string;
   alarmaFechaHora?: string | null;
   alarmaNotificationId?: string | null;
@@ -56,8 +59,8 @@ export interface HistoryItem extends Prenda {
 }
 
 export type RootStackParamList = {
+  Onboarding: undefined;
   MainTabs: undefined;
-  Inventarios: undefined;
   Cajas: { inventarioId: string; nombreInventario: string };
   ExcelGrid: { cajaId: string; nombreCaja: string; targetPrendaId?: string };
   Form: {
@@ -69,13 +72,12 @@ export type RootStackParamList = {
 };
 
 export type BottomTabParamList = {
-  Home: undefined;
+  Inventarios: undefined;
+  Stats: undefined;
   Chatbot: undefined;
   History: undefined;
-  Settings: undefined;
+  GarmentDetails: { cajaId: string; nombreCaja: string };
 };
-
-export type RootTabParamList = BottomTabParamList;
 
 export interface ChatSession {
   id: string;

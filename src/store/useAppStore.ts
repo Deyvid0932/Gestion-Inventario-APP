@@ -1,9 +1,12 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SQLiteDatabase } from 'expo-sqlite';
 import { User, Session } from '@supabase/supabase-js';
 import { getTheme, ColorSchemeType, theme } from '../style/theme';
 import { Prenda, InventarioStats } from '../types';
 import { SettingsService } from '../services/SettingsService';
+
+const ONBOARDING_KEY = 'has_completed_onboarding_v1';
 
 interface AppState {
   themeMode: 'light' | 'dark';
@@ -26,6 +29,11 @@ interface AppState {
   setSyncing: (isSyncing: boolean, message?: string) => void;
   setLastSyncTime: (time: string | null) => void;
   logout: () => void;
+
+  // Onboarding State
+  hasCompletedOnboarding: boolean | null;
+  checkOnboardingStatus: () => Promise<void>;
+  completeOnboarding: () => Promise<void>;
 
   // Estado Reactivo de Datos
   inventarios: InventarioStats[];
@@ -94,6 +102,26 @@ export const useAppStore = create<AppState>((set) => ({
   setSyncing: (isSyncing, message) => set({ isSyncing, syncMessage: message || '' }),
   setLastSyncTime: (lastSyncTime) => set({ lastSyncTime }),
   logout: () => set({ user: null, session: null, isSyncing: false }),
+
+  // Onboarding State
+  hasCompletedOnboarding: null,
+  checkOnboardingStatus: async () => {
+    try {
+      const val = await AsyncStorage.getItem(ONBOARDING_KEY);
+      set({ hasCompletedOnboarding: val === 'true' });
+    } catch {
+      set({ hasCompletedOnboarding: false });
+    }
+  },
+  completeOnboarding: async () => {
+    try {
+      await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+      set({ hasCompletedOnboarding: true });
+    } catch (e) {
+      console.error('Error guardando estado de onboarding:', e);
+      set({ hasCompletedOnboarding: true });
+    }
+  },
 
   // Reactivity State
   inventarios: [],

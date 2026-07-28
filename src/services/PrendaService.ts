@@ -1,6 +1,8 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import { Prenda } from '../types';
 import { supabase } from '../database/supabase';
+import { R2Service } from './r2Service';
+import { AuthManager } from './AuthManager';
 
 export const PrendaService = {
   addPrenda: async (db: SQLiteDatabase, prenda: Prenda) => {
@@ -23,8 +25,8 @@ export const PrendaService = {
 
       const now = new Date().toISOString();
       await db.runAsync(
-        `INSERT INTO prendas (id, cajaId, op, estilo, color, talla, fotoUri, fotoUri2, estado, fechaCreacion, alarmaFechaHora, alarmaNotificationId, updated_at, sync_status) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+        `INSERT INTO prendas (id, cajaId, op, estilo, color, talla, fotoUri, fotoUri2, r2Key, r2Key2, estado, fechaCreacion, alarmaFechaHora, alarmaNotificationId, updated_at, sync_status) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
         [
           prenda.id,
           prenda.cajaId,
@@ -34,6 +36,8 @@ export const PrendaService = {
           prenda.talla || '',
           prenda.fotoUri || null,
           prenda.fotoUri2 || null,
+          prenda.r2Key || null,
+          prenda.r2Key2 || null,
           prenda.estado ?? 1,
           prenda.fechaCreacion || now,
           prenda.alarmaFechaHora || null,
@@ -67,7 +71,7 @@ export const PrendaService = {
 
       const now = new Date().toISOString();
       await db.runAsync(
-        `UPDATE prendas SET op = ?, estilo = ?, color = ?, talla = ?, fotoUri = ?, fotoUri2 = ?, alarmaFechaHora = ?, alarmaNotificationId = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
+        `UPDATE prendas SET op = ?, estilo = ?, color = ?, talla = ?, fotoUri = ?, fotoUri2 = ?, r2Key = ?, r2Key2 = ?, alarmaFechaHora = ?, alarmaNotificationId = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
         [
           prenda.op || '',
           prenda.estilo,
@@ -75,6 +79,8 @@ export const PrendaService = {
           prenda.talla || '',
           prenda.fotoUri || null,
           prenda.fotoUri2 || null,
+          prenda.r2Key || null,
+          prenda.r2Key2 || null,
           prenda.alarmaFechaHora || null,
           prenda.alarmaNotificationId || null,
           now,
@@ -109,6 +115,7 @@ export const PrendaService = {
         `UPDATE prendas SET cajaId = ?, fechaCreacion = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
         [newCajaId, now, now, prendaId]
       );
+      await AuthManager.refreshAllAppState(db);
       return { success: true };
     } catch (error) {
       console.error('Error al mover prenda:', error);
@@ -118,29 +125,27 @@ export const PrendaService = {
 
   hardDelete: async (db: SQLiteDatabase, id: string, userId?: string | null) => {
     try {
-      const prenda = await db.getFirstAsync<{ fotoUri?: string; fotoUri2?: string }>(
-        `SELECT fotoUri, fotoUri2 FROM prendas WHERE id = ?`,
+      const prenda = await db.getFirstAsync<{ fotoUri?: string; fotoUri2?: string; r2Key?: string; r2Key2?: string }>(
+        `SELECT fotoUri, fotoUri2, r2Key, r2Key2 FROM prendas WHERE id = ?`,
         [id]
       );
 
       let remoteDeleted = false;
 
       if (userId) {
-        const { error } = await supabase.from('prendas').delete().eq('id', id);
-        if (!error) {
-          remoteDeleted = true;
-          const photosToRemove: string[] = [];
-          if (prenda?.fotoUri && prenda.fotoUri.includes('supabase.co')) {
-            const path = prenda.fotoUri.split('/garment-pictures/')[1];
-            if (path) photosToRemove.push(path);
+        try {
+          const { error } = await supabase.from('prendas').delete().eq('id', id);
+          if (!error) {
+            remoteDeleted = true;
+            if (prenda?.r2Key) {
+              await R2Service.deletePhotoFromR2(prenda.r2Key).catch(() => {});
+            }
+            if (prenda?.r2Key2) {
+              await R2Service.deletePhotoFromR2(prenda.r2Key2).catch(() => {});
+            }
           }
-          if (prenda?.fotoUri2 && prenda.fotoUri2.includes('supabase.co')) {
-            const path = prenda.fotoUri2.split('/garment-pictures/')[1];
-            if (path) photosToRemove.push(path);
-          }
-          if (photosToRemove.length > 0) {
-            await supabase.storage.from('garment-pictures').remove(photosToRemove).catch(() => {});
-          }
+        } catch (netErr) {
+          console.warn('Fallo eliminación remota inmediata, guardando en cola de pendientes:', netErr);
         }
       }
 
@@ -150,7 +155,7 @@ export const PrendaService = {
           await db.runAsync(
             `INSERT INTO pending_deletions (id, tableName, recordId, createdAt) VALUES (?, 'prendas', ?, ?)`,
             [deletionId, id, new Date().toISOString()]
-          );
+          ).catch(() => {});
         }
         await db.runAsync(`DELETE FROM prendas WHERE id = ?`, [id]);
       });

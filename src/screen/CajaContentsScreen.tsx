@@ -31,7 +31,6 @@ import { MovePrendaModal } from '../components/MovePrendaModal';
 import { SuccessModal } from '../components/SuccessModal';
 
 import { AuthManager } from '../services/AuthManager';
-import { EmptyState } from '../design-system/components/EmptyState';
 
 type ExcelGridRouteProp = RouteProp<RootStackParamList, 'ExcelGrid'>;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -45,7 +44,12 @@ const CajaContentsScreen = () => {
   const { processImage, loading: ocrLoading } = useOCRManager();
 
   const [search, setSearch] = useState('');
-  const [localPrendas, setLocalPrendas] = useState<Prenda[]>([]);
+  const globalPrendas = useAppStore(state => state.prendas);
+  const initialCajaPrendas = React.useMemo(() => {
+    return globalPrendas.filter(p => p.cajaId === cajaId);
+  }, [globalPrendas, cajaId]);
+
+  const [localPrendas, setLocalPrendas] = useState<Prenda[]>(initialCajaPrendas);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ALARM' | 'PHOTOS' | 'INACTIVE'>('ALL');
 
   const filteredPrendas = React.useMemo(() => {
@@ -57,8 +61,8 @@ const CajaContentsScreen = () => {
     });
   }, [localPrendas, activeFilter]);
   const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [loading, setLoading] = useState(initialCajaPrendas.length === 0);
+  const fadeAnim = useRef(new Animated.Value(initialCajaPrendas.length > 0 ? 1 : 0)).current;
   const lastNavTime = useRef(0);
   const searchCounter = useRef(0);
 
@@ -90,7 +94,7 @@ const CajaContentsScreen = () => {
     if (!db) return;
     const queryId = ++searchCounter.current;
 
-    if (showLoading) {
+    if (showLoading && localPrendas.length === 0) {
       setLoading(true);
       fadeAnim.setValue(0);
     }
@@ -123,15 +127,24 @@ const CajaContentsScreen = () => {
         setLoading(false);
       }
     }
-  }, [db, cajaId, setPrendasGlobal, fadeAnim, search]);
+  }, [db, cajaId, setPrendasGlobal, fadeAnim, search, localPrendas.length]);
+
+  useEffect(() => {
+    const cached = globalPrendas.filter(p => p.cajaId === cajaId);
+    if (cached.length > 0) {
+      setLocalPrendas(cached);
+      setLoading(false);
+      fadeAnim.setValue(1);
+    }
+  }, [cajaId, globalPrendas, fadeAnim]);
 
   useFocusEffect(
     useCallback(() => {
-      if (db) {
-        fetchPrendas(localPrendas.length === 0);
+      if (db && cajaId) {
+        fetchPrendas(false);
       }
       return () => clearSelectedPrendas();
-    }, [db, fetchPrendas, clearSelectedPrendas])
+    }, [db, cajaId, fetchPrendas, clearSelectedPrendas])
   );
 
   const isInitialMount = useRef(true);
@@ -153,17 +166,17 @@ const CajaContentsScreen = () => {
 
   useEffect(() => {
     const targetId = route.params?.targetPrendaId;
-    if (targetId && localPrendas.length > 0 && !loading) {
+    if (targetId && localPrendas.length > 0) {
       setHighlightedId(targetId);
       const index = localPrendas.findIndex(p => p.id === targetId);
       if (index !== -1) {
-        setTimeout(() => {
+        const timer = setTimeout(() => {
           flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-        }, 500);
-        navigation.setParams({ targetPrendaId: undefined });
+        }, 350);
+        return () => clearTimeout(timer);
       }
     }
-  }, [localPrendas, route.params?.targetPrendaId, loading, navigation]);
+  }, [localPrendas, route.params?.targetPrendaId]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -253,7 +266,7 @@ const CajaContentsScreen = () => {
               Alert.alert('Error al eliminar', res.error || 'No se pudo eliminar la prenda.');
               return;
             }
-            fetchPrendas(false);
+            setLocalPrendas(prev => prev.filter((p: Prenda) => p.id !== id));
             AuthManager.refreshAllAppState(db);
           } catch (e) {
             console.error('Error al eliminar prenda:', e);
@@ -429,7 +442,7 @@ const CajaContentsScreen = () => {
               renderItem={renderItem}
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContent}
-              initialNumToRender={10}
+              initialNumToRender={8}
               maxToRenderPerBatch={8}
               windowSize={5}
               removeClippedSubviews={true}
@@ -457,11 +470,13 @@ const CajaContentsScreen = () => {
                 />
               }
               ListEmptyComponent={
-                <EmptyState 
-                  icon="shirt-outline"
-                  title="¡Sin Prendas!"
-                  subtitle="Toca 'Nuevo' o usa el OCR para comenzar."
-                />
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="shirt-outline" size={100} color={currentTheme.border} />
+                  <Text style={[styles.emptyTitle, { color: currentTheme.textSecondary }]}>¡Sin Prendas!</Text>
+                  <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
+                    Toca "Nuevo" o usa el OCR para comenzar.
+                  </Text>
+                </View>
               }
 
               ListFooterComponent={<View style={{ height: 50 }} />}

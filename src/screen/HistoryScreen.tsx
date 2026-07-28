@@ -160,7 +160,10 @@ export const HistoryScreen = () => {
           <TouchableOpacity
             activeOpacity={0.8}
             style={[styles.card, clayStyles, { backgroundColor: currentTheme.card, borderColor: currentTheme.border, shadowColor: currentTheme.borderShadow || '#000' }]}
-            onPress={() => navigation.navigate('ExcelGrid', { cajaId: item.cajaId, nombreCaja: item.cajaNombre, targetPrendaId: item.id })}
+            onPress={() => {
+              const rootNav = (navigation.getParent() as any) || navigation;
+              rootNav.navigate('ExcelGrid', { cajaId: item.cajaId, nombreCaja: item.cajaNombre, targetPrendaId: item.id });
+            }}
           >
             <View style={styles.cardHeader}>
               <View style={styles.badgeContainer}>

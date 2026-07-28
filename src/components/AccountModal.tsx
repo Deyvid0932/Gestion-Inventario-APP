@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Modal,
   View,
@@ -65,9 +66,11 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
     prendasActivas: 0,
     prendasInactivas: 0,
     prendasConFoto: 0,
+    prendasConAlarma: 0,
     cajaTopNombre: '',
     cajaTopCantidad: 0,
     top5Cajas: [],
+    topColores: [],
   });
 
   const [syncStatus, setSyncStatus] = useState<SyncStatusType>('synced');
@@ -470,7 +473,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
                       <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
                     </TouchableOpacity>
 
-                    <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
 
                     <TouchableOpacity style={styles.menuRow} onPress={() => setPrivacyModalVisible(true)}>
                       <Ionicons name="document-text-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />

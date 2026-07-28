@@ -14,6 +14,10 @@ import { AuthManager } from './src/services/AuthManager';
 import { SynchronizationEngine } from './src/sync/SynchronizationEngine';
 import { LoadingModal } from './src/components/LoadingModal';
 
+import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 // Garantizar accesibilidad de fuente grande sin romper el diseño en pantallas pequeñas
 if ((Text as any).defaultProps == null) (Text as any).defaultProps = {};
 (Text as any).defaultProps.maxFontSizeMultiplier = 1.35;
@@ -29,7 +33,9 @@ const ThemeInitializer = () => {
 
   useEffect(() => {
     if (db) {
-      loadThemeFromDb(db);
+      loadThemeFromDb(db).finally(() => {
+        SplashScreen.hideAsync().catch(() => {});
+      });
     }
   }, [db, loadThemeFromDb]);
 
@@ -42,25 +48,38 @@ const AuthInitializer = () => {
   const setLastSyncTime = useAppStore(state => state.setLastSyncTime);
 
   useEffect(() => {
-    SynchronizationEngine.getLastSyncTime().then(time => {
-      if (time) setLastSyncTime(time);
-    });
+    let subscription: any = null;
+    try {
+      SynchronizationEngine.getLastSyncTime().then(time => {
+        if (time) setLastSyncTime(time);
+      }).catch(e => console.error('[STARTUP_LOG] Error al obtener last sync time:', e));
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (db) {
-        AuthManager.handleAuthChange(db, session?.user ?? null);
-      }
-    });
+      supabase.auth.getSession().then((res) => {
+        const session = res?.data?.session ?? null;
+        setSession(session);
+        if (db) {
+          AuthManager.handleAuthChange(db, session?.user ?? null).catch(e => console.error('[STARTUP_LOG] Error en handleAuthChange:', e));
+        }
+      }).catch(e => console.error('[STARTUP_LOG] Error al obtener sesion de Supabase:', e));
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (db) {
-        AuthManager.handleAuthChange(db, session?.user ?? null);
-      }
-    });
+      const authRes = supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session);
+        if (db) {
+          AuthManager.handleAuthChange(db, session?.user ?? null).catch(e => console.error('[STARTUP_LOG] Error en onAuthStateChange:', e));
+        }
+      });
+      subscription = authRes?.data?.subscription;
+    } catch (e) {
+      console.error('[STARTUP_LOG] Excepción en AuthInitializer:', e);
+    }
 
-    return () => subscription.unsubscribe();
+    return () => {
+      try {
+        if (subscription && typeof subscription.unsubscribe === 'function') {
+          subscription.unsubscribe();
+        }
+      } catch (_) {}
+    };
   }, [db, setSession, setLastSyncTime]);
 
   return null;
@@ -73,19 +92,33 @@ export default function App() {
   const syncMessage = useAppStore(state => state.syncMessage);
 
   useEffect(() => {
-    // Listener para cuando el usuario toca una notificación (abierta, en segundo plano o cerrada)
-    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data;
-      if (data?.cajaId && navigationRef.isReady()) {
-        navigationRef.navigate('ExcelGrid', {
-          cajaId: data.cajaId as string,
-          nombreCaja: (data.cajaNombre as string) || 'Caja',
-          targetPrendaId: data.prendaId as string,
-        });
-      }
-    });
+    let subscription: any = null;
+    try {
+      subscription = Notifications.addNotificationResponseReceivedListener(response => {
+        try {
+          const data = response?.notification?.request?.content?.data;
+          if (data?.cajaId && navigationRef.isReady()) {
+            navigationRef.navigate('ExcelGrid', {
+              cajaId: data.cajaId as string,
+              nombreCaja: (data.cajaNombre as string) || 'Caja',
+              targetPrendaId: data.prendaId as string,
+            });
+          }
+        } catch (e) {
+          console.error('[STARTUP_LOG] Error procesando respuesta de notificación:', e);
+        }
+      });
+    } catch (e) {
+      console.error('[STARTUP_LOG] Excepción al registrar listener de notificaciones:', e);
+    }
 
-    return () => subscription.remove();
+    return () => {
+      try {
+        if (subscription && typeof subscription.remove === 'function') {
+          subscription.remove();
+        }
+      } catch (_) {}
+    };
   }, []);
 
   const navigationTheme = {

@@ -23,6 +23,7 @@ const TECHNOLOGIES = [
   { name: 'TypeScript', icon: 'logo-javascript', color: '#3178C6', desc: 'Tipado estático seguro para prevenir errores en tiempo de desarrollo.' },
   { name: 'SQLite (WAL)', icon: 'server-outline', color: '#003B57', darkColor: '#007ACC', desc: 'Base de datos relacional ultra rápida almacenada 100% en tu dispositivo.' },
   { name: 'Supabase', icon: 'flash-outline', color: '#3ECF8E', desc: 'Backend Cloud para autenticación segura con Google y sincronización remota.' },
+  { name: 'Cloudflare R2', icon: 'cloud-upload-outline', color: '#F38020', desc: 'Almacenamiento de objetos de alta velocidad para el guardado y respaldo de fotos de prendas.' },
   { name: 'Llama 3.3 IA', icon: 'hardware-chip-outline', color: '#8B5CF6', desc: 'Modelo de inteligencia artificial avanzado para el asistente virtual y consultas.' },
   { name: 'React Navigation', icon: 'navigate-outline', color: '#7B1FA2', desc: 'Gestor de rutas y navegación entre pestañas sin lag.' },
   { name: 'Zustand', icon: 'cube-outline', color: '#F59E0B', desc: 'Estado global atómico y ligero sin renders globales innecesarios.' },
@@ -30,6 +31,7 @@ const TECHNOLOGIES = [
 
 const ADVANTAGES = [
   { title: 'Funciona sin internet', desc: 'Todos tus lotes, cajas y prendas están disponibles offline en SQLite.', icon: 'cloud-offline-outline' },
+  { title: 'Fotos en Cloudflare R2', desc: 'Guardado y respaldo seguro de imágenes de prendas en almacenamiento Cloudflare R2.', icon: 'images-outline' },
   { title: 'Sincronización en la nube', desc: 'Respaldo seguro en Supabase para restaurar o usar en varios teléfonos.', icon: 'cloud-done-outline' },
   { title: 'IA integrada (Llama 3.3)', desc: 'Consultas inteligentes para buscar prendas por color, lote o descripción.', icon: 'sparkles-outline' },
   { title: 'Búsquedas ultra rápidas', desc: 'Filtros instantáneos con índices optimizados en base de datos local.', icon: 'search-outline' },

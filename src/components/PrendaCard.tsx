@@ -20,7 +20,6 @@ import { Prenda } from '../types';
 import { getColorHex } from '../utils/colorUtils';
 import { clayStyles } from '../style/theme';
 import { moderateScale } from '../utils/responsive';
-import { StatusBadge } from '../design-system/components/StatusBadge';
 
 
 interface PrendaCardProps {
@@ -165,8 +164,17 @@ export const PrendaCard = React.memo(({
                 </View>
 
                 {!historyMode && onToggleStatus && (
-                  <TouchableOpacity onPress={onToggleStatus} activeOpacity={0.8}>
-                    <StatusBadge active={estado === 1} activeText="Activo" inactiveText="Inactivo" />
+                  <TouchableOpacity
+                    onPress={onToggleStatus}
+                    activeOpacity={0.8}
+                    style={[styles.statusBadge, { backgroundColor: estado === 1 ? '#2ecc7120' : '#8E8E9320' }]}
+                    accessibilityLabel={`Estado: ${estado === 1 ? 'Activo' : 'Inactivo'}`}
+                    accessibilityRole="button"
+                  >
+                    <View style={[styles.statusIndicator, { backgroundColor: estado === 1 ? '#2ecc71' : '#8E8E93' }]} />
+                    <Text style={[styles.statusText, { color: estado === 1 ? '#2ecc71' : '#8E8E93' }]} allowFontScaling={true}>
+                      {estado === 1 ? 'Activo' : 'Inactivo'}
+                    </Text>
                   </TouchableOpacity>
                 )}
                 {historyMode && (
@@ -235,6 +243,22 @@ export const PrendaCard = React.memo(({
                           />
                         </TouchableOpacity>
                       )}
+                      {item.fotoUri2 && (
+                        <TouchableOpacity
+                          onPress={() => onImagePress(item.fotoUri2)}
+                          activeOpacity={0.85}
+                          style={[styles.thumbnailContainer, { borderColor: theme.border }]}
+                          accessibilityLabel="Ver segunda fotografía"
+                        >
+                          <Image
+                            source={{ uri: item.fotoUri2 }}
+                            style={styles.thumbnail}
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            transition={200}
+                          />
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </>
                 )}
@@ -253,10 +277,16 @@ export const PrendaCard = React.memo(({
 }, (prev, next) => {
   return prev.isSelected === next.isSelected &&
     prev.item.id === next.item.id &&
-    prev.item.estado === next.item.estado &&
-    (prev.item as any).updated_at === (next.item as any).updated_at &&
     prev.isHighlighted === next.isHighlighted &&
-    prev.theme === next.theme;
+    prev.item.estado === next.item.estado &&
+    prev.item.estilo === next.item.estilo &&
+    prev.item.color === next.item.color &&
+    prev.item.op === next.item.op &&
+    prev.item.fotoUri === next.item.fotoUri &&
+    prev.item.fotoUri2 === next.item.fotoUri2 &&
+    prev.item.alarmaFechaHora === next.item.alarmaFechaHora &&
+    prev.theme === next.theme &&
+    prev.historyMode === next.historyMode;
 });
 
 const styles = StyleSheet.create({

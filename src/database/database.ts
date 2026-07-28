@@ -7,123 +7,102 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     CREATE TABLE IF NOT EXISTS user_version (id INTEGER PRIMARY KEY DEFAULT 1, version INTEGER);
   `);
   // Auto-corrección garantizada de tablas de Chat, ajustes y campos de sincronización
-  try {
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS chat_sessions (
-        id TEXT PRIMARY KEY NOT NULL,
-        title TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY NOT NULL,
-        value TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS pending_deletions (
-        id TEXT PRIMARY KEY NOT NULL,
-        tableName TEXT NOT NULL,
-        recordId TEXT NOT NULL,
-        createdAt TEXT NOT NULL
-      );
-    `);
-    await db.runAsync('ALTER TABLE chat_history ADD COLUMN sessionId TEXT;').catch(() => { });
-    await db.runAsync('ALTER TABLE chat_history ADD COLUMN engineUsed TEXT;').catch(() => { });
-
-    // Columnas de sincronización para chat_sessions y chat_history
-    await db.runAsync('ALTER TABLE chat_sessions ADD COLUMN user_id TEXT;').catch(() => { });
-    await db.runAsync('ALTER TABLE chat_sessions ADD COLUMN updated_at TEXT;').catch(() => { });
-    await db.runAsync('ALTER TABLE chat_sessions ADD COLUMN deleted_at TEXT;').catch(() => { });
-    await db.runAsync("ALTER TABLE chat_sessions ADD COLUMN sync_status TEXT DEFAULT 'PENDING';").catch(() => { });
-
-    await db.runAsync('ALTER TABLE chat_history ADD COLUMN updated_at TEXT;').catch(() => { });
-    await db.runAsync('ALTER TABLE chat_history ADD COLUMN deleted_at TEXT;').catch(() => { });
-    await db.runAsync("ALTER TABLE chat_history ADD COLUMN sync_status TEXT DEFAULT 'PENDING';").catch(() => { });
-    await db.runAsync('ALTER TABLE prendas ADD COLUMN talla TEXT;').catch(() => { });
-  } catch (e) {
-    console.error('Error auto-corrigiendo esquema:', e);
-  }
   const result = await db.getFirstAsync<{ version: number }>('SELECT version FROM user_version');
   let currentDbVersion = result ? result.version : 0;
-  if (currentDbVersion >= DATABASE_VERSION) {
-    return;
-  }
-  if (currentDbVersion === 0) {
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY NOT NULL,
-        value TEXT NOT NULL
-      );
-      INSERT OR IGNORE INTO app_settings (key, value) VALUES ('themeMode', 'light');
-      INSERT OR IGNORE INTO app_settings (key, value) VALUES ('colorScheme', 'morado');
-      CREATE TABLE IF NOT EXISTS inventarios (
-        id TEXT PRIMARY KEY NOT NULL,
-        user_id TEXT,
-        nombre TEXT NOT NULL,
-        descripcion TEXT,
-        fechaCreacion TEXT NOT NULL,
-        estado INTEGER NOT NULL DEFAULT 1,
-        updated_at TEXT,
-        deleted_at TEXT,
-        sync_status TEXT DEFAULT 'PENDING'
-      );
-      CREATE TABLE IF NOT EXISTS cajas (
-        id TEXT PRIMARY KEY NOT NULL,
-        inventarioId TEXT NOT NULL,
-        nombre TEXT NOT NULL,
-        fechaCreacion TEXT NOT NULL,
-        orden INTEGER DEFAULT 0,
-        updated_at TEXT,
-        deleted_at TEXT,
-        sync_status TEXT DEFAULT 'PENDING',
-        FOREIGN KEY (inventarioId) REFERENCES inventarios (id) ON DELETE CASCADE
-      );
-      CREATE TABLE IF NOT EXISTS prendas (
-        id TEXT PRIMARY KEY NOT NULL,
-        cajaId TEXT NOT NULL,
-        op TEXT,
-        estilo TEXT NOT NULL,
-        color TEXT NOT NULL,
-        talla TEXT,
-        fotoUri TEXT,
-        fotoUri2 TEXT,
-        estado INTEGER NOT NULL DEFAULT 1,
-        fechaCreacion TEXT NOT NULL,
-        alarmaFechaHora TEXT,
-        alarmaNotificationId TEXT,
-        updated_at TEXT,
-        deleted_at TEXT,
-        sync_status TEXT DEFAULT 'PENDING',
-        FOREIGN KEY (cajaId) REFERENCES cajas (id) ON DELETE CASCADE
-      );
-      -- Indexes for performance
-      CREATE INDEX IF NOT EXISTS idx_cajas_inventario ON cajas(inventarioId);
-      CREATE INDEX IF NOT EXISTS idx_prendas_caja ON prendas(cajaId);
-      CREATE INDEX IF NOT EXISTS idx_prendas_estado ON prendas(estado);
-      CREATE INDEX IF NOT EXISTS idx_prendas_fecha ON prendas(fechaCreacion);
-      CREATE INDEX IF NOT EXISTS idx_cajas_orden ON cajas(orden);
-      CREATE INDEX IF NOT EXISTS idx_inventarios_user ON inventarios(user_id);
-      CREATE INDEX IF NOT EXISTS idx_inventarios_sync ON inventarios(sync_status);
-      CREATE INDEX IF NOT EXISTS idx_cajas_sync ON cajas(sync_status);
-      CREATE INDEX IF NOT EXISTS idx_prendas_sync ON prendas(sync_status);
-      CREATE TABLE IF NOT EXISTS chat_sessions (
-        id TEXT PRIMARY KEY NOT NULL,
-        title TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS chat_history (
-        id TEXT PRIMARY KEY NOT NULL,
-        sessionId TEXT,
-        sender TEXT NOT NULL,
-        text TEXT NOT NULL,
-        matches_json TEXT,
-        engineUsed TEXT,
-        timestamp INTEGER NOT NULL,
-        FOREIGN KEY (sessionId) REFERENCES chat_sessions (id) ON DELETE CASCADE
-      );
-      INSERT OR REPLACE INTO user_version (id, version) VALUES (1, ${DATABASE_VERSION});
-    `);
-  } else {
+
+  if (currentDbVersion < DATABASE_VERSION) {
+    if (currentDbVersion === 0) {
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY NOT NULL,
+          value TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO app_settings (key, value) VALUES ('themeMode', 'light');
+        INSERT OR IGNORE INTO app_settings (key, value) VALUES ('colorScheme', 'morado');
+        CREATE TABLE IF NOT EXISTS inventarios (
+          id TEXT PRIMARY KEY NOT NULL,
+          user_id TEXT,
+          nombre TEXT NOT NULL,
+          descripcion TEXT,
+          fechaCreacion TEXT NOT NULL,
+          estado INTEGER NOT NULL DEFAULT 1,
+          updated_at TEXT,
+          deleted_at TEXT,
+          sync_status TEXT DEFAULT 'PENDING'
+        );
+        CREATE TABLE IF NOT EXISTS cajas (
+          id TEXT PRIMARY KEY NOT NULL,
+          inventarioId TEXT NOT NULL,
+          nombre TEXT NOT NULL,
+          fechaCreacion TEXT NOT NULL,
+          orden INTEGER DEFAULT 0,
+          updated_at TEXT,
+          deleted_at TEXT,
+          sync_status TEXT DEFAULT 'PENDING',
+          FOREIGN KEY (inventarioId) REFERENCES inventarios (id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS prendas (
+          id TEXT PRIMARY KEY NOT NULL,
+          cajaId TEXT NOT NULL,
+          op TEXT,
+          estilo TEXT NOT NULL,
+          color TEXT NOT NULL,
+          talla TEXT,
+          fotoUri TEXT,
+          fotoUri2 TEXT,
+          r2Key TEXT,
+          r2Key2 TEXT,
+          estado INTEGER NOT NULL DEFAULT 1,
+          fechaCreacion TEXT NOT NULL,
+          alarmaFechaHora TEXT,
+          alarmaNotificationId TEXT,
+          updated_at TEXT,
+          deleted_at TEXT,
+          sync_status TEXT DEFAULT 'PENDING',
+          FOREIGN KEY (cajaId) REFERENCES cajas (id) ON DELETE CASCADE
+        );
+        -- Indexes for performance
+        CREATE INDEX IF NOT EXISTS idx_cajas_inventario ON cajas(inventarioId);
+        CREATE INDEX IF NOT EXISTS idx_prendas_caja ON prendas(cajaId);
+        CREATE INDEX IF NOT EXISTS idx_prendas_estado ON prendas(estado);
+        CREATE INDEX IF NOT EXISTS idx_prendas_fecha ON prendas(fechaCreacion);
+        CREATE INDEX IF NOT EXISTS idx_cajas_orden ON cajas(orden);
+        CREATE INDEX IF NOT EXISTS idx_inventarios_user ON inventarios(user_id);
+        CREATE INDEX IF NOT EXISTS idx_inventarios_sync ON inventarios(sync_status);
+        CREATE INDEX IF NOT EXISTS idx_cajas_sync ON cajas(sync_status);
+        CREATE INDEX IF NOT EXISTS idx_prendas_sync ON prendas(sync_status);
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+          id TEXT PRIMARY KEY NOT NULL,
+          user_id TEXT,
+          title TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          updatedAt INTEGER NOT NULL,
+          updated_at TEXT,
+          deleted_at TEXT,
+          sync_status TEXT DEFAULT 'PENDING'
+        );
+        CREATE TABLE IF NOT EXISTS chat_history (
+          id TEXT PRIMARY KEY NOT NULL,
+          sessionId TEXT,
+          sender TEXT NOT NULL,
+          text TEXT NOT NULL,
+          matches_json TEXT,
+          engineUsed TEXT,
+          timestamp INTEGER NOT NULL,
+          updated_at TEXT,
+          deleted_at TEXT,
+          sync_status TEXT DEFAULT 'PENDING',
+          FOREIGN KEY (sessionId) REFERENCES chat_sessions (id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS pending_deletions (
+          id TEXT PRIMARY KEY NOT NULL,
+          tableName TEXT NOT NULL,
+          recordId TEXT NOT NULL,
+          createdAt TEXT NOT NULL
+        );
+        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, ${DATABASE_VERSION});
+      `);
+    }
     if (currentDbVersion === 1) {
       await db.execAsync(`
         ALTER TABLE prendas ADD COLUMN fechaCreacion TEXT;
@@ -284,6 +263,44 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       `);
       currentDbVersion = 13;
     }
+  }
+
+  // Auto-corrección garantizada de columnas y tablas de respaldo para cualquier versión de base de datos
+  try {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id TEXT PRIMARY KEY NOT NULL,
+        title TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS pending_deletions (
+        id TEXT PRIMARY KEY NOT NULL,
+        tableName TEXT NOT NULL,
+        recordId TEXT NOT NULL,
+        createdAt TEXT NOT NULL
+      );
+    `);
+    await db.runAsync('ALTER TABLE chat_history ADD COLUMN sessionId TEXT;').catch(() => { });
+    await db.runAsync('ALTER TABLE chat_history ADD COLUMN engineUsed TEXT;').catch(() => { });
+
+    await db.runAsync('ALTER TABLE chat_sessions ADD COLUMN user_id TEXT;').catch(() => { });
+    await db.runAsync('ALTER TABLE chat_sessions ADD COLUMN updated_at TEXT;').catch(() => { });
+    await db.runAsync('ALTER TABLE chat_sessions ADD COLUMN deleted_at TEXT;').catch(() => { });
+    await db.runAsync("ALTER TABLE chat_sessions ADD COLUMN sync_status TEXT DEFAULT 'PENDING';").catch(() => { });
+
+    await db.runAsync('ALTER TABLE chat_history ADD COLUMN updated_at TEXT;').catch(() => { });
+    await db.runAsync('ALTER TABLE chat_history ADD COLUMN deleted_at TEXT;').catch(() => { });
+    await db.runAsync("ALTER TABLE chat_history ADD COLUMN sync_status TEXT DEFAULT 'PENDING';").catch(() => { });
+    await db.runAsync('ALTER TABLE prendas ADD COLUMN talla TEXT;').catch(() => { });
+    await db.runAsync('ALTER TABLE prendas ADD COLUMN r2Key TEXT;').catch(() => { });
+    await db.runAsync('ALTER TABLE prendas ADD COLUMN r2Key2 TEXT;').catch(() => { });
+  } catch (e) {
+    console.error('Error en auto-corrección de esquema:', e);
   }
 }
 export const generateId = () => {

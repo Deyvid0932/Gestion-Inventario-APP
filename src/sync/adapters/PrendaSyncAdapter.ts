@@ -1,6 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import { SyncAdapter, SyncResult } from '../SyncAdapter';
 import { supabase } from '../../database/supabase';
+import { R2Service } from '../../services/r2Service';
 
 export class PrendaSyncAdapter implements SyncAdapter {
   tableName = 'prendas';
@@ -21,15 +22,44 @@ export class PrendaSyncAdapter implements SyncAdapter {
         await db.runAsync(`UPDATE prendas SET sync_status = 'SYNCING' WHERE id = ?`, [id]);
       }
 
+      // Procesar subida de imágenes a Cloudflare R2 si existen en local (file://)
+      for (const row of pendingRows) {
+        let updatedR2Key = row.r2Key;
+        let updatedR2Key2 = row.r2Key2;
+
+        if (row.fotoUri && !row.fotoUri.startsWith('http') && !row.r2Key) {
+         // console.log(`📸 Subiendo foto 1 a Cloudflare R2 (Prenda: ${row.id}, URI: ${row.fotoUri})...`);
+          const key = await R2Service.uploadPhotoToR2(row.fotoUri, row.id, 1);
+          //console.log(`📌 R2 Key 1 resultado:`, key);
+          if (key) {
+            updatedR2Key = key;
+            await db.runAsync(`UPDATE prendas SET r2Key = ? WHERE id = ?`, [key, row.id]);
+          }
+        }
+
+        if (row.fotoUri2 && !row.fotoUri2.startsWith('http') && !row.r2Key2) {
+          //console.log(`📸 Subiendo foto 2 a Cloudflare R2 (Prenda: ${row.id}, URI: ${row.fotoUri2})...`);
+          const key2 = await R2Service.uploadPhotoToR2(row.fotoUri2, row.id, 2);
+          //console.log(`📌 R2 Key 2 resultado:`, key2);
+          if (key2) {
+            updatedR2Key2 = key2;
+            await db.runAsync(`UPDATE prendas SET r2Key2 = ? WHERE id = ?`, [key2, row.id]);
+          }
+        }
+
+        row.r2Key = updatedR2Key;
+        row.r2Key2 = updatedR2Key2;
+      }
+
+      // Construir payload enviando directamente r2Key y r2Key2 a Supabase
       const payload = pendingRows.map(row => ({
         id: row.id,
         "cajaId": row.cajaId,
         op: row.op || '',
         estilo: row.estilo,
         color: row.color,
-        talla: row.talla || '',
-        "fotoUri": row.fotoUri || null,
-        "fotoUri2": row.fotoUri2 || null,
+        r2Key: row.r2Key || null,
+        r2Key2: row.r2Key2 || null,
         estado: row.estado,
         "fechaCreacion": row.fechaCreacion || new Date().toISOString(),
         "alarmaFechaHora": row.alarmaFechaHora || null,
@@ -96,8 +126,8 @@ export class PrendaSyncAdapter implements SyncAdapter {
 
           if (!local) {
             await db.runAsync(
-              `INSERT INTO prendas (id, cajaId, op, estilo, color, talla, fotoUri, fotoUri2, estado, fechaCreacion, alarmaFechaHora, alarmaNotificationId, updated_at, sync_status) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
+              `INSERT INTO prendas (id, cajaId, op, estilo, color, talla, fotoUri, fotoUri2, r2Key, r2Key2, estado, fechaCreacion, alarmaFechaHora, alarmaNotificationId, updated_at, sync_status) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
               [
                 r.id,
                 r.cajaId,
@@ -107,6 +137,8 @@ export class PrendaSyncAdapter implements SyncAdapter {
                 r.talla || '',
                 r.fotoUri || null,
                 r.fotoUri2 || null,
+                r.r2Key || null,
+                r.r2Key2 || null,
                 r.estado,
                 r.fechaCreacion,
                 r.alarmaFechaHora || null,
@@ -121,15 +153,15 @@ export class PrendaSyncAdapter implements SyncAdapter {
 
             if (remoteTime >= localTime) {
               await db.runAsync(
-                `UPDATE prendas SET cajaId = ?, op = ?, estilo = ?, color = ?, talla = ?, fotoUri = ?, fotoUri2 = ?, estado = ?, fechaCreacion = ?, alarmaFechaHora = ?, alarmaNotificationId = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
+                `UPDATE prendas SET cajaId = ?, op = ?, estilo = ?, color = ?, talla = ?, r2Key = ?, r2Key2 = ?, estado = ?, fechaCreacion = ?, alarmaFechaHora = ?, alarmaNotificationId = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
                 [
                   r.cajaId,
                   r.op || '',
                   r.estilo,
                   r.color,
                   r.talla || '',
-                  r.fotoUri || null,
-                  r.fotoUri2 || null,
+                  r.r2Key || local.r2Key || null,
+                  r.r2Key2 || local.r2Key2 || null,
                   r.estado,
                   r.fechaCreacion,
                   r.alarmaFechaHora || null,

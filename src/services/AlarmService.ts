@@ -2,15 +2,19 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { SQLiteDatabase } from 'expo-sqlite';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+} catch (e) {
+  console.warn('⚠️ Error al configurar handler de notificaciones:', e);
+}
 
 export interface PrendaAlarmItem {
   id: string;

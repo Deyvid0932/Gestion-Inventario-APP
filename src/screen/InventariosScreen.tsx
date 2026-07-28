@@ -18,9 +18,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import InventarioCard from '../components/InventarioCard';
+import { DashboardSummaryCard } from '../components/DashboardSummaryCard';
 import { InventarioService } from '../services/InventarioService';
 import { SynchronizationEngine } from '../sync/SynchronizationEngine';
-import { EmptyState } from '../design-system/components/EmptyState';
 import { AuthManager } from '../services/AuthManager';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -89,7 +89,7 @@ export const InventariosScreen = () => {
     const now = Date.now();
     if (now - lastNavTime.current < 300) return;
     lastNavTime.current = now;
-    
+
     setPrendas([]);
     navigation.navigate('Cajas', {
       inventarioId: id,
@@ -114,7 +114,7 @@ export const InventariosScreen = () => {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: currentTheme.background }}>
       <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
-        <Navbar title="Lotes de Trabajo" showBackButton={true} />
+        <Navbar title="Lotes de Trabajo" />
 
         {loading ? (
           <SkeletonLoader theme={currentTheme} />
@@ -147,26 +147,33 @@ export const InventariosScreen = () => {
               keyExtractor={item => item.id.toString()}
               contentContainerStyle={styles.listContent}
               initialNumToRender={10}
-              maxToRenderPerBatch={8}
+              maxToRenderPerBatch={10}
               windowSize={5}
               removeClippedSubviews={true}
+              alwaysBounceVertical={true}
+              overScrollMode="always"
+              ListFooterComponent={<DashboardSummaryCard />}
               ListEmptyComponent={
                 <Reanimated.View
                   style={styles.emptyContainer}
-                  entering={FadeIn.duration(400)} 
+                  entering={FadeIn.duration(400)}
                 >
-                  <EmptyState 
-                    icon="cube-outline"
-                    title="¡Lotes Vacíos!"
-                    subtitle="Parece que aún no has creado inventarios. Toca el botón + para comenzar."
-                  />
+                  <View style={styles.emptyContainer}>
+                    <View style={[styles.emptyIconCircle, { backgroundColor: currentTheme.card }]}>
+                      <Ionicons name="cube-outline" size={80} color={currentTheme.primary} />
+                    </View>
+                    <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>¡Lotes Vacíos!</Text>
+                    <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
+                      Parece que aún no has creado inventarios. Toca el botón + para comenzar.
+                    </Text>
+                  </View>
                 </Reanimated.View>
               }
             />
           </View>
         )}
 
-        <FloatingButton onPress={() => navigateSafe('Form', { mode: 'BASIC', entityType: 'inventario' })} />
+        <FloatingButton style={{ bottom: 30 }} onPress={() => navigateSafe('Form', { mode: 'BASIC', entityType: 'inventario' })} />
       </View>
     </GestureHandlerRootView>
   );
@@ -176,19 +183,20 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   listContent: {
     padding: 18,
-    paddingBottom: 100,
+    paddingBottom: 90,
     flexGrow: 1,
+    justifyContent: 'space-between',
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: 25,
   },
   emptyIconCircle: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
+    width: 86.5,
+    height: 86.5,
+    borderRadius: 60,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
