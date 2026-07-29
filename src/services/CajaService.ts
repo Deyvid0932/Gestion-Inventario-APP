@@ -26,7 +26,7 @@ export const CajaService = {
 
       if (userId) {
         try {
-          const { error } = await supabase.from('cajas').delete().eq('id', id);
+          const { error } = await supabase.from('boxes').delete().eq('id', id);
           if (!error) {
             remoteDeleted = true;
           }

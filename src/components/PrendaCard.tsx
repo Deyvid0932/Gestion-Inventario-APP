@@ -3,12 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Animated as RNAnimated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { Swipeable, RectButton } from 'react-native-gesture-handler';
+import { Swipeable, RectButton, TouchableOpacity } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
   interpolateColor,
@@ -34,6 +33,7 @@ interface PrendaCardProps {
   onMove?: () => void;
   onToggleStatus?: () => void;
   historyMode?: boolean;
+  canEdit?: boolean;
   onImagePress: (uri: string | null | undefined) => void;
 }
 
@@ -48,6 +48,7 @@ export const PrendaCard = React.memo(({
   onToggleStatus,
   isHighlighted,
   historyMode = false,
+  canEdit = true,
   onImagePress,
 }: PrendaCardProps) => {
   const swipeableRef = React.useRef<Swipeable>(null);
@@ -59,11 +60,11 @@ export const PrendaCard = React.memo(({
   useEffect(() => {
     if (isHighlighted) {
       highlightOpacity.value = withSequence(
-        withTiming(1, { duration: 600 }),
-        withTiming(0, { duration: 1500 })
+        withTiming(1, { duration: 450 }),
+        withTiming(0, { duration: 800 })
       );
     }
-  }, [isHighlighted]);
+  }, [isHighlighted, highlightOpacity]);
 
   const animatedStyle = useAnimatedStyle(() => {
     const bgColor = interpolateColor(
@@ -97,6 +98,7 @@ export const PrendaCard = React.memo(({
   const renderRightActions = useCallback((
     progress: RNAnimated.AnimatedInterpolation<number>
   ) => {
+    if (!canEdit) return null;
     const trans = progress.interpolate({
       inputRange: [0, 1],
       outputRange: [containerWidth, 0]
@@ -132,14 +134,15 @@ export const PrendaCard = React.memo(({
         )}
       </View>
     );
-  }, [onMove, onDelete]);
+  }, [onMove, onDelete, canEdit]);
 
   return (
     <Swipeable
       ref={swipeableRef}
-      renderRightActions={renderRightActions}
+      renderRightActions={canEdit ? renderRightActions : undefined}
       friction={2.5}
       rightThreshold={40}
+      enabled={canEdit}
     >
       <TouchableOpacity
         activeOpacity={1}

@@ -22,6 +22,7 @@ import { DashboardSummaryCard } from '../components/DashboardSummaryCard';
 import { InventarioService } from '../services/InventarioService';
 import { SynchronizationEngine } from '../sync/SynchronizationEngine';
 import { AuthManager } from '../services/AuthManager';
+import { useRoles } from '../hooks/useRoles';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -32,6 +33,9 @@ export const InventariosScreen = () => {
   const setPrendas = useAppStore(state => state.setPrendas);
   const themeMode = useAppStore(state => state.themeMode);
   const user = useAppStore(state => state.user);
+
+  const { hasRole } = useRoles();
+  const canEdit = hasRole(['Admin', 'Editor']);
 
   // Suscripción reactiva pura a Zustand
   const inventarios = useAppStore(state => state.inventarios);
@@ -138,6 +142,7 @@ export const InventariosScreen = () => {
                   <InventarioCard
                     item={item}
                     theme={currentTheme}
+                    canEdit={canEdit}
                     onPress={() => handleNavigateToCajas(item.id, item.nombre)}
                     onEdit={() => navigateSafe('Form', { mode: 'BASIC', entityType: 'inventario', initialData: { id: item.id, nombre: item.nombre, descripcion: item.descripcion || '' } })}
                     onDelete={() => deleteInventario(item.id)}
@@ -173,7 +178,16 @@ export const InventariosScreen = () => {
           </View>
         )}
 
-        <FloatingButton style={{ bottom: 30 }} onPress={() => navigateSafe('Form', { mode: 'BASIC', entityType: 'inventario' })} />
+        <FloatingButton 
+          style={{ bottom: 30 }} 
+          onPress={() => {
+            if (!canEdit) {
+              Alert.alert('Acceso Restringido', 'Tu rol actual (Viewer) solo permite lectura. No tienes permisos para crear inventarios.');
+              return;
+            }
+            navigateSafe('Form', { mode: 'BASIC', entityType: 'inventario' });
+          }} 
+        />
       </View>
     </GestureHandlerRootView>
   );

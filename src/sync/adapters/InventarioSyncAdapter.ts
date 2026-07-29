@@ -26,14 +26,14 @@ export class InventarioSyncAdapter implements SyncAdapter {
       const payload = pendingRows.map(row => ({
         id: row.id,
         user_id: userId,
-        nombre: row.nombre,
-        descripcion: row.descripcion || '',
-        estado: (row as any).estado === 1 || (row as any).estado === 'Activo' ? 'Activo' : 'Inactivo',
-        "fechaCreacion": row.fechaCreacion,
+        name: (row as any).name ?? row.nombre,
+        description: (row as any).description ?? row.descripcion ?? '',
+        status: (row as any).active === false || (row as any).estado === 'Inactivo' || (row as any).estado === 0 || (row as any).status === 0 ? 0 : 1,
+        created_at: (row as any).created_at ?? row.fechaCreacion ?? new Date().toISOString(),
         updated_at: row.updated_at || new Date().toISOString(),
       }));
 
-      const { error } = await supabase.from('inventarios').upsert(payload, { onConflict: 'id' });
+      const { error } = await supabase.from('inventories').upsert(payload, { onConflict: 'id' });
 
       if (error) {
         console.error('Error al hacer push de inventarios a Supabase:', error);
@@ -59,7 +59,7 @@ export class InventarioSyncAdapter implements SyncAdapter {
   async pullRemote(db: SQLiteDatabase, userId: string, since: string | null): Promise<SyncResult> {
     const result: SyncResult = { success: true, pushedCount: 0, pulledCount: 0 };
     try {
-      let query = supabase.from('inventarios').select('*').eq('user_id', userId);
+      let query = supabase.from('inventories').select('*');
       if (since) {
         query = query.gt('updated_at', since);
       }
@@ -80,7 +80,7 @@ export class InventarioSyncAdapter implements SyncAdapter {
         // Purgar localmente si fue un pull completo (since === null) y el registro no está en Supabase
         if (since === null) {
           const remoteIds = new Set(remoteRows.map(r => r.id));
-          const localRows = await db.getAllAsync<{ id: string }>('SELECT id FROM inventarios WHERE user_id = ?', [userId]);
+          const localRows = await db.getAllAsync<{ id: string }>('SELECT id FROM inventarios');
           for (const localRow of localRows) {
             if (!remoteIds.has(localRow.id)) {
               await db.runAsync('DELETE FROM prendas WHERE cajaId IN (SELECT id FROM cajas WHERE inventarioId = ?)', [localRow.id]);
@@ -92,7 +92,10 @@ export class InventarioSyncAdapter implements SyncAdapter {
 
         for (const r of remoteRows) {
           const local = await db.getFirstAsync<Inventario>('SELECT * FROM inventarios WHERE id = ?', [r.id]);
-          const estadoVal = r.estado === 'Inactivo' ? 'Inactivo' : 'Activo';
+          const nombreVal = r.name || r.nombre || '';
+          const descVal = r.description || r.descripcion || '';
+          const fechaVal = r.created_at || r.fechaCreacion || new Date().toISOString();
+          const estadoVal = (r.status === 0 || r.status === 'Inactivo' || r.estado === 'Inactivo') ? 'Inactivo' : 'Activo';
 
           if (!local) {
             await db.runAsync(
@@ -101,9 +104,9 @@ export class InventarioSyncAdapter implements SyncAdapter {
               [
                 r.id,
                 r.user_id,
-                r.nombre,
-                r.descripcion || '',
-                r.fechaCreacion,
+                nombreVal,
+                descVal,
+                fechaVal,
                 estadoVal,
                 r.updated_at,
               ]
@@ -112,15 +115,16 @@ export class InventarioSyncAdapter implements SyncAdapter {
           } else {
             const localTime = local.updated_at ? new Date(local.updated_at).getTime() : 0;
             const remoteTime = r.updated_at ? new Date(r.updated_at).getTime() : 0;
+            const isPlaceholder = !local.nombre || local.nombre === 'Lote Sincronizado' || local.nombre.includes('Sincroniz');
 
-            if (remoteTime >= localTime) {
+            if (remoteTime >= localTime || isPlaceholder) {
               await db.runAsync(
                 `UPDATE inventarios SET user_id = ?, nombre = ?, descripcion = ?, fechaCreacion = ?, estado = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
                 [
                   r.user_id,
-                  r.nombre,
-                  r.descripcion || '',
-                  r.fechaCreacion,
+                  nombreVal || local.nombre,
+                  descVal,
+                  fechaVal,
                   estadoVal,
                   r.updated_at,
                   r.id,

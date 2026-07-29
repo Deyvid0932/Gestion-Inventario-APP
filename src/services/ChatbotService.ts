@@ -274,7 +274,7 @@ export const ChatbotService = {
         ).catch(() => {});
 
         Promise.all([
-          supabase.from('chat_history').delete().eq('sessionId', sessionId),
+          supabase.from('chat_messages').delete().eq('session_id', sessionId),
           supabase.from('chat_sessions').delete().eq('id', sessionId)
         ]).catch(() => {});
       }
@@ -345,7 +345,7 @@ export const ChatbotService = {
   clearHistory: async (db: SQLiteDatabase, userId?: string | null): Promise<void> => {
     try {
       if (userId) {
-        await supabase.from('chat_history').delete().neq('id', '');
+        await supabase.from('chat_messages').delete().neq('id', '');
         await supabase.from('chat_sessions').delete().neq('id', '');
       }
       await db.runAsync('DELETE FROM chat_history');

@@ -30,22 +30,33 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
             parsedMatches = null;
           }
         }
+        let isoCreatedAt = new Date().toISOString();
+        if (typeof row.timestamp === 'number') {
+          isoCreatedAt = new Date(row.timestamp).toISOString();
+        } else if (typeof row.created_at === 'number') {
+          isoCreatedAt = new Date(row.created_at).toISOString();
+        } else if (row.timestamp) {
+          try { isoCreatedAt = new Date(row.timestamp).toISOString(); } catch (_) {}
+        } else if (row.created_at) {
+          try { isoCreatedAt = new Date(row.created_at).toISOString(); } catch (_) {}
+        }
+
         return {
           id: row.id,
-          "sessionId": row.sessionId,
+          session_id: row.session_id ?? row.sessionId,
           sender: row.sender,
-          text: row.text,
+          content: row.content ?? row.text,
           matches_json: parsedMatches,
-          "engineUsed": row.engineUsed || null,
-          timestamp: row.timestamp,
+          engine_used: row.engine_used ?? row.engineUsed ?? null,
+          created_at: isoCreatedAt,
           updated_at: row.updated_at || new Date().toISOString(),
         };
       });
 
-      const { error } = await supabase.from('chat_history').upsert(payload, { onConflict: 'id' });
+      const { error } = await supabase.from('chat_messages').upsert(payload, { onConflict: 'id' });
 
       if (error) {
-        console.error('Error al hacer push de chat_history a Supabase:', error);
+        console.error('Error al hacer push de chat_messages a Supabase:', error);
         for (const id of ids) {
           await db.runAsync(`UPDATE chat_history SET sync_status = 'FAILED' WHERE id = ?`, [id]);
         }
@@ -68,14 +79,14 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
   async pullRemote(db: SQLiteDatabase, _userId: string, since: string | null): Promise<SyncResult> {
     const result: SyncResult = { success: true, pushedCount: 0, pulledCount: 0 };
     try {
-      let query = supabase.from('chat_history').select('*');
+      let query = supabase.from('chat_messages').select('*');
       if (since) {
         query = query.gt('updated_at', since);
       }
 
       const { data: remoteRows, error } = await query;
       if (error) {
-        console.error('Error al hacer pull de chat_history desde Supabase:', error);
+        console.error('Error al hacer pull de chat_messages desde Supabase:', error);
         result.success = false;
         result.errors = [error.message];
         return result;
@@ -99,6 +110,25 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
         for (const r of remoteRows) {
           const local = await db.getFirstAsync<any>('SELECT * FROM chat_history WHERE id = ?', [r.id]);
           const matchesStr = r.matches_json ? (typeof r.matches_json === 'string' ? r.matches_json : JSON.stringify(r.matches_json)) : null;
+          const sessionIdVal = r.session_id || r.sessionId;
+          const textVal = r.content || r.text || '';
+          const engineVal = r.engine_used || r.engineUsed || null;
+          const timestampVal = r.timestamp || r.created_at || new Date().toISOString();
+
+          // Garantizar integridad referencial de Foreign Key (sessionId -> chat_sessions.id)
+          if (sessionIdVal) {
+            const parentSession = await db.getFirstAsync('SELECT id FROM chat_sessions WHERE id = ?', [sessionIdVal]);
+            if (!parentSession) {
+              await db.runAsync(
+                `INSERT OR IGNORE INTO chat_sessions (id, user_id, title, createdAt, updatedAt, updated_at, sync_status) 
+                 VALUES (?, ?, 'Chat Sincronizado', ?, ?, ?, 'SYNCED')`,
+                [sessionIdVal, _userId || '', timestampVal, timestampVal, r.updated_at || new Date().toISOString()]
+              );
+            }
+          } else {
+            // Si el registro de Supabase carece de session_id, omitirlo para no violar la Foreign Key
+            continue;
+          }
 
           if (!local) {
             await db.runAsync(
@@ -106,12 +136,12 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
               [
                 r.id,
-                r.sessionId,
+                sessionIdVal,
                 r.sender,
-                r.text,
+                textVal,
                 matchesStr,
-                r.engineUsed || null,
-                r.timestamp,
+                engineVal,
+                timestampVal,
                 r.updated_at,
               ]
             );
@@ -124,12 +154,12 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
               await db.runAsync(
                 `UPDATE chat_history SET sessionId = ?, sender = ?, text = ?, matches_json = ?, engineUsed = ?, timestamp = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
                 [
-                  r.sessionId,
+                  sessionIdVal,
                   r.sender,
-                  r.text,
+                  textVal,
                   matchesStr,
-                  r.engineUsed || null,
-                  r.timestamp,
+                  engineVal,
+                  timestampVal,
                   r.updated_at,
                   r.id,
                 ]

@@ -29,12 +29,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PrendaService } from '../services/PrendaService';
 import { InventarioService } from '../services/InventarioService';
 import { CajaService } from '../services/CajaService';
+import { AuthManager } from '../services/AuthManager';
 import { SynchronizationEngine } from '../sync/SynchronizationEngine';
 import { AlarmService } from '../services/AlarmService';
 import { usePrenda } from '../hooks/usePrenda';
 import { Ionicons } from '@expo/vector-icons';
 import { clayStyles } from '../style/theme';
 import { getColorHex } from '../utils/colorUtils';
+import { ImagePreviewModal } from '../components/ImagePreviewModal';
+
+import { useRoles } from '../hooks/useRoles';
 
 export const FormScreen = () => {
   const route = useRoute<RouteProp<RootStackParamList, 'Form'>>();
@@ -43,6 +47,7 @@ export const FormScreen = () => {
   const currentTheme = useAppStore(state => state.currentTheme);
   const themeMode = useAppStore(state => state.themeMode);;
   const insets = useSafeAreaInsets();
+  const { hasRole } = useRoles();
   const { addPrenda } = usePrenda();
   const lastSubmitTime = useRef(0);
 
@@ -56,6 +61,7 @@ export const FormScreen = () => {
   const buttonScale = useRef(new Animated.Value(1)).current;
   const [imageUri, setImageUri] = useState<string | null>(initialData?.fotoUri || null);
   const [imageUri2, setImageUri2] = useState<string | null>(initialData?.fotoUri2 || null);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
 
   const [alarmEnabled, setAlarmEnabled] = useState<boolean>(!!initialData?.alarmaFechaHora);
   const [alarmDate, setAlarmDate] = useState<Date>(() => {
@@ -125,16 +131,29 @@ export const FormScreen = () => {
   };
 
   const removeImage = (slot: 1 | 2) => {
-    if (slot === 1) {
-      if (imageUri2) {
-        setImageUri(imageUri2);
-        setImageUri2(null);
-      } else {
-        setImageUri(null);
-      }
-    } else {
-      setImageUri2(null);
-    }
+    Alert.alert(
+      'Eliminar Fotografía',
+      '¿Estás seguro de que deseas eliminar esta fotografía?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            if (slot === 1) {
+              if (imageUri2) {
+                setImageUri(imageUri2);
+                setImageUri2(null);
+              } else {
+                setImageUri(null);
+              }
+            } else {
+              setImageUri2(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const onPressIn = () => {
@@ -150,6 +169,11 @@ export const FormScreen = () => {
   };
 
   const handleSubmit = async () => {
+    if (!hasRole(['Admin', 'Editor'])) {
+      Alert.alert('Acceso Restringido', 'Tu rol actual (Viewer) solo permite lectura. No tienes permisos para crear o modificar registros.');
+      return;
+    }
+
     const now = Date.now();
     if (now - lastSubmitTime.current < 400) return;
     lastSubmitTime.current = now;
@@ -230,11 +254,17 @@ export const FormScreen = () => {
           op: formData.op || '',
           estilo: formData.estilo || '',
           color: formData.color || '',
+          talla: formData.talla || initialData?.talla || '',
           fotoUri: imageUri || null,
           fotoUri2: imageUri2 || null,
-          estado: 1,
+          r2Key: initialData?.r2Key || null,
+          r2Key2: initialData?.r2Key2 || null,
+          estado: initialData?.estado ?? 1,
           alarmaFechaHora: finalAlarmaFechaHora,
           alarmaNotificationId: finalNotificationId,
+          fechaCreacion: initialData?.fechaCreacion || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          sync_status: 'PENDING',
         } as any;
 
         if (isUpdate) {
@@ -254,6 +284,8 @@ export const FormScreen = () => {
           }
         }
       }
+
+      await AuthManager.refreshAllAppState(db);
 
       const currentUser = useAppStore.getState().user;
       if (currentUser?.id) {
@@ -388,7 +420,13 @@ export const FormScreen = () => {
                     <View style={{ flexDirection: 'row', gap: 12, width: '100%', height: 120 }}>
                       {imageUri && (
                         <View style={[styles.imagePreviewContainer, { flex: 1, height: '100%' }]}>
-                          <Image source={{ uri: imageUri }} style={{ width: '100%', height: '100%', borderRadius: 12 }} resizeMode="cover" />
+                          <TouchableOpacity
+                            activeOpacity={0.88}
+                            style={{ width: '100%', height: '100%' }}
+                            onPress={() => setPreviewUri(imageUri)}
+                          >
+                            <Image source={{ uri: imageUri }} style={{ width: '100%', height: '100%', borderRadius: 12 }} resizeMode="cover" />
+                          </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.removeImageBtn}
                             onPress={() => removeImage(1)}
@@ -400,7 +438,13 @@ export const FormScreen = () => {
 
                       {imageUri2 ? (
                         <View style={[styles.imagePreviewContainer, { flex: 1, height: '100%' }]}>
-                          <Image source={{ uri: imageUri2 }} style={{ width: '100%', height: '100%', borderRadius: 12 }} resizeMode="cover" />
+                          <TouchableOpacity
+                            activeOpacity={0.88}
+                            style={{ width: '100%', height: '100%' }}
+                            onPress={() => setPreviewUri(imageUri2)}
+                          >
+                            <Image source={{ uri: imageUri2 }} style={{ width: '100%', height: '100%', borderRadius: 12 }} resizeMode="cover" />
+                          </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.removeImageBtn}
                             onPress={() => removeImage(2)}
@@ -604,6 +648,12 @@ export const FormScreen = () => {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ImagePreviewModal
+        uri={previewUri}
+        visible={!!previewUri}
+        onClose={() => setPreviewUri(null)}
+      />
     </View>
   );
 };

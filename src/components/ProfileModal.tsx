@@ -34,6 +34,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
   const setIsAuthLoading = useAppStore(state => state.setIsAuthLoading);
   const setSession = useAppStore(state => state.setSession);
   const logout = useAppStore(state => state.logout);
+  const userRoles = useAppStore(state => state.userRoles);
   const lastSyncTime = useAppStore(state => state.lastSyncTime);
   const setLastSyncTime = useAppStore(state => state.setLastSyncTime);
 
@@ -48,7 +49,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
 
   const handleSyncNow = async () => {
     if (!user) {
-      Alert.alert('Modo Invitado', 'Inicia sesión con Google para sincronizar tus datos en la nube.');
+      Alert.alert('Modo Local', 'Inicia sesión con Google para sincronizar tus datos en la nube.');
       return;
     }
     try {
@@ -200,6 +201,16 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
                     <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>DETALLES DE LA CUENTA</Text>
                     <View style={[styles.detailsGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
                       <View style={styles.detailRow}>
+                        <Ionicons name="key-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
+                        <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Rol asignado</Text>
+                        <Text style={[styles.detailValue, { color: currentTheme.primary, fontWeight: '800' }]}>
+                          {userRoles[0] === 'Admin' ? '👑 Admin' : userRoles[0] === 'Editor' ? '✏️ Editor' : '👁️ Viewer'}
+                        </Text>
+                      </View>
+
+                      <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+                      <View style={styles.detailRow}>
                         <Ionicons name="calendar-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
                         <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Miembro desde</Text>
                         <Text style={[styles.detailValue, { color: currentTheme.text }]}>{createdAt}</Text>
@@ -262,12 +273,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
                   </>
                 ) : (
                   <>
-                    {/* Modo Invitado: Tarjetas Visuales de Ventajas */}
+                    {/* Modo Local: Tarjetas Visuales de Ventajas */}
                     <View style={[styles.guestHero, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
                       <View style={[styles.guestIconBadge, { backgroundColor: currentTheme.primary + '20' }]}>
                         <Ionicons name="person-outline" size={32} color={currentTheme.primary} />
                       </View>
-                      <Text style={[styles.guestHeroTitle, { color: currentTheme.text }]}>Perfil de Invitado</Text>
+                      <Text style={[styles.guestHeroTitle, { color: currentTheme.text }]}>Perfil Local</Text>
                       <Text style={[styles.guestHeroSubtitle, { color: currentTheme.textSecondary }]}>
                         Estás utilizando Topytop Kith en Modo Local sin cuenta conectada.
                       </Text>

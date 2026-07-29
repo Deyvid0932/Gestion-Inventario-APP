@@ -51,23 +51,23 @@ export class PrendaSyncAdapter implements SyncAdapter {
         row.r2Key2 = updatedR2Key2;
       }
 
-      // Construir payload enviando directamente r2Key y r2Key2 a Supabase
+      // Construir payload enviando directamente a la tabla garments de Supabase
       const payload = pendingRows.map(row => ({
         id: row.id,
-        "cajaId": row.cajaId,
+        box_id: row.box_id ?? row.cajaId,
         op: row.op || '',
-        estilo: row.estilo,
+        style: row.style ?? row.estilo,
         color: row.color,
-        r2Key: row.r2Key || null,
-        r2Key2: row.r2Key2 || null,
-        estado: row.estado,
-        "fechaCreacion": row.fechaCreacion || new Date().toISOString(),
-        "alarmaFechaHora": row.alarmaFechaHora || null,
-        "alarmaNotificationId": row.alarmaNotificationId || null,
+        status: row.status ?? row.estado,
+        created_at: row.created_at ?? row.fechaCreacion ?? new Date().toISOString(),
+        alarm_datetime: row.alarm_datetime ?? row.alarmaFechaHora ?? null,
+        alarm_notification_id: row.alarm_notification_id ?? row.alarmaNotificationId ?? null,
+        r2_key: row.r2_key ?? row.r2Key ?? null,
+        r2_key_2: row.r2_key_2 ?? row.r2Key2 ?? null,
         updated_at: row.updated_at || new Date().toISOString(),
       }));
 
-      const { error } = await supabase.from('prendas').upsert(payload, { onConflict: 'id' });
+      const { error } = await supabase.from('garments').upsert(payload, { onConflict: 'id' });
 
       if (error) {
         console.error('Error al hacer push de prendas a Supabase:', error);
@@ -93,7 +93,7 @@ export class PrendaSyncAdapter implements SyncAdapter {
   async pullRemote(db: SQLiteDatabase, _userId: string, since: string | null): Promise<SyncResult> {
     const result: SyncResult = { success: true, pushedCount: 0, pulledCount: 0 };
     try {
-      let query = supabase.from('prendas').select('*');
+      let query = supabase.from('garments').select('*');
       if (since) {
         query = query.gt('updated_at', since);
       }
@@ -123,6 +123,26 @@ export class PrendaSyncAdapter implements SyncAdapter {
 
         for (const r of remoteRows) {
           const local = await db.getFirstAsync<any>('SELECT * FROM prendas WHERE id = ?', [r.id]);
+          const boxIdVal = r.box_id || r.cajaId;
+          const styleVal = r.style || r.estilo || '';
+          const colorVal = r.color || '';
+          const sizeVal = r.size || r.talla || '';
+          const statusVal = r.status ?? r.estado ?? 1;
+          const fechaVal = r.created_at || r.fechaCreacion || new Date().toISOString();
+          const alarmDateVal = r.alarm_datetime || r.alarmaFechaHora || null;
+          const alarmNotifIdVal = r.alarm_notification_id || r.alarmaNotificationId || null;
+          const r2KeyVal = r.r2_key || r.r2Key || null;
+          const r2Key2Val = r.r2_key_2 || r.r2Key2 || null;
+
+          if (boxIdVal) {
+            const parentCaja = await db.getFirstAsync('SELECT id FROM cajas WHERE id = ?', [boxIdVal]);
+            if (!parentCaja) {
+              await db.runAsync(
+                `INSERT OR IGNORE INTO cajas (id, inventarioId, nombre, fechaCreacion, orden, updated_at, sync_status) VALUES (?, '', 'Caja Sincronizada', ?, 0, ?, 'SYNCED')`,
+                [boxIdVal, fechaVal, r.updated_at || fechaVal]
+              );
+            }
+          }
 
           if (!local) {
             await db.runAsync(
@@ -130,19 +150,19 @@ export class PrendaSyncAdapter implements SyncAdapter {
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
               [
                 r.id,
-                r.cajaId,
+                boxIdVal,
                 r.op || '',
-                r.estilo,
-                r.color,
-                r.talla || '',
+                styleVal,
+                colorVal,
+                sizeVal,
                 r.fotoUri || null,
                 r.fotoUri2 || null,
-                r.r2Key || null,
-                r.r2Key2 || null,
-                r.estado,
-                r.fechaCreacion,
-                r.alarmaFechaHora || null,
-                r.alarmaNotificationId || null,
+                r2KeyVal,
+                r2Key2Val,
+                statusVal,
+                fechaVal,
+                alarmDateVal,
+                alarmNotifIdVal,
                 r.updated_at,
               ]
             );
@@ -155,17 +175,17 @@ export class PrendaSyncAdapter implements SyncAdapter {
               await db.runAsync(
                 `UPDATE prendas SET cajaId = ?, op = ?, estilo = ?, color = ?, talla = ?, r2Key = ?, r2Key2 = ?, estado = ?, fechaCreacion = ?, alarmaFechaHora = ?, alarmaNotificationId = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
                 [
-                  r.cajaId,
+                  boxIdVal,
                   r.op || '',
-                  r.estilo,
-                  r.color,
-                  r.talla || '',
-                  r.r2Key || local.r2Key || null,
-                  r.r2Key2 || local.r2Key2 || null,
-                  r.estado,
-                  r.fechaCreacion,
-                  r.alarmaFechaHora || null,
-                  r.alarmaNotificationId || null,
+                  styleVal,
+                  colorVal,
+                  sizeVal,
+                  r2KeyVal || local.r2Key || null,
+                  r2Key2Val || local.r2Key2 || null,
+                  statusVal,
+                  fechaVal,
+                  alarmDateVal,
+                  alarmNotifIdVal,
                   r.updated_at,
                   r.id,
                 ]

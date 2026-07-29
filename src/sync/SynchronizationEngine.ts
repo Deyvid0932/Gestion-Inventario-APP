@@ -83,10 +83,22 @@ class SynchronizationEngineClass {
 
       if (!pendingDeletions || pendingDeletions.length === 0) return;
 
+      const tableMap: Record<string, string> = {
+        inventarios: 'inventories',
+        cajas: 'boxes',
+        prendas: 'garments',
+        chat_sessions: 'chat_sessions',
+        chat_history: 'chat_messages',
+        chat_messages: 'chat_messages',
+      };
+
       for (const item of pendingDeletions) {
-        const { error } = await supabase.from(item.tableName).delete().eq('id', item.recordId);
+        const targetRemoteTable = tableMap[item.tableName] || item.tableName;
+        const { error } = await supabase.from(targetRemoteTable).delete().eq('id', item.recordId);
         if (!error) {
           await db.runAsync(`DELETE FROM pending_deletions WHERE id = ?`, [item.id]);
+        } else {
+          console.warn(`[SyncEngine] Error al eliminar registro ${item.recordId} de ${targetRemoteTable} en Supabase:`, error.message);
         }
       }
     } catch (e) {}

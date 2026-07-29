@@ -134,7 +134,7 @@ export const PrendaService = {
 
       if (userId) {
         try {
-          const { error } = await supabase.from('prendas').delete().eq('id', id);
+          const { error } = await supabase.from('garments').delete().eq('id', id);
           if (!error) {
             remoteDeleted = true;
             if (prenda?.r2Key) {

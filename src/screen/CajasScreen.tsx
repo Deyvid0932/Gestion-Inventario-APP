@@ -20,6 +20,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CajaService } from '../services/CajaService';
 import { AuthManager } from '../services/AuthManager';
 import CajaCard from '../components/CajaCard';
+import { useRoles } from '../hooks/useRoles';
 
 type CajasRouteProp = RouteProp<RootStackParamList, 'Cajas'>;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -32,6 +33,9 @@ export const CajasScreen = () => {
   const currentTheme = useAppStore(state => state.currentTheme);
   const themeMode = useAppStore(state => state.themeMode);
   const user = useAppStore(state => state.user);
+
+  const { hasRole } = useRoles();
+  const canEdit = hasRole(['Admin', 'Editor']);
 
   const [cajas, setCajas] = useState<CajaWithStats[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,14 +145,15 @@ export const CajasScreen = () => {
       <CajaCard
         item={item}
         theme={currentTheme}
+        canEdit={canEdit}
         onPress={() => handleNavigateToPrendas(item.id, item.nombre)}
         onEdit={() => navigateSafe('Form', { mode: 'NAME_ONLY', entityType: 'caja', initialData: { id: item.id, nombre: item.nombre } })}
         onDelete={() => deleteCaja(item.id, item.nombre)}
-        drag={drag}
+        drag={canEdit ? drag : () => {}}
         isActive={isActive}
       />
     </View>
-  ), [currentTheme, navigateSafe, deleteCaja, handleNavigateToPrendas]);
+  ), [currentTheme, navigateSafe, deleteCaja, handleNavigateToPrendas, canEdit]);
 
   const showSkeleton = !db || (loading && cajas.length === 0);
 
@@ -199,7 +204,13 @@ export const CajasScreen = () => {
         </View>
 
         <FloatingButton
-          onPress={() => navigateSafe('Form', { mode: 'NAME_ONLY', entityType: 'caja', parentId: inventarioId })}
+          onPress={() => {
+            if (!canEdit) {
+              Alert.alert('Acceso Restringido', 'Tu rol actual (Viewer) solo permite lectura. No tienes permisos para crear cajas.');
+              return;
+            }
+            navigateSafe('Form', { mode: 'NAME_ONLY', entityType: 'caja', parentId: inventarioId });
+          }}
         />
       </View>
     </GestureHandlerRootView>

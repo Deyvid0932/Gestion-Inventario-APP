@@ -31,6 +31,7 @@ import { MovePrendaModal } from '../components/MovePrendaModal';
 import { SuccessModal } from '../components/SuccessModal';
 
 import { AuthManager } from '../services/AuthManager';
+import { useRoles } from '../hooks/useRoles';
 
 type ExcelGridRouteProp = RouteProp<RootStackParamList, 'ExcelGrid'>;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -38,6 +39,7 @@ type NavigationProp = StackNavigationProp<RootStackParamList>;
 const CajaContentsScreen = () => {
   const route = useRoute<ExcelGridRouteProp>();
   const navigation = useNavigation<NavigationProp>();
+  const { hasRole } = useRoles();
   const { cajaId, nombreCaja } = route.params;
   const db = useSQLiteContext();
   const user = useAppStore(state => state.user);
@@ -203,6 +205,11 @@ const CajaContentsScreen = () => {
   }, [Object.keys(selectedPrendas).filter(k => selectedPrendas[k]).length, cajaId, navigateSafe, toggleSelectPrenda]);
 
   const handleBulkDelete = () => {
+    if (!hasRole(['Admin', 'Editor'])) {
+      Alert.alert('Acceso Restringido', 'Tu rol actual solo permite lectura. No tienes permisos para eliminar registros.');
+      return;
+    }
+
     Alert.alert(
       "Eliminar Selección",
       `¿Deseas eliminar las ${Object.keys(selectedPrendas).filter(k => selectedPrendas[k]).length} prendas seleccionadas?`,
@@ -229,6 +236,11 @@ const CajaContentsScreen = () => {
   };
 
   const handleCameraScan = async () => {
+    if (!hasRole(['Admin', 'Editor'])) {
+      Alert.alert('Acceso Restringido', 'Tu rol actual (Viewer) solo permite lectura. No tienes permisos para escanear prendas.');
+      return;
+    }
+
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') return Alert.alert('Error', 'Permisos denegados');
 
@@ -256,6 +268,11 @@ const CajaContentsScreen = () => {
   };
 
   const deletePrenda = useCallback(async (id: string) => {
+    if (!hasRole(['Admin', 'Editor'])) {
+      Alert.alert('Acceso Restringido', 'Tu rol actual (Viewer) solo permite lectura. No tienes permisos para eliminar registros.');
+      return;
+    }
+
     Alert.alert("Eliminar", "¿Eliminar registro de prenda?", [
       { text: "Cancelar" },
       {
@@ -275,43 +292,55 @@ const CajaContentsScreen = () => {
         }
       }
     ]);
-  }, [db, fetchPrendas, user?.id]);
+  }, [db, fetchPrendas, user?.id, hasRole]);
 
 
-  const renderItem = useCallback(({ item }: { item: Prenda }) => (
-    <PrendaCard
-      item={item}
-      theme={currentTheme}
-      isSelected={!!selectedPrendas[item.id]}
-      isHighlighted={item.id === highlightedId}
-      onPress={() => handleItemPress(item)}
-      onLongPress={() => toggleSelectPrenda(item.id)}
-      onDelete={() => deletePrenda(item.id)}
-      onToggleStatus={() => {
-        const nextStatusLabel = item.estado === 1 ? 'Inactivo' : 'Activo';
-        Alert.alert("Estado", `¿Marcar como ${nextStatusLabel}?`, [
-          { text: "Cancelar", style: "cancel" },
-          {
-            text: "Confirmar",
-            onPress: async () => {
-              await togglePrendaStatus(item.id);
-              fetchPrendas(false);
-            }
+  const renderItem = useCallback(({ item }: { item: Prenda }) => {
+    const canEdit = hasRole(['Admin', 'Editor']);
+    return (
+      <PrendaCard
+        item={item}
+        theme={currentTheme}
+        isSelected={!!selectedPrendas[item.id]}
+        isHighlighted={item.id === highlightedId}
+        canEdit={canEdit}
+        onPress={() => handleItemPress(item)}
+        onLongPress={() => toggleSelectPrenda(item.id)}
+        onDelete={() => deletePrenda(item.id)}
+        onToggleStatus={() => {
+          if (!canEdit) {
+            Alert.alert('Acceso Restringido', 'Tu rol actual (Viewer) solo permite lectura. No tienes permisos para cambiar el estado.');
+            return;
           }
-        ]);
-      }}
-      onMove={() => {
-        setPrendaToMove(item.id);
-        setMoveModalVisible(true);
-      }}
-      onImagePress={(uri) => {
-        if (uri) {
-          setModalVisible(true);
-          setCurrentImage(uri);
-        }
-      }}
-    />
-  ), [currentTheme, selectedPrendas, highlightedId, handleItemPress, toggleSelectPrenda, deletePrenda, togglePrendaStatus, fetchPrendas]);
+          const nextStatusLabel = item.estado === 1 ? 'Inactivo' : 'Activo';
+          Alert.alert("Estado", `¿Marcar como ${nextStatusLabel}?`, [
+            { text: "Cancelar", style: "cancel" },
+            {
+              text: "Confirmar",
+              onPress: async () => {
+                await togglePrendaStatus(item.id);
+                fetchPrendas(false);
+              }
+            }
+          ]);
+        }}
+        onMove={() => {
+          if (!canEdit) {
+            Alert.alert('Acceso Restringido', 'Tu rol actual (Viewer) solo permite lectura. No tienes permisos para mover prendas.');
+            return;
+          }
+          setPrendaToMove(item.id);
+          setMoveModalVisible(true);
+        }}
+        onImagePress={(uri) => {
+          if (uri) {
+            setModalVisible(true);
+            setCurrentImage(uri);
+          }
+        }}
+      />
+    );
+  }, [currentTheme, selectedPrendas, highlightedId, handleItemPress, toggleSelectPrenda, deletePrenda, togglePrendaStatus, fetchPrendas, hasRole]);
 
   const showSkeleton = !db || (loading && localPrendas.length === 0);
 

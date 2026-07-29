@@ -4,16 +4,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '../store/useAppStore';
 import { clayStyles } from '../style/theme';
 
+import { RoleGuard } from './RoleGuard';
+import { RoleName } from '../types/roles';
+
 interface FloatingButtonProps {
   onPress: () => void;
   icon?: string;
   style?: ViewStyle;
+  roles?: RoleName[];
 }
 
 export const FloatingButton: React.FC<FloatingButtonProps> = ({
   onPress,
   icon = "add",
-  style
+  style,
+  roles = ['Admin', 'Editor'],
 }) => {
 
   const currentTheme = useAppStore(state => state.currentTheme);
@@ -30,31 +35,33 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
   };
 
   return (
-    <TouchableOpacity
-      activeOpacity={1}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
-      onPress={onPress}
-      style={[{ position: 'absolute', bottom: 90, right: 24, zIndex: 999 }, style]}
-    >
-      <Animated.View
-        style={[
-          styles.button,
-          {
-            backgroundColor: currentTheme.primary,
-            borderColor: currentTheme.border,
-            borderWidth: clayStyles.borderWidth,
-            shadowColor: currentTheme.borderShadow,
-            shadowOpacity: 0.4,
-            shadowOffset: { width: 0, height: 8 },
-            shadowRadius: 12,
-            transform: [{ scale: scaleAnim }]
-          }
-        ]}
+    <RoleGuard roles={roles}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        onPress={onPress}
+        style={[{ position: 'absolute', bottom: 90, right: 24, zIndex: 999 }, style]}
       >
-        <Ionicons name={icon as any} size={28} color={themeMode === 'light' ? '#FFF' : '#000'} />
-      </Animated.View>
-    </TouchableOpacity>
+        <Animated.View
+          style={[
+            styles.button,
+            {
+              backgroundColor: currentTheme.primary,
+              borderColor: currentTheme.border,
+              borderWidth: clayStyles.borderWidth,
+              shadowColor: currentTheme.borderShadow,
+              shadowOpacity: 0.4,
+              shadowOffset: { width: 0, height: 8 },
+              shadowRadius: 12,
+              transform: [{ scale: scaleAnim }]
+            }
+          ]}
+        >
+          <Ionicons name={icon as any} size={28} color={themeMode === 'light' ? '#FFF' : '#000'} />
+        </Animated.View>
+      </TouchableOpacity>
+    </RoleGuard>
   );
 };
 

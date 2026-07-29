@@ -117,7 +117,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose }) => {
                 <View style={[styles.metaPill, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
                   <Text style={[styles.metaLabel, { color: currentTheme.textSecondary }]}>Estado Usuario</Text>
                   <Text style={[styles.metaValue, { color: user ? '#2ecc71' : currentTheme.primary }]}>
-                    {user ? 'Autenticado' : 'Invitado'}
+                    {user ? 'Autenticado' : 'Sin sesión'}
                   </Text>
                 </View>
               </View>

@@ -71,6 +71,7 @@ serve(async (req) => {
     });
 
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+    console.log(user?.id);
     if (authError || !user) {
       console.error("Error autenticando usuario JWT:", authError);
       return new Response(JSON.stringify({ error: 'Token de sesión no válido o expirado' }), {

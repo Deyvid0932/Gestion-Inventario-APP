@@ -2,13 +2,12 @@ import React, { memo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   Animated,
   Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Swipeable, RectButton } from 'react-native-gesture-handler';
+import { Swipeable, RectButton, TouchableOpacity } from 'react-native-gesture-handler';
 import { InventarioStats } from '../types';
 import { clayStyles } from '../style/theme';
 
@@ -18,6 +17,7 @@ interface InventarioCardProps {
   onEdit: () => void;
   onDelete: () => void;
   theme: any;
+  canEdit?: boolean;
 }
 
 const InventarioCard = memo(({
@@ -25,7 +25,8 @@ const InventarioCard = memo(({
   onPress,
   onEdit,
   onDelete,
-  theme
+  theme,
+  canEdit = true,
 }: InventarioCardProps) => {
   const swipeableRef = useRef<Swipeable>(null);
 
@@ -43,6 +44,7 @@ const InventarioCard = memo(({
   const progressColor = getProgressColor();
 
   const renderRightActions = useCallback((progress: any) => {
+    if (!canEdit) return null;
     const trans = progress.interpolate({
       inputRange: [0, 1],
       outputRange: [160, 0],
@@ -95,19 +97,19 @@ const InventarioCard = memo(({
         </Animated.View>
       </View>
     );
-  }, [onEdit, onDelete, item.nombre]);
+  }, [onEdit, onDelete, item.nombre, canEdit]);
 
   return (
     <Swipeable
       ref={swipeableRef}
-      renderRightActions={renderRightActions}
+      renderRightActions={canEdit ? renderRightActions : undefined}
       friction={3}
       rightThreshold={30}
+      enabled={canEdit}
     >
-      <TouchableOpacity
-        activeOpacity={0.8}
-        delayPressIn={0}
-        pressRetentionOffset={{ top: 20, left: 20, right: 20, bottom: 20 }}
+      <RectButton
+        activeOpacity={0.1}
+        underlayColor={theme.card}
         style={[
           styles.card,
           clayStyles,
@@ -159,7 +161,7 @@ const InventarioCard = memo(({
             />
           </View>
         </View>
-      </TouchableOpacity>
+      </RectButton>
     </Swipeable>
   );
 }, (prev, next) => {

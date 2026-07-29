@@ -18,6 +18,18 @@ import * as SplashScreen from 'expo-splash-screen';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+// Prevenir pantalla roja por bug interno de Expo Dev Settings en rechazo de promesas
+if (typeof (global as any).ErrorUtils !== 'undefined') {
+  const originalHandler = (global as any).ErrorUtils.getGlobalHandler();
+  (global as any).ErrorUtils.setGlobalHandler((error: any, isFatal: boolean) => {
+    if (error?.message?.includes('reload') || error?.toString()?.includes('reload')) {
+      console.warn('[ExpoDevGuard] Error de dev reload ignorado:', error);
+      return;
+    }
+    if (originalHandler) originalHandler(error, isFatal);
+  });
+}
+
 // Garantizar accesibilidad de fuente grande sin romper el diseño en pantallas pequeñas
 if ((Text as any).defaultProps == null) (Text as any).defaultProps = {};
 (Text as any).defaultProps.maxFontSizeMultiplier = 1.35;
@@ -25,7 +37,7 @@ if ((Text as any).defaultProps == null) (Text as any).defaultProps = {};
 if ((TextInput as any).defaultProps == null) (TextInput as any).defaultProps = {};
 (TextInput as any).defaultProps.maxFontSizeMultiplier = 1.35;
 
-export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+import { navigationRef } from './src/navigation/navigationRef';
 
 const ThemeInitializer = () => {
   const db = useSQLiteContext();

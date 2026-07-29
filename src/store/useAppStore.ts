@@ -6,6 +6,8 @@ import { getTheme, ColorSchemeType, theme } from '../style/theme';
 import { Prenda, InventarioStats } from '../types';
 import { SettingsService } from '../services/SettingsService';
 
+import { UserProfile, RoleName } from '../types/roles';
+
 const ONBOARDING_KEY = 'has_completed_onboarding_v1';
 
 interface AppState {
@@ -19,12 +21,18 @@ interface AppState {
   // Supabase Auth & Sync State
   user: User | null;
   session: Session | null;
+  userProfile: UserProfile | null;
+  userRoles: RoleName[];
+  isAccountActive: boolean;
+  isRoleLoading: boolean;
   isAuthLoading: boolean;
   isSyncing: boolean;
   syncMessage: string;
   lastSyncTime: string | null;
   setUser: (user: User | null) => void;
   setSession: (session: Session | null) => void;
+  setUserProfileAndRoles: (profile: UserProfile | null, roles: RoleName[], isActive?: boolean) => void;
+  setIsRoleLoading: (loading: boolean) => void;
   setIsAuthLoading: (loading: boolean) => void;
   setSyncing: (isSyncing: boolean, message?: string) => void;
   setLastSyncTime: (time: string | null) => void;
@@ -92,16 +100,34 @@ export const useAppStore = create<AppState>((set) => ({
   // Auth State
   user: null,
   session: null,
+  userProfile: null,
+  userRoles: [],
+  isAccountActive: true,
+  isRoleLoading: false,
   isAuthLoading: false,
   isSyncing: false,
   syncMessage: '',
   lastSyncTime: null,
   setUser: (user) => set({ user }),
   setSession: (session) => set({ session, user: session?.user ?? null }),
+  setUserProfileAndRoles: (userProfile, userRoles, isAccountActive = true) => set({
+    userProfile,
+    userRoles,
+    isAccountActive,
+    isRoleLoading: false,
+  }),
+  setIsRoleLoading: (isRoleLoading) => set({ isRoleLoading }),
   setIsAuthLoading: (isAuthLoading) => set({ isAuthLoading }),
   setSyncing: (isSyncing, message) => set({ isSyncing, syncMessage: message || '' }),
   setLastSyncTime: (lastSyncTime) => set({ lastSyncTime }),
-  logout: () => set({ user: null, session: null, isSyncing: false }),
+  logout: () => set({
+    user: null,
+    session: null,
+    userProfile: null,
+    userRoles: [],
+    isAccountActive: true,
+    isSyncing: false
+  }),
 
   // Onboarding State
   hasCompletedOnboarding: null,
@@ -162,6 +188,10 @@ export const useAppStore = create<AppState>((set) => ({
   clearAllState: () => set({
     user: null,
     session: null,
+    userProfile: null,
+    userRoles: [],
+    isAccountActive: true,
+    isRoleLoading: false,
     lastSyncTime: null,
     isSyncing: false,
     syncMessage: '',

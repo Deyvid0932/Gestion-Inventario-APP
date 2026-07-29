@@ -41,9 +41,7 @@ export const StatsService = {
         topColores: [],
       };
 
-      const userFilter = userId
-        ? `(i.user_id = '${userId}' OR i.user_id IS NULL OR i.user_id = '')`
-        : `(i.user_id IS NULL OR i.user_id = '')`;
+      const userFilter = '1=1';
 
       const combinedQuery = `
         SELECT 

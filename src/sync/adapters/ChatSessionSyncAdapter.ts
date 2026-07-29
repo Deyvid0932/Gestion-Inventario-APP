@@ -22,14 +22,26 @@ export class ChatSessionSyncAdapter implements SyncAdapter {
         await db.runAsync(`UPDATE chat_sessions SET sync_status = 'SYNCING', user_id = ? WHERE id = ?`, [userId, id]);
       }
 
-      const payload = pendingRows.map(row => ({
-        id: row.id,
-        user_id: userId,
-        title: row.title,
-        "createdAt": row.createdAt,
-        "updatedAt": row.updatedAt,
-        updated_at: row.updated_at || new Date().toISOString(),
-      }));
+      const payload = pendingRows.map(row => {
+        let isoCreatedAt = new Date().toISOString();
+        if (typeof row.createdAt === 'number') {
+          isoCreatedAt = new Date(row.createdAt).toISOString();
+        } else if (typeof row.created_at === 'number') {
+          isoCreatedAt = new Date(row.created_at).toISOString();
+        } else if (row.createdAt) {
+          try { isoCreatedAt = new Date(row.createdAt).toISOString(); } catch (_) {}
+        } else if (row.created_at) {
+          try { isoCreatedAt = new Date(row.created_at).toISOString(); } catch (_) {}
+        }
+
+        return {
+          id: row.id,
+          user_id: userId,
+          title: row.title,
+          created_at: isoCreatedAt,
+          updated_at: row.updated_at || new Date().toISOString(),
+        };
+      });
 
       const { error } = await supabase.from('chat_sessions').upsert(payload, { onConflict: 'id' });
 
@@ -88,6 +100,8 @@ export class ChatSessionSyncAdapter implements SyncAdapter {
 
         for (const r of remoteRows) {
           const local = await db.getFirstAsync<any>('SELECT * FROM chat_sessions WHERE id = ?', [r.id]);
+          const createdAtVal = typeof r.created_at === 'number' ? r.created_at : (r.created_at ? new Date(r.created_at).getTime() : (r.createdAt || Date.now()));
+          const updatedAtVal = r.updated_at ? new Date(r.updated_at).getTime() : (r.updatedAt || Date.now());
 
           if (!local) {
             await db.runAsync(
@@ -97,9 +111,9 @@ export class ChatSessionSyncAdapter implements SyncAdapter {
                 r.id,
                 r.user_id,
                 r.title,
-                r.createdAt,
-                r.updatedAt,
-                r.updated_at,
+                createdAtVal,
+                updatedAtVal,
+                r.updated_at || new Date().toISOString(),
               ]
             );
             result.pulledCount++;
@@ -113,9 +127,9 @@ export class ChatSessionSyncAdapter implements SyncAdapter {
                 [
                   r.user_id,
                   r.title,
-                  r.createdAt,
-                  r.updatedAt,
-                  r.updated_at,
+                  createdAtVal,
+                  updatedAtVal,
+                  r.updated_at || new Date().toISOString(),
                   r.id,
                 ]
               );

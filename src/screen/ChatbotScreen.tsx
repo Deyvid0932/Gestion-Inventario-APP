@@ -26,6 +26,7 @@ import { SearchResult } from '../utils/nlpEngine';
 import { RootStackParamList, ChatSession } from '../types';
 
 import { SynchronizationEngine } from '../sync/SynchronizationEngine';
+import { useRoles } from '../hooks/useRoles';
 
 const llamaLogo = require('../../assets/llama_logo.png');
 
@@ -44,6 +45,7 @@ export const ChatbotScreen = () => {
   const currentTheme = useAppStore(state => state.currentTheme);
   const themeMode = useAppStore(state => state.themeMode);
   const user = useAppStore(state => state.user);
+  const { hasRole } = useRoles();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -124,9 +126,15 @@ export const ChatbotScreen = () => {
     navigation.navigate(routeName as any, params);
   }, [navigation]);
 
-  const handleSend = async () => {
-    const userText = input.trim();
-    if (!userText || !currentSessionId) return;
+  const handleSend = async (textToSend?: string) => {
+    if (!hasRole(['Admin', 'Editor'])) {
+      Alert.alert('Acceso Restringido', 'El rol Viewer solo tiene permisos de lectura y no puede realizar consultas a la Inteligencia Artificial.');
+      return;
+    }
+
+    if (!currentSessionId) return;
+    const userText = typeof textToSend === 'string' ? textToSend : input;
+    if (!userText.trim() || isTyping) return;
 
     if (messages.length <= 1) {
       await ChatbotService.updateSessionTitle(db, currentSessionId, userText.substring(0, 30));
@@ -510,7 +518,7 @@ export const ChatbotScreen = () => {
               opacity: !input.trim() || isTyping ? 0.5 : 1,
             },
           ]}
-          onPress={handleSend}
+          onPress={() => handleSend()}
           disabled={!input.trim() || isTyping}
           accessibilityLabel="Enviar mensaje"
           accessibilityRole="button"

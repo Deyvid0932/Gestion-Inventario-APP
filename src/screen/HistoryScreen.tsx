@@ -64,8 +64,7 @@ export const HistoryScreen = () => {
       const startParam = `${search}%`;
       const exactParam = search;
 
-      const user = useAppStore.getState().user;
-      const userClause = user?.id ? `AND (i.user_id = '${user.id}' OR i.user_id IS NULL OR i.user_id = '')` : `AND (i.user_id IS NULL OR i.user_id = '')`;
+      const userClause = '';
 
       let query = '';
       let params: any[] = [];

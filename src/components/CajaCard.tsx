@@ -3,12 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  Animated,
-  TouchableOpacity
+  Animated
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScaleDecorator } from 'react-native-draggable-flatlist';
-import { Swipeable, RectButton } from 'react-native-gesture-handler';
+import { Swipeable, RectButton, TouchableOpacity } from 'react-native-gesture-handler';
 import { CajaWithStats } from '../types';
 import { clayStyles } from '../style/theme';
 
@@ -20,6 +19,7 @@ interface CajaCardProps {
   theme: any;
   drag: () => void;
   isActive: boolean;
+  canEdit?: boolean;
 }
 
 const CajaCard = memo(({
@@ -29,13 +29,15 @@ const CajaCard = memo(({
   onDelete,
   theme,
   drag,
-  isActive
+  isActive,
+  canEdit = true,
 }: CajaCardProps) => {
   const swipeableRef = useRef<Swipeable>(null);
 
   const renderRightActions = useCallback((
     progress: Animated.AnimatedInterpolation<number>
   ) => {
+    if (!canEdit) return null;
     const trans = progress.interpolate({
       inputRange: [0, 1],
       outputRange: [160, 0],
@@ -67,16 +69,16 @@ const CajaCard = memo(({
         </Animated.View>
       </View>
     );
-  }, [onEdit, onDelete, item.id, item.nombre]);
+  }, [onEdit, onDelete, item.id, item.nombre, canEdit]);
 
   return (
     <ScaleDecorator>
       <Swipeable
         ref={swipeableRef}
-        renderRightActions={renderRightActions}
+        renderRightActions={canEdit ? renderRightActions : undefined}
         friction={2.5}
         rightThreshold={40}
-        enabled={!isActive}
+        enabled={!isActive && canEdit}
       >
         <TouchableOpacity
           onLongPress={drag}

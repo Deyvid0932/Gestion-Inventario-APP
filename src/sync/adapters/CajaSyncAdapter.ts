@@ -23,14 +23,14 @@ export class CajaSyncAdapter implements SyncAdapter {
 
       const payload = pendingRows.map(row => ({
         id: row.id,
-        "inventarioId": row.inventarioId,
-        nombre: row.nombre,
-        "fechaCreacion": row.fechaCreacion,
-        orden: row.orden || 0,
+        inventory_id: row.inventory_id ?? row.inventarioId,
+        name: row.name ?? row.nombre,
+        created_at: row.created_at ?? row.fechaCreacion ?? new Date().toISOString(),
+        order_index: row.order_index ?? row.orden ?? 0,
         updated_at: row.updated_at || new Date().toISOString(),
       }));
 
-      const { error } = await supabase.from('cajas').upsert(payload, { onConflict: 'id' });
+      const { error } = await supabase.from('boxes').upsert(payload, { onConflict: 'id' });
 
       if (error) {
         console.error('Error al hacer push de cajas a Supabase:', error);
@@ -56,7 +56,7 @@ export class CajaSyncAdapter implements SyncAdapter {
   async pullRemote(db: SQLiteDatabase, _userId: string, since: string | null): Promise<SyncResult> {
     const result: SyncResult = { success: true, pushedCount: 0, pulledCount: 0 };
     try {
-      let query = supabase.from('cajas').select('*');
+      let query = supabase.from('boxes').select('*');
       if (since) {
         query = query.gt('updated_at', since);
       }
@@ -87,6 +87,20 @@ export class CajaSyncAdapter implements SyncAdapter {
 
         for (const r of remoteRows) {
           const local = await db.getFirstAsync<any>('SELECT * FROM cajas WHERE id = ?', [r.id]);
+          const invIdVal = r.inventory_id || r.inventarioId;
+          const nombreVal = r.name || r.nombre || '';
+          const fechaVal = r.created_at || r.fechaCreacion || new Date().toISOString();
+          const ordenVal = r.order_index ?? r.orden ?? 0;
+
+          if (invIdVal) {
+            const parentInv = await db.getFirstAsync('SELECT id FROM inventarios WHERE id = ?', [invIdVal]);
+            if (!parentInv) {
+              await db.runAsync(
+                `INSERT OR IGNORE INTO inventarios (id, nombre, descripcion, fechaCreacion, estado, updated_at, sync_status) VALUES (?, 'Nuevo Lote', '', ?, 'Activo', ?, 'SYNCED')`,
+                [invIdVal, fechaVal, r.updated_at || fechaVal]
+              );
+            }
+          }
 
           if (!local) {
             await db.runAsync(
@@ -94,10 +108,10 @@ export class CajaSyncAdapter implements SyncAdapter {
                VALUES (?, ?, ?, ?, ?, ?, 'SYNCED')`,
               [
                 r.id,
-                r.inventarioId,
-                r.nombre,
-                r.fechaCreacion,
-                r.orden || 0,
+                invIdVal,
+                nombreVal,
+                fechaVal,
+                ordenVal,
                 r.updated_at,
               ]
             );
@@ -110,10 +124,10 @@ export class CajaSyncAdapter implements SyncAdapter {
               await db.runAsync(
                 `UPDATE cajas SET inventarioId = ?, nombre = ?, fechaCreacion = ?, orden = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
                 [
-                  r.inventarioId,
-                  r.nombre,
-                  r.fechaCreacion,
-                  r.orden || 0,
+                  invIdVal,
+                  nombreVal,
+                  fechaVal,
+                  ordenVal,
                   r.updated_at,
                   r.id,
                 ]

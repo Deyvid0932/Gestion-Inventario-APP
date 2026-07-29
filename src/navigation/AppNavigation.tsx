@@ -14,10 +14,13 @@ import { CajasScreen } from '../screen/CajasScreen';
 import { FormScreen } from '../screen/FormScreen';
 
 import { LoadingModal } from '../components/LoadingModal';
-import { navigationRef } from '../../App';
+import { InactiveAccountModal } from '../components/InactiveAccountModal';
+import { navigationRef } from './navigationRef';
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
+
+import { TrashScreen } from '../screen/TrashScreen';
 
 const MainStack = () => {
   const currentTheme = useAppStore(state => state.currentTheme);
@@ -124,6 +127,7 @@ export const AppNavigation = () => {
     <>
       <MainStack />
       <LoadingModal visible={showLoading} message={loadingMsg} />
+      <InactiveAccountModal />
     </>
   );
 };

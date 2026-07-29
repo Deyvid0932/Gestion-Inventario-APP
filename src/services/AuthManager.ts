@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SQLiteDatabase } from 'expo-sqlite';
 import { User } from '@supabase/supabase-js';
 import { ProfileService } from './ProfileService';
+import { RoleService } from './RoleService';
 import { SynchronizationEngine } from '../sync/SynchronizationEngine';
 import { useAppStore } from '../store/useAppStore';
 
@@ -32,37 +33,17 @@ export const AuthManager = {
   // Refrescar todos los datos de la app desde SQLite a Zustand reactivo
   refreshAllAppState: async (db: SQLiteDatabase): Promise<void> => {
     try {
-      const user = useAppStore.getState().user;
-      let freshInventarios: any[];
-
-      if (user?.id) {
-        freshInventarios = await db.getAllAsync<any>(
-          `SELECT i.*, 
-                  (SELECT COUNT(*) FROM cajas WHERE inventarioId = i.id) as totalCajas,
-                  COUNT(p.id) as totalPrendas,
-                  SUM(CASE WHEN p.estado = 1 THEN 1 ELSE 0 END) as prendasEscaneadas
-           FROM inventarios i 
-           LEFT JOIN cajas c ON c.inventarioId = i.id
-           LEFT JOIN prendas p ON p.cajaId = c.id
-           WHERE (i.user_id = ? OR i.user_id IS NULL OR i.user_id = '')
-           GROUP BY i.id
-           ORDER BY i.fechaCreacion DESC`,
-          [user.id]
-        );
-      } else {
-        freshInventarios = await db.getAllAsync<any>(
-          `SELECT i.*, 
-                  (SELECT COUNT(*) FROM cajas WHERE inventarioId = i.id) as totalCajas,
-                  COUNT(p.id) as totalPrendas,
-                  SUM(CASE WHEN p.estado = 1 THEN 1 ELSE 0 END) as prendasEscaneadas
-           FROM inventarios i 
-           LEFT JOIN cajas c ON c.inventarioId = i.id
-           LEFT JOIN prendas p ON p.cajaId = c.id
-           WHERE (i.user_id IS NULL OR i.user_id = '')
-           GROUP BY i.id
-           ORDER BY i.fechaCreacion DESC`
-        );
-      }
+      const freshInventarios = await db.getAllAsync<any>(
+        `SELECT i.*, 
+                (SELECT COUNT(*) FROM cajas WHERE inventarioId = i.id) as totalCajas,
+                COUNT(p.id) as totalPrendas,
+                SUM(CASE WHEN p.estado = 1 THEN 1 ELSE 0 END) as prendasEscaneadas
+         FROM inventarios i 
+         LEFT JOIN cajas c ON c.inventarioId = i.id
+         LEFT JOIN prendas p ON p.cajaId = c.id
+         GROUP BY i.id
+         ORDER BY i.fechaCreacion DESC`
+      );
       useAppStore.getState().setInventarios(freshInventarios);
     } catch (e) {
       console.error('Error al refrescar estado de la app:', e);
@@ -90,7 +71,17 @@ export const AuthManager = {
       // 1. Crear o actualizar profile automáticamente en Supabase
       await ProfileService.upsertProfile(user);
 
-      // 2. Evaluar Casos de Login y descargar/subir datos de Supabase
+      // 2. Obtener roles y estado de cuenta activo desde Supabase
+      const roleInfo = await RoleService.getUserProfileAndRoles(currentUserId);
+      useAppStore.getState().setUserProfileAndRoles(roleInfo.profile, roleInfo.roles, roleInfo.isActive);
+
+      if (!roleInfo.isActive) {
+        console.warn('[AUTH_LOG] Cuenta desactivada por un Administrador. Deteniendo sincronización.');
+        useAppStore.getState().setSyncing(false);
+        return;
+      }
+
+      // 3. Evaluar Casos de Login y descargar/subir datos de Supabase
       if (previousUserId && previousUserId !== currentUserId) {
         // CASO 2: Cambio de cuenta
         useAppStore.getState().clearAllState();

@@ -28,6 +28,10 @@ import { NotificationSettingsModal } from './NotificationSettingsModal';
 import { AboutModal } from './AboutModal';
 import { PrivacyModal } from './PrivacyModal';
 
+import { RoleGuard } from './RoleGuard';
+import { UserManagementModal } from './UserManagementModal';
+import { TrashModal } from './TrashModal';
+
 interface AccountModalProps {
   visible: boolean;
   onClose: () => void;
@@ -45,6 +49,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
   const setIsAuthLoading = useAppStore(state => state.setIsAuthLoading);
   const setSession = useAppStore(state => state.setSession);
   const logout = useAppStore(state => state.logout);
+  const userRoles = useAppStore(state => state.userRoles);
   const lastSyncTime = useAppStore(state => state.lastSyncTime);
   const setLastSyncTime = useAppStore(state => state.setLastSyncTime);
 
@@ -57,6 +62,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [aboutModalVisible, setAboutModalVisible] = useState(false);
   const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
+  const [userMgmtModalVisible, setUserMgmtModalVisible] = useState(false);
+  const [trashModalVisible, setTrashModalVisible] = useState(false);
 
   // Estadísticas de SQLite
   const [stats, setStats] = useState<DashboardStats>({
@@ -76,12 +83,25 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
   const [syncStatus, setSyncStatus] = useState<SyncStatusType>('synced');
   const [syncMessage, setSyncMessage] = useState<string>('Todo está sincronizado correctamente.');
 
-  // Cargar estadísticas cuando el modal abre
+  // Cargar estadísticas y refrescar roles cuando el modal abre
   useEffect(() => {
     if (visible && db) {
       StatsService.getStats(db, user?.id).then(data => {
         setStats(data);
       }).catch(e => console.error(e));
+
+      // Refrescar roles desde Supabase para mantener consistencia
+      if (user?.id) {
+        import('../services/RoleService').then(({ RoleService }) => {
+          RoleService.getUserProfileAndRoles(user.id).then(roleInfo => {
+            useAppStore.getState().setUserProfileAndRoles(
+              roleInfo.profile,
+              roleInfo.roles,
+              roleInfo.isActive
+            );
+          }).catch(() => {});
+        });
+      }
     }
   }, [visible, db, user?.id]);
 
@@ -123,7 +143,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
             await AuthService.signOut();
             logout();
             setSyncStatus('synced');
-            setSyncMessage('Modo Invitado Activo');
+            setSyncMessage('Modo Local Activo');
           },
         },
       ]
@@ -132,7 +152,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
 
   const handleSync = async () => {
     if (!user) {
-      Alert.alert('Modo Invitado', 'Inicia sesión con Google para sincronizar tus datos en la nube.');
+      Alert.alert('Modo Local', 'Inicia sesión con Google para sincronizar tus datos en la nube.');
       return;
     }
     try {
@@ -272,7 +292,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
                           <Ionicons name="person-outline" size={26} color={currentTheme.primary} />
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={[styles.profileName, { color: currentTheme.text }]}>👤 Invitado</Text>
+                          <Text style={[styles.profileName, { color: currentTheme.text }]}>👤 Usuario Local</Text>
                           <Text style={[styles.profileStatusText, { color: currentTheme.textSecondary }]}>Almacenamiento Local (SQLite)</Text>
                         </View>
                       </View>
@@ -328,6 +348,17 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
                               Google conectado ({email})
                             </Text>
                           </View>
+                          {userRoles && userRoles.length > 0 && (
+                            <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                              {userRoles.map((r, i) => (
+                                <View key={i} style={{ backgroundColor: currentTheme.primary + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: currentTheme.primary + '50' }}>
+                                  <Text style={{ fontSize: 10, fontWeight: '800', color: currentTheme.primary }}>
+                                    {r === 'Admin' ? '👑 Admin' : r === 'Editor' ? '✏️ Editor' : '👁️ Viewer'}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
                         </View>
                         <Ionicons name="chevron-forward" size={18} color={currentTheme.textSecondary} />
                       </View>
@@ -464,6 +495,26 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
                     </TouchableOpacity>
                   </View>
 
+                  {/* Sección: Administración (Solo Admin) */}
+                  <RoleGuard roles={['Admin']}>
+                    <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>ADMINISTRACIÓN</Text>
+                    <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                      <TouchableOpacity style={styles.menuRow} onPress={() => setUserMgmtModalVisible(true)}>
+                        <Ionicons name="people-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                        <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Gestión de Usuarios y Roles</Text>
+                        <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                      </TouchableOpacity>
+
+                      <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+                      <TouchableOpacity style={styles.menuRow} onPress={() => setTrashModalVisible(true)}>
+                        <Ionicons name="trash-outline" size={20} color="#EF4444" style={styles.menuIcon} />
+                        <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Papelera de Reciclaje</Text>
+                        <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </RoleGuard>
+
                   {/* Sección: Información */}
                   <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>INFORMACIÓN</Text>
                   <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
@@ -506,6 +557,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
       <NotificationSettingsModal visible={notifModalVisible} onClose={() => setNotifModalVisible(false)} />
       <AboutModal visible={aboutModalVisible} onClose={() => setAboutModalVisible(false)} />
       <PrivacyModal visible={privacyModalVisible} onClose={() => setPrivacyModalVisible(false)} />
+      <UserManagementModal visible={userMgmtModalVisible} onClose={() => setUserMgmtModalVisible(false)} />
+      <TrashModal visible={trashModalVisible} onClose={() => setTrashModalVisible(false)} />
     </>
   );
 };
@@ -707,34 +760,43 @@ const styles = StyleSheet.create({
   },
   sectionSubtitle: {
     fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '800',
+    letterSpacing: 1,
     marginBottom: 8,
-    marginTop: 6,
+    marginTop: 10,
+    textTransform: 'uppercase',
   },
   menuGroup: {
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
     overflow: 'hidden',
     marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   menuIcon: {
-    marginRight: 12,
+    marginRight: 14,
     width: 22,
+    alignItems: 'center',
   },
   menuLabel: {
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   divider: {
     height: 1,
     width: '100%',
+    opacity: 0.6,
   },
 });

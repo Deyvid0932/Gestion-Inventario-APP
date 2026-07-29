@@ -1,14 +1,6 @@
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../database/supabase';
-
-export interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  avatar_url: string | null;
-  created_at: string;
-  updated_at: string;
-}
+import { UserProfile } from '../types/roles';
 
 export const ProfileService = {
   upsertProfile: async (user: User): Promise<UserProfile | null> => {
@@ -23,24 +15,48 @@ export const ProfileService = {
         name: fullName,
         email: user.email || '',
         avatar_url: avatarUrl,
+        active: true,
         updated_at: now,
       };
 
+      // 1. Verificar si el perfil ya existe en Supabase
+      const existing = await ProfileService.getProfile(user.id);
+
+      if (existing) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .update({
+            name: fullName,
+            email: user.email || '',
+            avatar_url: avatarUrl,
+            updated_at: now,
+          })
+          .eq('id', user.id)
+          .select()
+          .single();
+
+        if (!error && data) {
+          return data as UserProfile;
+        }
+        return existing;
+      }
+
+      // 2. Si es un usuario completamente nuevo, realizar insert
       const { data, error } = await supabase
         .from('profiles')
-        .upsert(profilePayload, { onConflict: 'id' })
+        .insert([profilePayload])
         .select()
         .single();
 
       if (error) {
-        console.error('Error al guardar profile en Supabase:', error);
-        return null;
+        console.warn('[ProfileService] Error al insertar nuevo perfil en Supabase:', error.message);
+        return await ProfileService.getProfile(user.id);
       }
 
       return data as UserProfile;
     } catch (e) {
       console.error('Excepción en ProfileService.upsertProfile:', e);
-      return null;
+      return await ProfileService.getProfile(user.id);
     }
   },
 
