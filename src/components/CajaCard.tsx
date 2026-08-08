@@ -1,15 +1,30 @@
-import React, { memo, useRef, useCallback } from 'react';
+import React, { memo, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Animated
+  Animated,
+  Platform,
+  Vibration,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { Swipeable, RectButton, TouchableOpacity } from 'react-native-gesture-handler';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import { CajaWithStats } from '../types';
 import { clayStyles } from '../style/theme';
+
+const SPRING_CONFIG = {
+  damping: 20,
+  stiffness: 200,
+  mass: 0.8,
+  overshootClamping: false,
+  restDisplacementThreshold: 0.01,
+  restSpeedThreshold: 0.01,
+};
 
 interface CajaCardProps {
   item: CajaWithStats;
@@ -33,6 +48,25 @@ const CajaCard = memo(({
   canEdit = true,
 }: CajaCardProps) => {
   const swipeableRef = useRef<Swipeable>(null);
+  const scale = useSharedValue(1);
+  const elevation = useSharedValue(0);
+
+  useEffect(() => {
+    if (isActive) {
+      scale.value = withSpring(1.04, SPRING_CONFIG);
+      elevation.value = withSpring(1, SPRING_CONFIG);
+    } else {
+      scale.value = withSpring(1, SPRING_CONFIG);
+      elevation.value = withSpring(0, SPRING_CONFIG);
+    }
+  }, [isActive, scale, elevation]);
+
+  const animatedCardStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    shadowOpacity: 0.08 + elevation.value * 0.18,
+    shadowRadius: 4 + elevation.value * 12,
+    ...(Platform.OS === 'android' ? { elevation: 2 + elevation.value * 8 } : {}),
+  }));
 
   const renderRightActions = useCallback((
     progress: Animated.AnimatedInterpolation<number>
@@ -71,55 +105,82 @@ const CajaCard = memo(({
     );
   }, [onEdit, onDelete, item.id, item.nombre, canEdit]);
 
-  return (
-    <ScaleDecorator>
-      <Swipeable
-        ref={swipeableRef}
-        renderRightActions={canEdit ? renderRightActions : undefined}
-        friction={2.5}
-        rightThreshold={40}
-        enabled={!isActive && canEdit}
-      >
-        <TouchableOpacity
-          onLongPress={drag}
-          delayLongPress={300}
-          disabled={isActive}
-          onPress={() => onPress(item.id, item.nombre)}
-          activeOpacity={0.9}
-          style={[
-            styles.card,
-            clayStyles,
-            {
-              backgroundColor: isActive ? theme.card + '90' : theme.card,
-              borderColor: isActive ? theme.text : theme.border,
-              shadowColor: theme.borderShadow || '#000',
-            }
-          ]}
-        >
-          <View style={styles.cardMain}>
-            <View style={[styles.iconContainer, { backgroundColor: theme.background === '#000000' ? '#27272A' : '#F4F4F5', borderColor: theme.border }]}>
-              <Ionicons name="archive" size={24} color={theme.primary} />
-            </View>
+  const handleLongPress = useCallback(() => {
+    swipeableRef.current?.close();
+    if (canEdit && drag) {
+      Vibration.vibrate(35);
+      drag();
+    }
+  }, [canEdit, drag]);
 
-            <View style={styles.textContainer}>
-              <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>
-                {item.nombre}
+  const cardContent = (
+    <Reanimated.View style={animatedCardStyle}>
+      <TouchableOpacity
+        onLongPress={handleLongPress}
+        delayLongPress={150}
+        onPress={() => onPress(item.id, item.nombre)}
+        activeOpacity={0.85}
+        style={[
+          styles.card,
+          clayStyles,
+          {
+            backgroundColor: theme.card,
+            borderColor: isActive ? theme.primary : theme.border,
+            shadowColor: theme.borderShadow || '#000',
+          }
+        ]}
+      >
+        <View style={styles.cardMain}>
+          <View style={[styles.iconContainer, { backgroundColor: theme.background === '#000000' ? '#27272A' : '#F4F4F5', borderColor: theme.border }]}>
+            <Ionicons name="archive" size={24} color={theme.primary} />
+          </View>
+
+          <View style={styles.textContainer}>
+            <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>
+              {item.nombre}
+            </Text>
+            <View style={styles.cardFooter}>
+              <Ionicons name="time-outline" size={12} color={theme.textSecondary} />
+              <Text style={[styles.dateText, { color: theme.textSecondary }]}>
+                {new Date(item.fechaCreacion).toLocaleDateString()}
               </Text>
-              <View style={styles.cardFooter}>
-                <Ionicons name="time-outline" size={12} color={theme.textSecondary} />
-                <Text style={[styles.dateText, { color: theme.textSecondary }]}>
-                  {new Date(item.fechaCreacion).toLocaleDateString()}
-                </Text>
-                <Text style={[styles.dot, { color: theme.textSecondary }]}>•</Text>
-                <Text style={[styles.dateText, { color: theme.textSecondary }]}>
-                  {item.itemCount} prendas
-                </Text>
-              </View>
+              <Text style={[styles.dot, { color: theme.textSecondary }]}>•</Text>
+              <Text style={[styles.dateText, { color: theme.textSecondary }]}>
+                {item.itemCount} prendas
+              </Text>
             </View>
           </View>
-        </TouchableOpacity>
+
+          {canEdit && (
+            <View style={styles.swipeHintBadge}>
+              <Ionicons name="chevron-back" size={14} color={theme.textSecondary} />
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Reanimated.View>
+  );
+
+  if (!canEdit) {
+    return (
+      <View style={{ marginBottom: 16 }}>
+        {cardContent}
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <Swipeable
+        ref={swipeableRef}
+        renderRightActions={renderRightActions}
+        friction={1.8}
+        rightThreshold={40}
+        overshootRight={false}
+      >
+        {cardContent}
       </Swipeable>
-    </ScaleDecorator>
+    </View>
   );
 }, (prev, next) => {
   return prev.item.id === next.item.id &&
@@ -136,7 +197,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 20,
-    marginBottom: 16,
   },
   cardMain: {
     flexDirection: 'row',
@@ -178,7 +238,6 @@ const styles = StyleSheet.create({
     width: 160,
     flexDirection: 'row',
     height: '100%',
-    paddingBottom: 12,
   },
   actionButton: {
     flex: 1,
@@ -187,6 +246,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 12,
     marginHorizontal: 4,
+  },
+  swipeHintBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(142, 142, 147, 0.15)',
+    marginLeft: 8,
   },
 });
 

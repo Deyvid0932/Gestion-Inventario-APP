@@ -1,15 +1,31 @@
-import React, { memo, useCallback, useRef } from 'react';
+import React, { memo, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Animated,
-  Alert
+  Alert,
+  Platform,
+  Vibration,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable, RectButton, TouchableOpacity } from 'react-native-gesture-handler';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import { InventarioStats } from '../types';
 import { clayStyles } from '../style/theme';
+
+const SPRING_CONFIG = {
+  damping: 20,
+  stiffness: 200,
+  mass: 0.8,
+  overshootClamping: false,
+  restDisplacementThreshold: 0.01,
+  restSpeedThreshold: 0.01,
+};
 
 interface InventarioCardProps {
   item: InventarioStats;
@@ -17,6 +33,8 @@ interface InventarioCardProps {
   onEdit: () => void;
   onDelete: () => void;
   theme: any;
+  drag?: () => void;
+  isActive?: boolean;
   canEdit?: boolean;
 }
 
@@ -26,9 +44,30 @@ const InventarioCard = memo(({
   onEdit,
   onDelete,
   theme,
+  drag,
+  isActive = false,
   canEdit = true,
 }: InventarioCardProps) => {
   const swipeableRef = useRef<Swipeable>(null);
+  const scale = useSharedValue(1);
+  const elevationAnim = useSharedValue(0);
+
+  useEffect(() => {
+    if (isActive) {
+      scale.value = withSpring(1.04, SPRING_CONFIG);
+      elevationAnim.value = withSpring(1, SPRING_CONFIG);
+    } else {
+      scale.value = withSpring(1, SPRING_CONFIG);
+      elevationAnim.value = withSpring(0, SPRING_CONFIG);
+    }
+  }, [isActive, scale, elevationAnim]);
+
+  const animatedCardStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    shadowOpacity: 0.08 + elevationAnim.value * 0.18,
+    shadowRadius: 4 + elevationAnim.value * 12,
+    ...(Platform.OS === 'android' ? { elevation: 2 + elevationAnim.value * 8 } : {}),
+  }));
 
   const total = item.totalPrendas || 0;
   const escaneadas = item.prendasEscaneadas || 0;
@@ -99,27 +138,30 @@ const InventarioCard = memo(({
     );
   }, [onEdit, onDelete, item.nombre, canEdit]);
 
-  return (
-    <Swipeable
-      ref={swipeableRef}
-      renderRightActions={canEdit ? renderRightActions : undefined}
-      friction={3}
-      rightThreshold={30}
-      enabled={canEdit}
-    >
-      <RectButton
-        activeOpacity={0.1}
-        underlayColor={theme.card}
+  const handleLongPress = useCallback(() => {
+    swipeableRef.current?.close();
+    if (canEdit && drag) {
+      Vibration.vibrate(35);
+      drag();
+    }
+  }, [canEdit, drag]);
+
+  const cardContent = (
+    <Reanimated.View style={animatedCardStyle}>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={onPress}
+        onLongPress={handleLongPress}
+        delayLongPress={150}
         style={[
           styles.card,
           clayStyles,
           {
             backgroundColor: theme.card,
-            borderColor: theme.border,
-            shadowColor: theme.borderShadow || '#000'
+            borderColor: isActive ? theme.primary : theme.border,
+            shadowColor: theme.borderShadow || '#000',
           }
         ]}
-        onPress={onPress}
       >
         <View style={styles.cardMain}>
           <View style={{ flex: 1 }}>
@@ -131,11 +173,11 @@ const InventarioCard = memo(({
               </Text>
             </View>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: item.estado === 'Activo' ? '#2ecc7120' : theme.border }]}>
-            <Text style={[styles.statusText, { color: item.estado === 'Activo' ? '#2ecc71' : theme.textSecondary }]}>
-              {item.estado}
-            </Text>
-          </View>
+          {canEdit && (
+            <View style={styles.swipeHintBadge}>
+              <Ionicons name="chevron-back" size={14} color={theme.textSecondary} />
+            </View>
+          )}
         </View>
 
         <Text style={[styles.cardDesc, { color: theme.textSecondary }]} numberOfLines={1}>
@@ -161,23 +203,44 @@ const InventarioCard = memo(({
             />
           </View>
         </View>
-      </RectButton>
-    </Swipeable>
+      </TouchableOpacity>
+    </Reanimated.View>
+  );
+
+  if (!canEdit) {
+    return (
+      <View style={{ marginBottom: 16 }}>
+        {cardContent}
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <Swipeable
+        ref={swipeableRef}
+        renderRightActions={renderRightActions}
+        friction={1.8}
+        rightThreshold={30}
+        overshootRight={false}
+      >
+        {cardContent}
+      </Swipeable>
+    </View>
   );
 }, (prev, next) => {
   return prev.item.id === next.item.id &&
     prev.item.nombre === next.item.nombre &&
     prev.item.descripcion === next.item.descripcion &&
-    prev.item.estado === next.item.estado &&
     prev.item.totalPrendas === next.item.totalPrendas &&
     prev.item.prendasEscaneadas === next.item.prendasEscaneadas &&
+    prev.isActive === next.isActive &&
     prev.theme === next.theme;
 });
 
 const styles = StyleSheet.create({
   card: {
-    padding: 24,
-    marginBottom: 20,
+    padding: 18,
     // Claymorphism properties applied via spread from clayStyles
   },
   cardMain: {
@@ -201,16 +264,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
+
   cardDesc: {
     fontSize: 14,
     marginBottom: 18,
@@ -256,7 +310,15 @@ const styles = StyleSheet.create({
     width: 160,
     flexDirection: 'row',
     height: '100%',
-    paddingBottom: 16, // match card marginBottom
+  },
+  swipeHintBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(142, 142, 147, 0.15)',
+    marginLeft: 8,
   },
 });
 

@@ -29,7 +29,7 @@ export const RoleService = {
   },
 
   getUserRoles: async (userId: string): Promise<RoleName[]> => {
-    if (!userId) return ['Editor'];
+    if (!userId) return ['Viewer'];
     try {
       // 1. Probar primero RPC SECURITY DEFINER get_user_roles (Evita totalmente RLS y problemas de FK)
       const { data: rpcRoles, error: rpcError } = await supabase.rpc('get_user_roles', {
@@ -105,10 +105,10 @@ export const RoleService = {
         if (roleNames.length > 0) return roleNames;
       }
 
-      return ['Editor'];
+      return ['Viewer'];
     } catch (e) {
       console.error('Excepción en RoleService.getUserRoles:', e);
-      return ['Editor'];
+      return ['Viewer'];
     }
   },
 
@@ -138,7 +138,7 @@ export const RoleService = {
         .from('profile_roles')
         .select('*', { count: 'exact', head: true });
 
-      const assignedRole: RoleName = (count === 0 || count === null) ? 'Admin' : 'Editor';
+      const assignedRole: RoleName = (count === 0 || count === null) ? 'Admin' : 'Viewer';
       const assignedRoleId = rolesMap[assignedRole];
 
       if (assignedRoleId) {
@@ -150,39 +150,39 @@ export const RoleService = {
         // IMPORTANTE: verificar si realmente se insertó
         if (insertError) {
           console.error('Fallback insert falló (RLS):', insertError);
-          return ['Editor'];
+          return ['Viewer'];
         }
         return [assignedRole];
       }
 
-      return ['Editor'];
+      return ['Viewer'];
     } catch (e) {
       console.error('Excepción en fallback:', e);
-      return ['Editor'];
+      return ['Viewer'];
     }
   },
 
   getUserProfileAndRoles: async (userId: string): Promise<UserRoleInfo> => {
     if (!userId) {
-      return { profile: null, roles: ['Editor'], isActive: true };
+      return { profile: null, roles: ['Viewer'], isActive: true };
     }
 
     try {
       const [profile, roles] = await Promise.all([
         RoleService.getUserProfile(userId).catch(() => null),
-        RoleService.getUserRoles(userId).catch(() => ['Editor' as RoleName]),
+        RoleService.getUserRoles(userId).catch(() => ['Viewer' as RoleName]),
       ]);
 
       const isActive = profile ? (profile.active !== false && profile.activo !== false) : true;
 
       return {
         profile,
-        roles: roles || ['Editor'],
+        roles: roles || ['Viewer'],
         isActive,
       };
     } catch (e) {
       console.error('Excepción en RoleService.getUserProfileAndRoles:', e);
-      return { profile: null, roles: ['Editor'], isActive: true };
+      return { profile: null, roles: ['Viewer'], isActive: true };
     }
   },
 };

@@ -25,35 +25,41 @@ export const colorMap: Record<string, string> = {
   'brown': '#A52A2A',
   'marron': '#800000',
   'morado': '#AF52DE',
-  'purple': '#AF52DE',
-
-  // --- Colores Nuevos (Detectados en Auditoría) ---
-  'nocturnal': '#2C2C34',       // Azul noche muy oscuro
-  'sandrift': '#BDB1A2',        // Arena / Beige cálido
-  'sundrift': '#D2B48C',        // Tostado claro
-  'sandstone': '#766D5B',       // Piedra oscuro
-  'hermatite': '#4A4A4A',       // Gris metálico oscuro
-  'cyclone': '#8D99AE',         // Gris azulado
-  'light heather': '#D3D3D3',   // Gris jaspeado claro
-  'mystic': '#4B0082',          // Indigo / Morado místico
-  'kinoline': '#C5E063',        // Verde lima / Citrón
-  'layer': '#E0E0E0',           // Gris capa base
-  'navy blazer': '#06192E',     // Azul marino institucional
-  'navy blue': '#000080',       // Azul marino estándar
-  'turquesa': '#40E0D0',        // Turquesa
-  'voyage': '#008080',          // Azul petróleo / Teal
-  'equestrian': '#7B5C3E',      // Marrón cuero
-  'stadium': '#354D73',         // Azul medio (estadio)
-  'silk': '#F0EAD6',            // Crema / Seda
-  'bright white': '#F9F9F9',    // Blanco brillante
-  'black/white': '#2F2F2F',     // Gris muy oscuro (mezcla)
-  'black y white': '#2F2F2F',   // Gris muy oscuro (mezcla)
+  'purple': '#AF52DE', 
+  'b.q.black': '#1C1C1E',       
+  'b.q. black': '#1C1C1E',
+  'bq black': '#1C1C1E',
+  'black chincha': '#1C1C1E',
+  'magma': '#C0392B',           
+  'nocturnal': '#2C2C34',       
+  'sandrift': '#BDB1A2',        
+  'sundrift': '#D2B48C',        
+  'sandstone': '#766D5B',       
+  'hermatite': '#4A4A4A',       
+  'cyclone': '#8D99AE',         
+  'light heather': '#D3D3D3',   
+  'mystic': '#4B0082',          
+  'kinoline': '#C5E063',        
+  'layer': '#E0E0E0',          
+  'navy blazer': '#06192E',     
+  'navy blue': '#000080',       
+  'turquesa': '#40E0D0',        
+  'voyage': '#008080',          
+  'equestrian': '#7B5C3E',      
+  'stadium': '#354D73',         
+  'silk': '#F0EAD6',            
+  'bright white': '#F9F9F9',    
+  'white digital': '#F5F5F5',   
+  'black/white': '#2F2F2F',     
+  'black y white': '#2F2F2F',   
 };
 
 export const getColorHex = (colorName: string | undefined | null) => {
   if (!colorName) return '#8E8E93';
   const lower = colorName.toLowerCase().trim();
-  for (const [name, hex] of Object.entries(colorMap)) {
+  
+  const sortedEntries = Object.entries(colorMap).sort((a, b) => b[0].length - a[0].length);
+  for (const [name, hex] of sortedEntries) {
     if (lower.includes(name)) return hex;
   }
   return '#8E8E93';

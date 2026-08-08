@@ -63,6 +63,8 @@ const MainStack = () => {
   );
 };
 
+import { SettingsScreen } from '../screen/SettingsScreen';
+
 const TabNavigator = () => {
   const currentTheme = useAppStore(state => state.currentTheme);
 
@@ -73,14 +75,16 @@ const TabNavigator = () => {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap;
 
-          if (route.name === 'Inventarios') {
-            iconName = focused ? 'file-tray-stacked' : 'file-tray-stacked-outline';
-          } else if (route.name === 'Stats') {
-            iconName = focused ? 'stats-chart' : 'stats-chart-outline';
-          } else if (route.name === 'Chatbot') {
-            iconName = focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline';
+          if (route.name === 'Home') {
+            iconName = focused ? 'home' : 'home-outline';
+          } else if (route.name === 'Inventarios') {
+            iconName = focused ? 'cube' : 'cube-outline';
           } else if (route.name === 'History') {
-            iconName = focused ? 'time' : 'time-outline';
+            iconName = focused ? 'search' : 'search-outline';
+          } else if (route.name === 'Chatbot') {
+            iconName = focused ? 'sparkles' : 'sparkles-outline';
+          } else if (route.name === 'Settings') {
+            iconName = focused ? 'settings' : 'settings-outline';
           } else {
             iconName = 'help';
           }
@@ -95,10 +99,11 @@ const TabNavigator = () => {
         },
       })}
     >
+      <Tab.Screen name="Home" component={StatsScreen} options={{ title: 'Home' }} />
       <Tab.Screen name="Inventarios" component={InventariosScreen} options={{ title: 'Lotes' }} />
-      <Tab.Screen name="Stats" component={StatsScreen} options={{ title: 'Estadísticas' }} />
+      <Tab.Screen name="History" component={HistoryScreen} options={{ title: 'Buscar' }} />
       <Tab.Screen name="Chatbot" component={ChatbotScreen} options={{ title: 'Asistente' }} />
-      <Tab.Screen name="History" component={HistoryScreen} options={{ title: 'Historial' }} />
+      <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Ajustes' }} />
     </Tab.Navigator>
   );
 };

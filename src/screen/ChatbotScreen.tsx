@@ -20,12 +20,12 @@ import Animated, { FadeIn, FadeInRight, FadeInLeft, SlideInLeft, SlideOutLeft, F
 import { useAppStore } from '../store/useAppStore';
 import { ChatbotService } from '../services/ChatbotService';
 import { VoiceService } from '../services/VoiceService';
-import { AccountModal } from '../components/AccountModal';
+import { Navbar } from '../components/Navbar';
 import { Image } from 'expo-image';
 import { SearchResult } from '../utils/nlpEngine';
 import { RootStackParamList, ChatSession } from '../types';
 
-import { SynchronizationEngine } from '../sync/SynchronizationEngine';
+import { SyncScheduler } from '../sync/SyncScheduler';
 import { useRoles } from '../hooks/useRoles';
 
 const llamaLogo = require('../../assets/llama_logo.png');
@@ -51,7 +51,7 @@ export const ChatbotScreen = () => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [accountModalVisible, setAccountModalVisible] = useState(false);
+
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -105,7 +105,7 @@ export const ChatbotScreen = () => {
         setMessages([{
           id: '1',
           sender: 'bot',
-          text: '¡Hola! 👋 Soy tu asistente de inventario Topytop Kith. Puedes buscar por estilo, OP o color o hacer preguntas generales. ¿Qué necesitas?',
+          text: '¡Hola! 👋 Soy tu asistente de inventario Topytop Kith. Puedes buscar por estilo, OP o color. Ejm: Estilo KHM 030 020 o Color Gris. ¿Qué necesitas?',
           timestamp: Date.now(),
         }]);
       }
@@ -169,7 +169,7 @@ export const ChatbotScreen = () => {
       await ChatbotService.saveMessage(db, botMsg, currentSessionId);
 
       if (user?.id) {
-        SynchronizationEngine.pushAllPending(db, user.id).catch((e) => console.error('🔴 SYNC PUSH ERROR:', e));
+        SyncScheduler.schedulePush(db, user.id);
       }
     } catch (error) {
       console.error('Error procesando respuesta del bot:', error);
@@ -208,7 +208,7 @@ export const ChatbotScreen = () => {
     setSessions(await ChatbotService.getSessions(db, user?.id));
     setIsSidebarOpen(false);
     if (user?.id) {
-      SynchronizationEngine.pushAllPending(db, user.id).catch((e) => console.error('🔴 SYNC PUSH ERROR:', e));
+      SyncScheduler.schedulePush(db, user.id);
     }
   };
 
@@ -313,67 +313,28 @@ export const ChatbotScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { backgroundColor: currentTheme.background }]}
     >
-      {/* NAVBAR CON FOTO DE PERFIL DE USUARIO */}
-      <View style={[styles.navbar, { backgroundColor: currentTheme.card, borderBottomColor: currentTheme.border }]}>
-        <StatusBar
-          barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'}
-          backgroundColor={currentTheme.card}
-        />
-        <View style={styles.navLeft}>
-          <TouchableOpacity onPress={() => setIsSidebarOpen(true)} style={{ marginRight: 10 }} accessibilityLabel="Abrir historial">
-            <Ionicons name="menu" size={28} color={currentTheme.text} />
-          </TouchableOpacity>
-          <View style={[styles.navAvatarCircle, { backgroundColor: '#FFFFFF', borderColor: currentTheme.border }]}>
-            <Image
-              source={llamaLogo}
-              style={styles.navAvatarImage}
-              contentFit="contain"
-            />
-          </View>
-          <View style={{ marginLeft: 10 }}>
-            <Text style={[styles.navTitle, { color: currentTheme.text }]} numberOfLines={1}>Llama 3.3</Text>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: currentTheme.primary }}>Asistente IA </Text>
-          </View>
-        </View>
-
-        {/* FOTO DE PERFIL DEL USUARIO */}
-        <View style={[styles.navRight, { flexDirection: 'row', alignItems: 'center' }]}>
-          <TouchableOpacity
-            onPress={() => setAccountModalVisible(true)}
-            style={[
-              styles.accountNavButton,
-              {
-                backgroundColor: currentTheme.card,
-                borderColor: currentTheme.border,
-                borderWidth: clayStyles.borderWidth,
-                shadowColor: currentTheme.borderShadow || '#000',
-                shadowOpacity: 0.1,
-                shadowOffset: { width: 0, height: 4 },
-                shadowRadius: 5,
-                elevation: 4,
-              },
-            ]}
-            activeOpacity={0.7}
-            accessibilityLabel="Abrir menú de cuenta"
-          >
-            {avatarUrl ? (
+      <Navbar
+        title=""
+        showBackButton={false}
+        leftElement={
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity onPress={() => setIsSidebarOpen(true)} style={{ marginRight: 10 }} accessibilityLabel="Abrir historial">
+              <Ionicons name="menu" size={28} color={currentTheme.text} />
+            </TouchableOpacity>
+            <View style={[styles.navAvatarCircle, { backgroundColor: '#FFFFFF', borderColor: currentTheme.border }]}>
               <Image
-                source={{ uri: avatarUrl }}
-                style={styles.accountAvatarNavImage}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                transition={200}
+                source={llamaLogo}
+                style={styles.navAvatarImage}
+                contentFit="contain"
               />
-            ) : (
-              <Ionicons
-                name="person-circle-outline"
-                size={26}
-                color={currentTheme.primary}
-              />
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+            </View>
+            <View style={{ marginLeft: 10 }}>
+              <Text style={[styles.navTitle, { color: currentTheme.text }]} numberOfLines={1}>Llama 3.3</Text>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: currentTheme.primary }}>Asistente IA </Text>
+            </View>
+          </View>
+        }
+      />
 
       {/* MENSAJES */}
       <FlatList
@@ -534,11 +495,7 @@ export const ChatbotScreen = () => {
 
       </View>
 
-      {/* MODAL DE CUENTA Y AJUSTES */}
-      <AccountModal
-        visible={accountModalVisible}
-        onClose={() => setAccountModalVisible(false)}
-      />
+
 
       {/* OVERLAY DEL HISTORIAL */}
       {isSidebarOpen && (
@@ -671,26 +628,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  navbar: {
-    height: 100,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 45,
-    borderBottomWidth: 1,
-    elevation: 4,
-    zIndex: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  navLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
   navAvatarCircle: {
     width: 38,
     height: 38,
@@ -709,19 +646,12 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
   },
-  accountNavButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
+  navTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
-  accountAvatarNavImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
+
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -754,11 +684,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
   },
-  navTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
+
   navRight: {
     flexDirection: 'row',
     alignItems: 'center',

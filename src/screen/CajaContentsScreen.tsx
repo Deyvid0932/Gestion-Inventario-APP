@@ -9,7 +9,8 @@ import {
   Animated,
   Modal,
   Image,
-  ScrollView
+  ScrollView,
+  Platform
 } from 'react-native';
 import { RouteProp, useRoute, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -27,6 +28,8 @@ import { useOCRManager } from '../hooks/useOCRManager';
 import { PrendaCard } from '../components/PrendaCard';
 import { SearchBar } from '../components/SearchBar';
 import { SkeletonLoader } from '../components/SkeletonLoader';
+import { EmptyState } from '../components/EmptyState';
+import { ImagePreviewModal } from '../components/ImagePreviewModal';
 import { MovePrendaModal } from '../components/MovePrendaModal';
 import { SuccessModal } from '../components/SuccessModal';
 
@@ -54,10 +57,19 @@ const CajaContentsScreen = () => {
   const [localPrendas, setLocalPrendas] = useState<Prenda[]>(initialCajaPrendas);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ALARM' | 'PHOTOS' | 'INACTIVE'>('ALL');
 
+  const hasPhoto = (p: Prenda) => {
+    return !!(
+      (p.fotoUri && p.fotoUri.trim() !== '') ||
+      (p.fotoUri2 && p.fotoUri2.trim() !== '') ||
+      (p.r2Key && p.r2Key.trim() !== '') ||
+      (p.r2Key2 && p.r2Key2.trim() !== '')
+    );
+  };
+
   const filteredPrendas = React.useMemo(() => {
     return localPrendas.filter((item: Prenda) => {
       if (activeFilter === 'ALARM') return !!item.alarmaFechaHora;
-      if (activeFilter === 'PHOTOS') return !!item.fotoUri || !!item.fotoUri2;
+      if (activeFilter === 'PHOTOS') return hasPhoto(item);
       if (activeFilter === 'INACTIVE') return item.estado === 0;
       return true;
     });
@@ -278,13 +290,13 @@ const CajaContentsScreen = () => {
       {
         text: "Eliminar", style: "destructive", onPress: async () => {
           try {
-            const res = await PrendaService.hardDelete(db, id, user?.id);
+            const res = await PrendaService.softDelete(db, id, user?.id);
             if (!res.success) {
-              Alert.alert('Error al eliminar', res.error || 'No se pudo eliminar la prenda.');
+              Alert.alert('Error al eliminar', res.error || 'No se pudo mover la prenda a la papelera.');
               return;
             }
             setLocalPrendas(prev => prev.filter((p: Prenda) => p.id !== id));
-            AuthManager.refreshAllAppState(db);
+            await AuthManager.refreshAllAppState(db);
           } catch (e) {
             console.error('Error al eliminar prenda:', e);
             Alert.alert('Error', 'Ocurrió un error al eliminar la prenda.');
@@ -418,7 +430,7 @@ const CajaContentsScreen = () => {
             }}
           >
             <Text style={{ fontSize: 12, fontWeight: '700', color: activeFilter === 'ALARM' ? '#000' : currentTheme.text }}>
-              ⏰ Con Alarma ({localPrendas.filter((p: Prenda) => !!p.alarmaFechaHora).length})
+              Con Alarma ({localPrendas.filter((p: Prenda) => !!p.alarmaFechaHora).length})
             </Text>
           </TouchableOpacity>
 
@@ -435,7 +447,7 @@ const CajaContentsScreen = () => {
             }}
           >
             <Text style={{ fontSize: 12, fontWeight: '700', color: activeFilter === 'PHOTOS' ? currentTheme.primaryText : currentTheme.text }}>
-              📷 Con Fotos ({localPrendas.filter((p: Prenda) => !!p.fotoUri || !!p.fotoUri2).length})
+              Con Fotos ({localPrendas.filter((p: Prenda) => hasPhoto(p)).length})
             </Text>
           </TouchableOpacity>
 
@@ -452,7 +464,7 @@ const CajaContentsScreen = () => {
             }}
           >
             <Text style={{ fontSize: 12, fontWeight: '700', color: activeFilter === 'INACTIVE' ? '#FFF' : currentTheme.text }}>
-              ⚪ Inactivas ({localPrendas.filter((p: Prenda) => p.estado === 0).length})
+              Inactivas ({localPrendas.filter((p: Prenda) => p.estado === 0).length})
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -471,12 +483,12 @@ const CajaContentsScreen = () => {
               renderItem={renderItem}
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContent}
-              initialNumToRender={8}
-              maxToRenderPerBatch={8}
-              windowSize={5}
-              removeClippedSubviews={true}
+              style={{ overflow: 'visible' }}
+              initialNumToRender={12}
+              maxToRenderPerBatch={15}
+              windowSize={10}
+              removeClippedSubviews={Platform.OS === 'android'}
               getItemLayout={(_, index) => ({ length: 142, offset: 142 * index, index })}
-              updateCellsBatchingPeriod={50}
               onScrollToIndexFailed={(info) => {
                 const offset = info.averageItemLength * info.index;
                 flatListRef.current?.scrollToOffset({ offset, animated: true });
@@ -499,13 +511,13 @@ const CajaContentsScreen = () => {
                 />
               }
               ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="shirt-outline" size={100} color={currentTheme.border} />
-                  <Text style={[styles.emptyTitle, { color: currentTheme.textSecondary }]}>¡Sin Prendas!</Text>
-                  <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
-                    Toca "Nuevo" o usa el OCR para comenzar.
-                  </Text>
-                </View>
+                <EmptyState
+                  iconName="shirt-outline"
+                  title="¡Sin Prendas!"
+                  description="Toca 'Nuevo' o usa el OCR para comenzar."
+                  currentTheme={currentTheme}
+                  delay={100}
+                />
               }
 
               ListFooterComponent={<View style={{ height: 50 }} />}
@@ -543,26 +555,11 @@ const CajaContentsScreen = () => {
         onClose={() => setSuccessModalConfig(prev => ({ ...prev, isVisible: false }))}
       />
 
-      <Modal
+      <ImagePreviewModal
         visible={isModalVisible}
-        transparent={true}
-        animationType="fade"
-      >
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => setModalVisible(false)}
-          >
-            <Ionicons name="close" size={30} color="white" />
-          </TouchableOpacity>
-
-          <Image
-            source={{ uri: currentImage || '' }}
-            style={styles.modalImage}
-            resizeMode="contain"
-          />
-        </View>
-      </Modal>
+        uri={currentImage}
+        onClose={() => setModalVisible(false)}
+      />
     </GestureHandlerRootView>
 
 
@@ -591,23 +588,6 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 18,
     flexGrow: 1,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    marginTop: -50
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 15,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 5,
   },
   modalOverlay: {
     flex: 1,

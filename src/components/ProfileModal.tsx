@@ -19,6 +19,7 @@ import { clayStyles } from '../style/theme';
 import { useAppStore } from '../store/useAppStore';
 import { AuthService } from '../services/AuthService';
 import { SyncService } from '../services/SyncService';
+import { maskEmail } from '../utils/maskUtils';
 
 interface ProfileModalProps {
   visible: boolean;
@@ -163,184 +164,184 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
             nestedScrollEnabled={true}
             contentContainerStyle={styles.scrollContent}
           >
-                {user ? (
-                  <>
-                    {/* Tarjeta de Perfil Autenticado */}
-                    <View style={[styles.profileHero, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                      {avatarUrl ? (
-                        <Image
-                          source={{ uri: avatarUrl }}
-                          style={styles.heroAvatar}
-                          contentFit="cover"
-                          cachePolicy="memory-disk"
-                          transition={200}
-                        />
-                      ) : (
-                        <View style={[styles.heroAvatarPlaceholder, { backgroundColor: currentTheme.primary + '20' }]}>
-                          <Ionicons name="person" size={36} color={currentTheme.primary} />
-                        </View>
-                      )}
+            {user ? (
+              <>
+                {/* Tarjeta de Perfil Autenticado */}
+                <View style={[styles.profileHero, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                  {avatarUrl ? (
+                    <Image
+                      source={{ uri: avatarUrl }}
+                      style={styles.heroAvatar}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={200}
+                    />
+                  ) : (
+                    <View style={[styles.heroAvatarPlaceholder, { backgroundColor: currentTheme.primary + '20' }]}>
+                      <Ionicons name="person" size={36} color={currentTheme.primary} />
+                    </View>
+                  )}
 
-                      <Text style={[styles.heroName, { color: currentTheme.text }]}>{fullName}</Text>
-                      <Text style={[styles.heroEmail, { color: currentTheme.textSecondary }]}>{email}</Text>
+                  <Text style={[styles.heroName, { color: currentTheme.text }]}>{fullName}</Text>
+                  <Text style={[styles.heroEmail, { color: currentTheme.textSecondary }]}>{maskEmail(email)}</Text>
 
-                      <View style={styles.badgeRow}>
-                        <View style={[styles.authBadge, { backgroundColor: '#4285F415', borderColor: '#4285F440' }]}>
-                          <Ionicons name="logo-google" size={14} color="#4285F4" style={{ marginRight: 4 }} />
-                          <Text style={[styles.authBadgeText, { color: '#4285F4' }]}>Google OAuth</Text>
-                        </View>
-
-                        <View style={[styles.authBadge, { backgroundColor: '#2ecc7115', borderColor: '#2ecc7140' }]}>
-                          <View style={styles.greenDot} />
-                          <Text style={[styles.authBadgeText, { color: '#2ecc71' }]}>En línea</Text>
-                        </View>
-                      </View>
+                  <View style={styles.badgeRow}>
+                    <View style={[styles.authBadge, { backgroundColor: '#4285F415', borderColor: '#4285F440' }]}>
+                      <Ionicons name="logo-google" size={14} color="#4285F4" style={{ marginRight: 4 }} />
+                      <Text style={[styles.authBadgeText, { color: '#4285F4' }]}>Google OAuth</Text>
                     </View>
 
-                    {/* Detalle Técnico de la Cuenta */}
-                    <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>DETALLES DE LA CUENTA</Text>
-                    <View style={[styles.detailsGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                      <View style={styles.detailRow}>
-                        <Ionicons name="key-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
-                        <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Rol asignado</Text>
-                        <Text style={[styles.detailValue, { color: currentTheme.primary, fontWeight: '800' }]}>
-                          {userRoles[0] === 'Admin' ? '👑 Admin' : userRoles[0] === 'Editor' ? '✏️ Editor' : '👁️ Viewer'}
-                        </Text>
-                      </View>
-
-                      <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                      <View style={styles.detailRow}>
-                        <Ionicons name="calendar-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
-                        <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Miembro desde</Text>
-                        <Text style={[styles.detailValue, { color: currentTheme.text }]}>{createdAt}</Text>
-                      </View>
-
-                      <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                      <View style={styles.detailRow}>
-                        <Ionicons name="sync-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
-                        <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Última Sincronización</Text>
-                        <Text style={[styles.detailValue, { color: currentTheme.text }]}>{getSyncTimeFormatted()}</Text>
-                      </View>
-
-                      <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                      <View style={styles.detailRow}>
-                        <Ionicons name="shield-checkmark-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
-                        <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Estado de Sincronización</Text>
-                        <Text style={[styles.detailValue, { color: '#2ecc71', fontWeight: '700' }]}>Activo & Seguro</Text>
-                      </View>
+                    <View style={[styles.authBadge, { backgroundColor: '#2ecc7115', borderColor: '#2ecc7140' }]}>
+                      <View style={styles.greenDot} />
+                      <Text style={[styles.authBadgeText, { color: '#2ecc71' }]}>En línea</Text>
                     </View>
+                  </View>
+                </View>
 
-                    {/* Acciones */}
-                    <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>ACCIONES RÁPIDAS</Text>
-                    <View style={styles.actionsContainer}>
-                      <TouchableOpacity
-                        style={[styles.actionBtn, { backgroundColor: currentTheme.primary }]}
-                        onPress={handleSyncNow}
-                        disabled={isAuthLoading}
-                        activeOpacity={0.8}
-                      >
-                        {isAuthLoading ? (
-                          <ActivityIndicator size="small" color="#FFF" />
-                        ) : (
-                          <>
-                            <Ionicons name="refresh-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
-                            <Text style={styles.actionBtnText}>Sincronizar ahora</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
+                {/* Detalle Técnico de la Cuenta */}
+                <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>DETALLES DE LA CUENTA</Text>
+                <View style={[styles.detailsGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                  <View style={styles.detailRow}>
+                    <Ionicons name="key-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
+                    <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Rol asignado</Text>
+                    <Text style={[styles.detailValue, { color: currentTheme.primary, fontWeight: '800' }]}>
+                      {userRoles[0] === 'Admin' ? 'Admin' : userRoles[0] === 'Editor' ? 'Editor' : 'Viewer'}
+                    </Text>
+                  </View>
 
-                      <TouchableOpacity
-                        style={[styles.actionBtnOutline, { borderColor: currentTheme.border, backgroundColor: currentTheme.background }]}
-                        onPress={handleManageAccount}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="open-outline" size={18} color={currentTheme.text} style={{ marginRight: 6 }} />
-                        <Text style={[styles.actionBtnOutlineText, { color: currentTheme.text }]}>Administrar Cuenta</Text>
-                      </TouchableOpacity>
+                  <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
 
-                      <TouchableOpacity
-                        style={[styles.actionBtnOutline, { borderColor: '#e74c3c40', backgroundColor: '#e74c3c10' }]}
-                        onPress={handleSignOut}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="log-out-outline" size={18} color="#e74c3c" style={{ marginRight: 6 }} />
-                        <Text style={[styles.actionBtnOutlineText, { color: '#e74c3c' }]}>Cerrar Sesión</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    {/* Modo Local: Tarjetas Visuales de Ventajas */}
-                    <View style={[styles.guestHero, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                      <View style={[styles.guestIconBadge, { backgroundColor: currentTheme.primary + '20' }]}>
-                        <Ionicons name="person-outline" size={32} color={currentTheme.primary} />
-                      </View>
-                      <Text style={[styles.guestHeroTitle, { color: currentTheme.text }]}>Perfil Local</Text>
-                      <Text style={[styles.guestHeroSubtitle, { color: currentTheme.textSecondary }]}>
-                        Estás utilizando Topytop Kith en Modo Local sin cuenta conectada.
-                      </Text>
+                  <View style={styles.detailRow}>
+                    <Ionicons name="calendar-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
+                    <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Miembro desde</Text>
+                    <Text style={[styles.detailValue, { color: currentTheme.text }]}>{createdAt}</Text>
+                  </View>
 
-                      <TouchableOpacity
-                        style={[styles.googleSignInBtn, { backgroundColor: currentTheme.primary }]}
-                        onPress={handleGoogleSignIn}
-                        disabled={isAuthLoading}
-                        activeOpacity={0.8}
-                      >
-                        {isAuthLoading ? (
-                          <ActivityIndicator size="small" color="#FFF" />
-                        ) : (
-                          <>
-                            <Ionicons name="logo-google" size={18} color="#FFF" style={{ marginRight: 8 }} />
-                            <Text style={styles.googleSignInText}>☁ Continuar con Google</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
+                  <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
 
-                    <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>VENTAJAS DE CONECTAR TU CUENTA</Text>
+                  <View style={styles.detailRow}>
+                    <Ionicons name="sync-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
+                    <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Última Sincronización</Text>
+                    <Text style={[styles.detailValue, { color: currentTheme.text }]}>{getSyncTimeFormatted()}</Text>
+                  </View>
 
-                    <View style={styles.advantagesGrid}>
-                      <View style={[styles.advantageCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                        <Ionicons name="cloud-upload-outline" size={24} color={currentTheme.primary} style={{ marginBottom: 8 }} />
-                        <Text style={[styles.advantageTitle, { color: currentTheme.text }]}>Copia de Seguridad</Text>
-                        <Text style={[styles.advantageDesc, { color: currentTheme.textSecondary }]}>
-                          Respaldos automáticos en la nube para nunca perder tus lotes ni prendas.
-                        </Text>
-                      </View>
+                  <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
 
-                      <View style={[styles.advantageCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                        <Ionicons name="phone-portrait-outline" size={24} color={currentTheme.primary} style={{ marginBottom: 8 }} />
-                        <Text style={[styles.advantageTitle, { color: currentTheme.text }]}>Multi-Dispositivo</Text>
-                        <Text style={[styles.advantageDesc, { color: currentTheme.textSecondary }]}>
-                          Accede a tu inventario desde cualquier celular o tablet en tiempo real.
-                        </Text>
-                      </View>
+                  <View style={styles.detailRow}>
+                    <Ionicons name="shield-checkmark-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
+                    <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Estado de Sincronización</Text>
+                    <Text style={[styles.detailValue, { color: '#2ecc71', fontWeight: '700' }]}>Activo & Seguro</Text>
+                  </View>
+                </View>
 
-                      <View style={[styles.advantageCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                        <Ionicons name="refresh-circle-outline" size={24} color={currentTheme.primary} style={{ marginBottom: 8 }} />
-                        <Text style={[styles.advantageTitle, { color: currentTheme.text }]}>Recuperación de Datos</Text>
-                        <Text style={[styles.advantageDesc, { color: currentTheme.textSecondary }]}>
-                          Restaura tu inventario fácilmente si cambias o formateas tu dispositivo.
-                        </Text>
-                      </View>
+                {/* Acciones */}
+                <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>ACCIONES RÁPIDAS</Text>
+                <View style={styles.actionsContainer}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: currentTheme.primary }]}
+                    onPress={handleSyncNow}
+                    disabled={isAuthLoading}
+                    activeOpacity={0.8}
+                  >
+                    {isAuthLoading ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <>
+                        <Ionicons name="refresh-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.actionBtnText}>Sincronizar ahora</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
 
-                      <View style={[styles.advantageCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                        <Ionicons name="shield-checkmark-outline" size={24} color={currentTheme.primary} style={{ marginBottom: 8 }} />
-                        <Text style={[styles.advantageTitle, { color: currentTheme.text }]}>Seguridad Garantizada</Text>
-                        <Text style={[styles.advantageDesc, { color: currentTheme.textSecondary }]}>
-                          Autenticación encriptada protegida directamente por Google y Supabase.
-                        </Text>
-                      </View>
-                    </View>
-                  </>
-                )}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+                  <TouchableOpacity
+                    style={[styles.actionBtnOutline, { borderColor: currentTheme.border, backgroundColor: currentTheme.background }]}
+                    onPress={handleManageAccount}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="open-outline" size={18} color={currentTheme.text} style={{ marginRight: 6 }} />
+                    <Text style={[styles.actionBtnOutlineText, { color: currentTheme.text }]}>Administrar Cuenta</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtnOutline, { borderColor: '#e74c3c40', backgroundColor: '#e74c3c10' }]}
+                    onPress={handleSignOut}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="log-out-outline" size={18} color="#e74c3c" style={{ marginRight: 6 }} />
+                    <Text style={[styles.actionBtnOutlineText, { color: '#e74c3c' }]}>Cerrar Sesión</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                {/* Modo Local: Tarjetas Visuales de Ventajas */}
+                <View style={[styles.guestHero, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                  <View style={[styles.guestIconBadge, { backgroundColor: currentTheme.primary + '20' }]}>
+                    <Ionicons name="person-outline" size={32} color={currentTheme.primary} />
+                  </View>
+                  <Text style={[styles.guestHeroTitle, { color: currentTheme.text }]}>Perfil Local</Text>
+                  <Text style={[styles.guestHeroSubtitle, { color: currentTheme.textSecondary }]}>
+                    Estás utilizando Topytop Kith en Modo Local sin cuenta conectada.
+                  </Text>
+
+                  <TouchableOpacity
+                    style={[styles.googleSignInBtn, { backgroundColor: currentTheme.primary }]}
+                    onPress={handleGoogleSignIn}
+                    disabled={isAuthLoading}
+                    activeOpacity={0.8}
+                  >
+                    {isAuthLoading ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <>
+                        <Ionicons name="logo-google" size={18} color="#FFF" style={{ marginRight: 8 }} />
+                        <Text style={styles.googleSignInText}>☁ Continuar con Google</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>VENTAJAS DE CONECTAR TU CUENTA</Text>
+
+                <View style={styles.advantagesGrid}>
+                  <View style={[styles.advantageCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                    <Ionicons name="cloud-upload-outline" size={24} color={currentTheme.primary} style={{ marginBottom: 8 }} />
+                    <Text style={[styles.advantageTitle, { color: currentTheme.text }]}>Copia de Seguridad</Text>
+                    <Text style={[styles.advantageDesc, { color: currentTheme.textSecondary }]}>
+                      Respaldos automáticos en la nube para nunca perder tus lotes ni prendas.
+                    </Text>
+                  </View>
+
+                  <View style={[styles.advantageCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                    <Ionicons name="phone-portrait-outline" size={24} color={currentTheme.primary} style={{ marginBottom: 8 }} />
+                    <Text style={[styles.advantageTitle, { color: currentTheme.text }]}>Multi-Dispositivo</Text>
+                    <Text style={[styles.advantageDesc, { color: currentTheme.textSecondary }]}>
+                      Accede a tu inventario desde cualquier celular o tablet en tiempo real.
+                    </Text>
+                  </View>
+
+                  <View style={[styles.advantageCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                    <Ionicons name="refresh-circle-outline" size={24} color={currentTheme.primary} style={{ marginBottom: 8 }} />
+                    <Text style={[styles.advantageTitle, { color: currentTheme.text }]}>Recuperación de Datos</Text>
+                    <Text style={[styles.advantageDesc, { color: currentTheme.textSecondary }]}>
+                      Restaura tu inventario fácilmente si cambias o formateas tu dispositivo.
+                    </Text>
+                  </View>
+
+                  <View style={[styles.advantageCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                    <Ionicons name="shield-checkmark-outline" size={24} color={currentTheme.primary} style={{ marginBottom: 8 }} />
+                    <Text style={[styles.advantageTitle, { color: currentTheme.text }]}>Seguridad Garantizada</Text>
+                    <Text style={[styles.advantageDesc, { color: currentTheme.textSecondary }]}>
+                      Autenticación encriptada protegida directamente por Google y Supabase.
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 };
 

@@ -27,6 +27,7 @@ import { ProfileModal } from './ProfileModal';
 import { NotificationSettingsModal } from './NotificationSettingsModal';
 import { AboutModal } from './AboutModal';
 import { PrivacyModal } from './PrivacyModal';
+import { maskEmail } from '../utils/maskUtils';
 
 import { RoleGuard } from './RoleGuard';
 import { UserManagementModal } from './UserManagementModal';
@@ -99,8 +100,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
               roleInfo.roles,
               roleInfo.isActive
             );
-          }).catch(() => {});
-        });
+          }).catch(() => { });
+        }).catch(() => { });
       }
     }
   }, [visible, db, user?.id]);
@@ -217,7 +218,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
       return (
         <View style={[styles.statusBadge, { backgroundColor: '#e74c3c20', borderColor: '#e74c3c' }]}>
           <Ionicons name="alert-circle" size={14} color="#e74c3c" style={{ marginRight: 4 }} />
-          <Text style={[styles.statusBadgeText, { color: '#e74c3c' }]}>🔴 Error de sync</Text>
+          <Text style={[styles.statusBadgeText, { color: '#e74c3c' }]}>Error de sync</Text>
         </View>
       );
     }
@@ -225,14 +226,14 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
       return (
         <View style={[styles.statusBadge, { backgroundColor: '#EAB30820', borderColor: '#EAB308' }]}>
           <Ionicons name="cloud-offline" size={14} color="#EAB308" style={{ marginRight: 4 }} />
-          <Text style={[styles.statusBadgeText, { color: '#EAB308' }]}>🟡 Sin conexión</Text>
+          <Text style={[styles.statusBadgeText, { color: '#EAB308' }]}>Sin conexión</Text>
         </View>
       );
     }
     return (
       <View style={[styles.statusBadge, { backgroundColor: '#2ecc7120', borderColor: '#2ecc71' }]}>
         <View style={styles.greenDot} />
-        <Text style={[styles.statusBadgeText, { color: '#2ecc71' }]}>🟢 Sincronizado</Text>
+        <Text style={[styles.statusBadgeText, { color: '#2ecc71' }]}>Sincronizado</Text>
       </View>
     );
   };
@@ -284,271 +285,271 @@ export const AccountModal: React.FC<AccountModalProps> = ({ visible, onClose }) 
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.scrollContent}
             >
-                  {/* Tarjeta de Perfil Hero */}
-                  {!user ? (
-                    <View style={[styles.profileCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                      <View style={styles.profileHeader}>
-                        <View style={[styles.avatarPlaceholder, { backgroundColor: currentTheme.primary + '20' }]}>
-                          <Ionicons name="person-outline" size={26} color={currentTheme.primary} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.profileName, { color: currentTheme.text }]}>👤 Usuario Local</Text>
-                          <Text style={[styles.profileStatusText, { color: currentTheme.textSecondary }]}>Almacenamiento Local (SQLite)</Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.guestInfoText, { color: currentTheme.textSecondary }]}>
-                        Tus datos se almacenan únicamente en este dispositivo. Inicia sesión con Google para respaldar y sincronizar tus prendas entre dispositivos.
-                      </Text>
-                      <TouchableOpacity
-                        onPress={handleGoogleSignIn}
-                        disabled={isAuthLoading}
-                        activeOpacity={0.8}
-                        style={[styles.googleButton, { backgroundColor: currentTheme.primary }]}
-                      >
-                        {isAuthLoading ? (
-                          <ActivityIndicator size="small" color="#FFF" />
-                        ) : (
-                          <>
-                            <Ionicons name="cloud-upload-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
-                            <Text style={styles.googleButtonText}>☁ Continuar con Google</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                      <Text style={[styles.noteText, { color: currentTheme.textSecondary }]}>
-                        * Iniciar sesión es completamente opcional.
-                      </Text>
+              {/* Tarjeta de Perfil Hero */}
+              {!user ? (
+                <View style={[styles.profileCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                  <View style={styles.profileHeader}>
+                    <View style={[styles.avatarPlaceholder, { backgroundColor: currentTheme.primary + '20' }]}>
+                      <Ionicons name="person-outline" size={26} color={currentTheme.primary} />
                     </View>
-                  ) : (
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      onPress={() => setProfileModalVisible(true)}
-                      style={[styles.profileCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.primary + '50' }]}
-                    >
-                      <View style={styles.profileHeader}>
-                        {avatarUrl ? (
-                          <Image
-                            source={{ uri: avatarUrl }}
-                            style={styles.avatarImage}
-                            contentFit="cover"
-                            cachePolicy="memory-disk"
-                            transition={200}
-                          />
-                        ) : (
-                          <View style={[styles.avatarPlaceholder, { backgroundColor: currentTheme.primary + '20' }]}>
-                            <Ionicons name="person" size={26} color={currentTheme.primary} />
-                          </View>
-                        )}
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.profileName, { color: currentTheme.text }]} numberOfLines={1}>
-                            👤 {fullName}
-                          </Text>
-                          <View style={styles.connectedBadge}>
-                            <View style={styles.greenDot} />
-                            <Text style={[styles.connectedText, { color: '#2ecc71' }]} numberOfLines={1}>
-                              Google conectado ({email})
-                            </Text>
-                          </View>
-                          {userRoles && userRoles.length > 0 && (
-                            <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                              {userRoles.map((r, i) => (
-                                <View key={i} style={{ backgroundColor: currentTheme.primary + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: currentTheme.primary + '50' }}>
-                                  <Text style={{ fontSize: 10, fontWeight: '800', color: currentTheme.primary }}>
-                                    {r === 'Admin' ? '👑 Admin' : r === 'Editor' ? '✏️ Editor' : '👁️ Viewer'}
-                                  </Text>
-                                </View>
-                              ))}
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.profileName, { color: currentTheme.text }]}>👤 Usuario Local</Text>
+                      <Text style={[styles.profileStatusText, { color: currentTheme.textSecondary }]}>Almacenamiento Local (SQLite)</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.guestInfoText, { color: currentTheme.textSecondary }]}>
+                    Tus datos se almacenan únicamente en este dispositivo. Inicia sesión con Google para respaldar y sincronizar tus prendas entre dispositivos.
+                  </Text>
+                  <TouchableOpacity
+                    onPress={handleGoogleSignIn}
+                    disabled={isAuthLoading}
+                    activeOpacity={0.8}
+                    style={[styles.googleButton, { backgroundColor: currentTheme.primary }]}
+                  >
+                    {isAuthLoading ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <>
+                        <Ionicons name="cloud-upload-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                        <Text style={styles.googleButtonText}>☁ Continuar con Google</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  <Text style={[styles.noteText, { color: currentTheme.textSecondary }]}>
+                    * Iniciar sesión es completamente opcional.
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setProfileModalVisible(true)}
+                  style={[styles.profileCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.primary + '50' }]}
+                >
+                  <View style={styles.profileHeader}>
+                    {avatarUrl ? (
+                      <Image
+                        source={{ uri: avatarUrl }}
+                        style={styles.avatarImage}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={200}
+                      />
+                    ) : (
+                      <View style={[styles.avatarPlaceholder, { backgroundColor: currentTheme.primary + '20' }]}>
+                        <Ionicons name="person" size={26} color={currentTheme.primary} />
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.profileName, { color: currentTheme.text }]} numberOfLines={1}>
+                        👤 {fullName}
+                      </Text>
+                      <View style={styles.connectedBadge}>
+                        <View style={styles.greenDot} />
+                        <Text style={[styles.connectedText, { color: '#2ecc71' }]} numberOfLines={1}>
+                          Google conectado ({maskEmail(email)})
+                        </Text>
+                      </View>
+                      {userRoles && userRoles.length > 0 && (
+                        <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                          {userRoles.map((r, i) => (
+                            <View key={i} style={{ backgroundColor: currentTheme.primary + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: currentTheme.primary + '50' }}>
+                              <Text style={{ fontSize: 10, fontWeight: '800', color: currentTheme.primary }}>
+                                {r === 'Admin' ? 'Admin' : r === 'Editor' ? 'Editor' : 'Viewer'}
+                              </Text>
                             </View>
-                          )}
+                          ))}
                         </View>
-                        <Ionicons name="chevron-forward" size={18} color={currentTheme.textSecondary} />
-                      </View>
-                    </TouchableOpacity>
-                  )}
-
-                  {/* Tarjeta de Sincronización Avanzada */}
-                  <View style={[styles.syncHeroCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                    <View style={styles.syncHeroHeader}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.syncHeroTitle, { color: currentTheme.text }]}>Estado de Sincronización</Text>
-                        <Text style={[styles.syncMessageText, { color: currentTheme.textSecondary }]}>{syncMessage}</Text>
-                      </View>
-                      {renderSyncBadge()}
+                      )}
                     </View>
+                    <Ionicons name="chevron-forward" size={18} color={currentTheme.textSecondary} />
+                  </View>
+                </TouchableOpacity>
+              )}
 
-                    {/* Métricas de SQLite */}
-                    <View style={styles.metricsGrid}>
-                      <View style={[styles.metricPill, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
-                        <Ionicons name="albums-outline" size={16} color={currentTheme.primary} style={{ marginBottom: 2 }} />
-                        <Text style={[styles.metricNumber, { color: currentTheme.text }]}>{stats.totalInventarios}</Text>
-                        <Text style={[styles.metricLabel, { color: currentTheme.textSecondary }]}>Lotes</Text>
-                      </View>
+              {/* Tarjeta de Sincronización Avanzada */}
+              <View style={[styles.syncHeroCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                <View style={styles.syncHeroHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.syncHeroTitle, { color: currentTheme.text }]}>Estado de Sincronización</Text>
+                    <Text style={[styles.syncMessageText, { color: currentTheme.textSecondary }]}>{syncMessage}</Text>
+                  </View>
+                  {renderSyncBadge()}
+                </View>
 
-                      <View style={[styles.metricPill, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
-                        <Ionicons name="cube-outline" size={16} color={currentTheme.primary} style={{ marginBottom: 2 }} />
-                        <Text style={[styles.metricNumber, { color: currentTheme.text }]}>{stats.totalCajas}</Text>
-                        <Text style={[styles.metricLabel, { color: currentTheme.textSecondary }]}>Cajas</Text>
-                      </View>
-
-                      <View style={[styles.metricPill, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
-                        <Ionicons name="shirt-outline" size={16} color={currentTheme.primary} style={{ marginBottom: 2 }} />
-                        <Text style={[styles.metricNumber, { color: currentTheme.text }]}>{stats.totalPrendas}</Text>
-                        <Text style={[styles.metricLabel, { color: currentTheme.textSecondary }]}>Prendas</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.syncFooterRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.syncFooterLabel, { color: currentTheme.textSecondary }]}>Última actualización</Text>
-                        <Text style={[styles.syncFooterTime, { color: currentTheme.text }]}>{getSyncTimeFormatted()}</Text>
-                      </View>
-                      <TouchableOpacity
-                        onPress={handleSync}
-                        disabled={isAuthLoading}
-                        style={[styles.syncButton, { backgroundColor: currentTheme.primary }]}
-                        activeOpacity={0.8}
-                      >
-                        {isAuthLoading ? (
-                          <ActivityIndicator size="small" color="#FFF" />
-                        ) : (
-                          <>
-                            <Ionicons name="refresh" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                            <Text style={styles.syncButtonText}>Sincronizar ahora</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
+                {/* Métricas de SQLite */}
+                <View style={styles.metricsGrid}>
+                  <View style={[styles.metricPill, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+                    <Ionicons name="albums-outline" size={16} color={currentTheme.primary} style={{ marginBottom: 2 }} />
+                    <Text style={[styles.metricNumber, { color: currentTheme.text }]}>{stats.totalInventarios}</Text>
+                    <Text style={[styles.metricLabel, { color: currentTheme.textSecondary }]}>Lotes</Text>
                   </View>
 
-                  {/* Sección: Cuenta */}
-                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>CUENTA Y PREFERENCIAS</Text>
-                  <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                    <TouchableOpacity style={styles.menuRow} onPress={() => setProfileModalVisible(true)}>
-                      <Ionicons name="person-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Perfil de Usuario</Text>
-                      <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
-                    </TouchableOpacity>
-
-                    <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                    <TouchableOpacity style={styles.menuRow} onPress={handleSync}>
-                      <Ionicons name="sync-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Sincronización</Text>
-                      <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
-                    </TouchableOpacity>
-
-                    <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                    <TouchableOpacity style={styles.menuRow} onPress={() => toggleTheme(db)}>
-                      <Ionicons name={themeMode === 'light' ? 'sunny-outline' : 'moon-outline'} size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Apariencia ({themeMode === 'light' ? 'Modo Claro' : 'Modo Oscuro'})</Text>
-                      <Ionicons name="swap-horizontal" size={16} color={currentTheme.primary} />
-                    </TouchableOpacity>
-
-                    <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                    <TouchableOpacity style={styles.menuRow} onPress={() => setThemeModalVisible(true)}>
-                      <Ionicons name="color-palette-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Tema de Color</Text>
-                      <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
-                    </TouchableOpacity>
-
-                    <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                    <TouchableOpacity style={styles.menuRow} onPress={() => setNotifModalVisible(true)}>
-                      <Ionicons name="notifications-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Notificaciones</Text>
-                      <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
-                    </TouchableOpacity>
-
-                    <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                    <TouchableOpacity style={styles.menuRow} onPress={() => setExportModalVisible(true)}>
-                      <Ionicons name="archive-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Copia de seguridad (Excel)</Text>
-                      <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
-                    </TouchableOpacity>
+                  <View style={[styles.metricPill, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+                    <Ionicons name="cube-outline" size={16} color={currentTheme.primary} style={{ marginBottom: 2 }} />
+                    <Text style={[styles.metricNumber, { color: currentTheme.text }]}>{stats.totalCajas}</Text>
+                    <Text style={[styles.metricLabel, { color: currentTheme.textSecondary }]}>Cajas</Text>
                   </View>
 
-                  {/* Sección: Contacto */}
-                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>CONTACTO</Text>
-                  <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                    <TouchableOpacity style={styles.menuRow} onPress={() => openLink('https://www.linkedin.com/in/deyvid-jair-chupillon-silva')}>
-                      <Ionicons name="logo-linkedin" size={20} color="#0A66C2" style={styles.menuIcon} />
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>LinkedIn</Text>
-                      <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
-                    </TouchableOpacity>
-
-                    <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                    <TouchableOpacity style={styles.menuRow} onPress={() => openLink('https://github.com/Deyvid0932')}>
-                      <Ionicons name="logo-github" size={20} color={themeMode === 'light' ? '#24292E' : '#FFF'} style={styles.menuIcon} />
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>GitHub</Text>
-                      <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
-                    </TouchableOpacity>
-
-                    <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                    <TouchableOpacity style={styles.menuRow} onPress={() => openLink('https://wa.me/51980709494')}>
-                      <Ionicons name="logo-whatsapp" size={20} color="#25D366" style={styles.menuIcon} />
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>WhatsApp</Text>
-                      <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
-                    </TouchableOpacity>
+                  <View style={[styles.metricPill, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+                    <Ionicons name="shirt-outline" size={16} color={currentTheme.primary} style={{ marginBottom: 2 }} />
+                    <Text style={[styles.metricNumber, { color: currentTheme.text }]}>{stats.totalPrendas}</Text>
+                    <Text style={[styles.metricLabel, { color: currentTheme.textSecondary }]}>Prendas</Text>
                   </View>
+                </View>
 
-                  {/* Sección: Administración (Solo Admin) */}
-                  <RoleGuard roles={['Admin']}>
-                    <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>ADMINISTRACIÓN</Text>
-                    <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                      <TouchableOpacity style={styles.menuRow} onPress={() => setUserMgmtModalVisible(true)}>
-                        <Ionicons name="people-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                        <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Gestión de Usuarios y Roles</Text>
-                        <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
-                      </TouchableOpacity>
-
-                      <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                      <TouchableOpacity style={styles.menuRow} onPress={() => setTrashModalVisible(true)}>
-                        <Ionicons name="trash-outline" size={20} color="#EF4444" style={styles.menuIcon} />
-                        <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Papelera de Reciclaje</Text>
-                        <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
-                      </TouchableOpacity>
-                    </View>
-                  </RoleGuard>
-
-                  {/* Sección: Información */}
-                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>INFORMACIÓN</Text>
-                  <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                    <TouchableOpacity style={styles.menuRow} onPress={() => setAboutModalVisible(true)}>
-                      <Ionicons name="information-circle-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Acerca de la aplicación</Text>
-                      <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
-                    </TouchableOpacity>
-
-
-
-                    <TouchableOpacity style={styles.menuRow} onPress={() => setPrivacyModalVisible(true)}>
-                      <Ionicons name="document-text-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Política de privacidad</Text>
-                      <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
-                    </TouchableOpacity>
+                <View style={styles.syncFooterRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.syncFooterLabel, { color: currentTheme.textSecondary }]}>Última actualización</Text>
+                    <Text style={[styles.syncFooterTime, { color: currentTheme.text }]}>{getSyncTimeFormatted()}</Text>
                   </View>
-
-                  {/* Sección: Sesión (Solo si está autenticado) */}
-                  {user && (
-                    <>
-                      <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>SESIÓN</Text>
-                      <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: '#e74c3c40' }]}>
-                        <TouchableOpacity style={styles.menuRow} onPress={handleSignOut}>
-                          <Ionicons name="log-out-outline" size={20} color="#e74c3c" style={styles.menuIcon} />
-                          <Text style={[styles.menuLabel, { color: '#e74c3c', fontWeight: '700' }]}>Cerrar sesión</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  )}
-                </ScrollView>
+                  <TouchableOpacity
+                    onPress={handleSync}
+                    disabled={isAuthLoading}
+                    style={[styles.syncButton, { backgroundColor: currentTheme.primary }]}
+                    activeOpacity={0.8}
+                  >
+                    {isAuthLoading ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <>
+                        <Ionicons name="refresh" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.syncButtonText}>Sincronizar ahora</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </Modal>
+
+              {/* Sección: Cuenta */}
+              <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>CUENTA Y PREFERENCIAS</Text>
+              <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                <TouchableOpacity style={styles.menuRow} onPress={() => setProfileModalVisible(true)}>
+                  <Ionicons name="person-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Perfil de Usuario</Text>
+                  <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+
+                <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+                <TouchableOpacity style={styles.menuRow} onPress={handleSync}>
+                  <Ionicons name="sync-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Sincronización</Text>
+                  <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+
+                <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+                <TouchableOpacity style={styles.menuRow} onPress={() => toggleTheme(db)}>
+                  <Ionicons name={themeMode === 'light' ? 'sunny-outline' : 'moon-outline'} size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Apariencia ({themeMode === 'light' ? 'Modo Claro' : 'Modo Oscuro'})</Text>
+                  <Ionicons name="swap-horizontal" size={16} color={currentTheme.primary} />
+                </TouchableOpacity>
+
+                <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+                <TouchableOpacity style={styles.menuRow} onPress={() => setThemeModalVisible(true)}>
+                  <Ionicons name="color-palette-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Tema de Color</Text>
+                  <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+
+                <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+                <TouchableOpacity style={styles.menuRow} onPress={() => setNotifModalVisible(true)}>
+                  <Ionicons name="notifications-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Notificaciones</Text>
+                  <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+
+                <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+                <TouchableOpacity style={styles.menuRow} onPress={() => setExportModalVisible(true)}>
+                  <Ionicons name="archive-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Copia de seguridad (Excel)</Text>
+                  <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Sección: Contacto */}
+              <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>CONTACTO</Text>
+              <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                <TouchableOpacity style={styles.menuRow} onPress={() => openLink('https://www.linkedin.com/in/deyvid-jair-chupillon-silva')}>
+                  <Ionicons name="logo-linkedin" size={20} color="#0A66C2" style={styles.menuIcon} />
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>LinkedIn</Text>
+                  <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+
+                <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+                <TouchableOpacity style={styles.menuRow} onPress={() => openLink('https://github.com/Deyvid0932')}>
+                  <Ionicons name="logo-github" size={20} color={themeMode === 'light' ? '#24292E' : '#FFF'} style={styles.menuIcon} />
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>GitHub</Text>
+                  <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+
+                <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+                <TouchableOpacity style={styles.menuRow} onPress={() => openLink('https://wa.me/51980709494')}>
+                  <Ionicons name="logo-whatsapp" size={20} color="#25D366" style={styles.menuIcon} />
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>WhatsApp</Text>
+                  <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Sección: Administración (Solo Admin) */}
+              <RoleGuard roles={['Admin']}>
+                <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>ADMINISTRACIÓN</Text>
+                <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                  <TouchableOpacity style={styles.menuRow} onPress={() => setUserMgmtModalVisible(true)}>
+                    <Ionicons name="people-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                    <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Gestión de Usuarios y Roles</Text>
+                    <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                  </TouchableOpacity>
+
+                  <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+                  <TouchableOpacity style={styles.menuRow} onPress={() => setTrashModalVisible(true)}>
+                    <Ionicons name="trash-outline" size={20} color="#EF4444" style={styles.menuIcon} />
+                    <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Papelera de Reciclaje</Text>
+                    <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              </RoleGuard>
+
+              {/* Sección: Información */}
+              <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>INFORMACIÓN</Text>
+              <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                <TouchableOpacity style={styles.menuRow} onPress={() => setAboutModalVisible(true)}>
+                  <Ionicons name="information-circle-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Acerca de la aplicación</Text>
+                  <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+
+
+
+                <TouchableOpacity style={styles.menuRow} onPress={() => setPrivacyModalVisible(true)}>
+                  <Ionicons name="document-text-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Política de privacidad</Text>
+                  <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Sección: Sesión (Solo si está autenticado) */}
+              {user && (
+                <>
+                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>SESIÓN</Text>
+                  <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: '#e74c3c40' }]}>
+                    <TouchableOpacity style={styles.menuRow} onPress={handleSignOut}>
+                      <Ionicons name="log-out-outline" size={20} color="#e74c3c" style={styles.menuIcon} />
+                      <Text style={[styles.menuLabel, { color: '#e74c3c', fontWeight: '700' }]}>Cerrar sesión</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modales Especializados */}
       <ProfileModal visible={profileModalVisible} onClose={() => setProfileModalVisible(false)} />

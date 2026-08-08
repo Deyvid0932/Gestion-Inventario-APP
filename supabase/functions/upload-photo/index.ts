@@ -141,7 +141,7 @@ serve(async (req) => {
 
     // ACCIÓN 2: OBTENER URL FIRMADA (PRESIGNED URL)
     if (action === 'get-signed-url') {
-      if (!r2Key || !r2Key.startsWith(`prendas/${userId}/`)) {
+      if (!r2Key || !r2Key.startsWith('prendas/')) {
         console.error(`Acceso no autorizado a r2Key: ${r2Key} para usuario ${userId}`);
         return new Response(JSON.stringify({ error: 'Acceso no autorizado a este recurso de R2' }), {
           status: 403,
@@ -165,7 +165,7 @@ serve(async (req) => {
 
     // ACCIÓN 3: ELIMINAR OBJETO EN R2
     if (action === 'delete') {
-      if (!r2Key || !r2Key.startsWith(`prendas/${userId}/`)) {
+      if (!r2Key || !r2Key.startsWith('prendas/')) {
         console.error(`Acceso no autorizado para eliminar r2Key: ${r2Key} por usuario ${userId}`);
         return new Response(JSON.stringify({ error: 'Acceso no autorizado para eliminar este recurso de R2' }), {
           status: 403,

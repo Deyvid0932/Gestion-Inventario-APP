@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppStore } from '../store/useAppStore';
 import { supabase } from '../database/supabase';
 import { UserProfile, RoleName } from '../types/roles';
+import { maskEmail } from '../utils/maskUtils';
 
 interface UserManagementModalProps {
   visible: boolean;
@@ -124,7 +125,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ visibl
 
     Alert.alert(
       'Eliminar Usuario',
-      `¿Estás seguro de eliminar permanentemente a "${userEmail}"? Esta acción eliminará su perfil y roles de Supabase.`,
+      `¿Estás seguro de eliminar permanentemente a "${maskEmail(userEmail)}"? Esta acción eliminará su perfil y roles de Supabase.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -139,21 +140,30 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ visibl
               });
 
               if (rpcErr) {
-                console.warn('RPC delete_user_profile falló, ejecutando fallback:', rpcErr);
-                // Fallback manual
+                console.warn('[UserManagement] RPC delete_user_profile falló o no existe, ejecutando fallback:', rpcErr.message);
+                // Fallback manual: Borrar relación de roles y luego el perfil
                 await supabase.from('profile_roles').delete().eq('profile_id', userId);
                 const { error: delError } = await supabase.from('profiles').delete().eq('id', userId);
 
                 if (delError) {
-                  console.error('Error al eliminar perfil de Supabase:', delError);
-                  Alert.alert('Error', 'No se pudo eliminar el usuario de Supabase. Verifica los permisos.');
-                  return;
+                  console.warn('[UserManagement] Borrado físico denegado por RLS (code 42501), aplicando desactivación:', delError.message);
+                  // Si PostgreSQL RLS bloquea el borrado físico, deshabilitar/suspender al usuario
+                  const { error: suspendErr } = await supabase
+                    .from('profiles')
+                    .update({ active: false })
+                    .eq('id', userId);
+
+                  if (suspendErr) {
+                    console.error('[UserManagement] Error al suspender usuario:', suspendErr);
+                    Alert.alert('Error', 'No se pudo eliminar ni suspender el usuario de Supabase. Verifica los permisos.');
+                    return;
+                  }
                 }
               }
 
               // Eliminar de la lista local de React
               setUsers(prev => prev.filter(u => u.id !== userId));
-              Alert.alert('Éxito', 'El usuario ha sido eliminado correctamente de Supabase.');
+              Alert.alert('Éxito', 'El usuario ha sido eliminado/desactivado correctamente de Supabase.');
             } catch (e) {
               console.error('Excepción al eliminar usuario:', e);
               Alert.alert('Error', 'Ocurrió un fallo inesperado al eliminar la cuenta.');
@@ -167,99 +177,124 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ visibl
   };
 
   const toggleUserActive = async (userId: string, currentActive: boolean) => {
-    setUpdatingUserId(userId);
-    const newActiveState = !currentActive;
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ active: newActiveState })
-        .eq('id', userId);
+    const targetUser = users.find(u => u.id === userId);
+    const actionLabel = currentActive ? 'Suspender' : 'Reactivar';
+    const actionDesc = currentActive
+      ? `Se suspenderá el acceso de "${targetUser?.name || 'este usuario'}". No podrá sincronizar datos mientras esté suspendido.`
+      : `Se reactivará el acceso de "${targetUser?.name || 'este usuario'}". Podrá volver a sincronizar datos.`;
 
-      if (error) {
-        console.error('Error toggleActive:', error);
-        Alert.alert('Error', 'No se pudo actualizar el estado.');
-      } else {
-        setUsers(prev =>
-          prev.map(u => (u.id === userId ? { ...u, active: newActiveState } : u))
-        );
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setUpdatingUserId(null);
-    }
+    Alert.alert(
+      `¿${actionLabel} usuario?`,
+      actionDesc,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: actionLabel,
+          style: currentActive ? 'destructive' : 'default',
+          onPress: async () => {
+            setUpdatingUserId(userId);
+            const newActiveState = !currentActive;
+            try {
+              const { error } = await supabase
+                .from('profiles')
+                .update({ active: newActiveState })
+                .eq('id', userId);
+
+              if (error) {
+                console.error('Error toggleActive:', error);
+                Alert.alert('Error', 'No se pudo actualizar el estado.');
+              } else {
+                setUsers(prev =>
+                  prev.map(u => (u.id === userId ? { ...u, active: newActiveState } : u))
+                );
+              }
+            } catch (e) {
+              console.error(e);
+            } finally {
+              setUpdatingUserId(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const setUserRole = async (userId: string, targetRoleName: RoleName) => {
-    setUpdatingUserId(userId);
-    try {
-      // 1. Resolver el UUID del rol en Supabase (insensible a mayúsculas/minúsculas y espacios)
+    const targetUser = users.find(u => u.id === userId);
+    const currentRole = targetUser?.roles?.[0] || 'Sin rol';
 
-      const normalizedTarget = targetRoleName.trim().toLowerCase();
-      console.log("targetRoleName:", targetRoleName);
-      console.log("normalized:", normalizedTarget);
-      console.log("availableRoles:", availableRoles);
+    if (currentRole === targetRoleName) return; // Ya tiene este rol
 
-      let roleId = availableRoles.find(
-        r => r.name?.trim()?.toLowerCase() === normalizedTarget && !r.id.startsWith('temp-')
-      )?.id;
+    Alert.alert(
+      '¿Cambiar rol de usuario?',
+      `Se cambiará el rol de "${targetUser?.name || 'este usuario'}" de "${currentRole}" a "${targetRoleName}".\n\nEsto afectará sus permisos de inmediato.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar',
+          onPress: async () => {
+            setUpdatingUserId(userId);
+            try {
+              const normalizedTarget = targetRoleName.trim().toLowerCase();
 
-      if (!roleId) {
-        const { data: allRoles, error } = await supabase.from('roles').select('id, name');
-        console.log("allRoles:", allRoles);
-        console.log("error:", error);
-        if (allRoles && allRoles.length > 0) {
-          const match = allRoles.find((r: any) => r.name?.trim()?.toLowerCase() === normalizedTarget);
-          if (match) roleId = match.id;
-        }
-      }
+              let roleId = availableRoles.find(
+                r => r.name?.trim()?.toLowerCase() === normalizedTarget && !r.id.startsWith('temp-')
+              )?.id;
 
-      if (!roleId) {
-        Alert.alert('Error', `No se encontró el identificador del rol "${targetRoleName}" en Supabase.`);
-        return;
-      }
+              if (!roleId) {
+                const { data: allRoles } = await supabase.from('roles').select('id, name');
+                if (allRoles && allRoles.length > 0) {
+                  const match = allRoles.find((r: any) => r.name?.trim()?.toLowerCase() === normalizedTarget);
+                  if (match) roleId = match.id;
+                }
+              }
 
-      // 2. Ejecutar cambio de rol (reemplazar rol existente por el nuevo)
-      const { error: rpcError } = await supabase.rpc('change_user_role', {
-        target_user_id: userId,
-        new_role_id: roleId,
-      });
+              if (!roleId) {
+                Alert.alert('Error', `No se encontró el identificador del rol "${targetRoleName}" en Supabase.`);
+                return;
+              }
 
-      if (rpcError) {
-        console.warn('[UserManagement] RPC change_user_role falló, ejecutando reemplazo manual:', rpcError);
-        // Fallback: Eliminar asignaciones anteriores e insertar el nuevo rol
-        await supabase.from('profile_roles').delete().eq('profile_id', userId);
-        const { error: insErr } = await supabase
-          .from('profile_roles')
-          .insert({ profile_id: userId, role_id: roleId });
+              const { error: rpcError } = await supabase.rpc('change_user_role', {
+                target_user_id: userId,
+                new_role_id: roleId,
+              });
 
-        if (insErr) {
-          console.error('[UserManagement] Error al insertar nuevo rol:', insErr);
-          Alert.alert('Error', 'No se pudo actualizar el rol en Supabase. Verifica las políticas RLS.');
-          return;
-        }
-      }
+              if (rpcError) {
+                console.warn('[UserManagement] RPC change_user_role falló, ejecutando reemplazo manual:', rpcError);
+                await supabase.from('profile_roles').delete().eq('profile_id', userId);
+                const { error: insErr } = await supabase
+                  .from('profile_roles')
+                  .insert({ profile_id: userId, role_id: roleId });
 
-      // 3. Actualizar estado local
-      const newRoles: RoleName[] = [targetRoleName];
-      setUsers(prev => prev.map(u => (u.id === userId ? { ...u, roles: newRoles } : u)));
+                if (insErr) {
+                  console.error('[UserManagement] Error al insertar nuevo rol:', insErr);
+                  Alert.alert('Error', 'No se pudo actualizar el rol en Supabase. Verifica las políticas RLS.');
+                  return;
+                }
+              }
 
-      // 4. Si el usuario modificado es el usuario activo, actualizar Zustand
-      if (currentUser && currentUser.id === userId) {
-        useAppStore.getState().setUserProfileAndRoles(
-          useAppStore.getState().userProfile,
-          newRoles,
-          true
-        );
-      }
+              const newRoles: RoleName[] = [targetRoleName];
+              setUsers(prev => prev.map(u => (u.id === userId ? { ...u, roles: newRoles } : u)));
 
-      Alert.alert('Rol Actualizado', `Se asignó correctamente el rol "${targetRoleName}".`);
-    } catch (e) {
-      console.error('Excepción al asignar rol:', e);
-      Alert.alert('Error', 'Ocurrió un fallo inesperado al cambiar el rol.');
-    } finally {
-      setUpdatingUserId(null);
-    }
+              if (currentUser && currentUser.id === userId) {
+                useAppStore.getState().setUserProfileAndRoles(
+                  useAppStore.getState().userProfile,
+                  newRoles,
+                  true
+                );
+              }
+
+              Alert.alert('Rol Actualizado', `Se asignó correctamente el rol "${targetRoleName}".`);
+            } catch (e) {
+              console.error('Excepción al asignar rol:', e);
+              Alert.alert('Error', 'Ocurrió un fallo inesperado al cambiar el rol.');
+            } finally {
+              setUpdatingUserId(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getInitials = (name: string) => {
@@ -331,7 +366,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ visibl
           </View>
 
           {/* Info del usuario */}
-          <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
+          <View style={{ flex: 1, marginLeft: 12, justifyContent: 'center' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
               <Text style={[styles.userName, { color: currentTheme.text }]} numberOfLines={1}>
                 {item.name}
@@ -343,13 +378,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ visibl
               )}
             </View>
             <Text style={[styles.userEmail, { color: currentTheme.textSecondary }]} numberOfLines={1}>
-              {item.email}
+              {maskEmail(item.email)}
             </Text>
-          </View>
 
-          {/* Badges Multi-Rol + Estado */}
-          <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4, maxWidth: '42%' }}>
-            <View style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
               {userRolesList.map(role => {
                 const config = ROLE_CONFIG[role] || { icon: 'shield-outline', color: currentTheme.primary, label: role };
                 return (
@@ -362,7 +394,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ visibl
                 );
               })}
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          </View>
+
+          {/* Status */}
+          <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', paddingLeft: 8 }}>
+            <View style={{ flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
               <View
                 style={[
                   styles.statusDot,
@@ -501,6 +537,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ visibl
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onClose}
+        />
         <View
           style={[
             styles.container,

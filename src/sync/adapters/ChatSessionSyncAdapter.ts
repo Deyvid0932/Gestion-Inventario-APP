@@ -23,23 +23,32 @@ export class ChatSessionSyncAdapter implements SyncAdapter {
       }
 
       const payload = pendingRows.map(row => {
-        let isoCreatedAt = new Date().toISOString();
-        if (typeof row.createdAt === 'number') {
-          isoCreatedAt = new Date(row.createdAt).toISOString();
-        } else if (typeof row.created_at === 'number') {
-          isoCreatedAt = new Date(row.created_at).toISOString();
-        } else if (row.createdAt) {
-          try { isoCreatedAt = new Date(row.createdAt).toISOString(); } catch (_) {}
-        } else if (row.created_at) {
-          try { isoCreatedAt = new Date(row.created_at).toISOString(); } catch (_) {}
+        let createdAtNum = Date.now();
+        if (typeof row.createdAt === 'number' && row.createdAt > 0) {
+          createdAtNum = row.createdAt;
+        } else if (typeof row.created_at === 'number' && row.created_at > 0) {
+          createdAtNum = row.created_at;
+        } else if (row.createdAt && typeof row.createdAt === 'string') {
+          try { createdAtNum = new Date(row.createdAt).getTime(); } catch (_) {}
+        } else if (row.created_at && typeof row.created_at === 'string') {
+          try { createdAtNum = new Date(row.created_at).getTime(); } catch (_) {}
+        }
+
+        let updatedAtNum = Date.now();
+        if (row.updated_at && typeof row.updated_at === 'number') {
+          updatedAtNum = row.updated_at;
+        } else if (typeof row.updatedAt === 'number' && row.updatedAt > 0) {
+          updatedAtNum = row.updatedAt;
+        } else if (row.updated_at && typeof row.updated_at === 'string') {
+          try { updatedAtNum = new Date(row.updated_at).getTime(); } catch (_) {}
         }
 
         return {
-          id: row.id,
-          user_id: userId,
-          title: row.title,
-          created_at: isoCreatedAt,
-          updated_at: row.updated_at || new Date().toISOString(),
+          id: String(row.id),
+          user_id: String(userId),
+          title: String(row.title || 'Nueva Sesión'),
+          created_at: createdAtNum,
+          updated_at: new Date(updatedAtNum).toISOString(),
         };
       });
 

@@ -28,6 +28,9 @@ export class CajaSyncAdapter implements SyncAdapter {
         created_at: row.created_at ?? row.fechaCreacion ?? new Date().toISOString(),
         order_index: row.order_index ?? row.orden ?? 0,
         updated_at: row.updated_at || new Date().toISOString(),
+        deleted_at: row.deleted_at || null,
+        deleted_by: row.deleted_by || null,
+        deletion_batch_id: row.deletion_batch_id || null,
       }));
 
       const { error } = await supabase.from('boxes').upsert(payload, { onConflict: 'id' });
@@ -56,6 +59,24 @@ export class CajaSyncAdapter implements SyncAdapter {
   async pullRemote(db: SQLiteDatabase, _userId: string, since: string | null): Promise<SyncResult> {
     const result: SyncResult = { success: true, pushedCount: 0, pulledCount: 0 };
     try {
+      // 1. Descargar tombstones de eliminación física si aplica
+      try {
+        let tombQuery = supabase.from('deletion_tombstones').select('*').eq('table_name', 'boxes');
+        if (since) {
+          tombQuery = tombQuery.gt('deleted_at', since);
+        }
+        const { data: tombstones } = await tombQuery;
+        if (tombstones && tombstones.length > 0) {
+          for (const t of tombstones) {
+            await db.runAsync('DELETE FROM prendas WHERE cajaId = ?', [t.record_id]);
+            await db.runAsync('DELETE FROM cajas WHERE id = ?', [t.record_id]);
+          }
+        }
+      } catch (tErr) {
+        console.warn('Advertencia al consultar deletion_tombstones para cajas:', tErr);
+      }
+
+      // 2. Descargar cajas de Supabase
       let query = supabase.from('boxes').select('*');
       if (since) {
         query = query.gt('updated_at', since);
@@ -91,21 +112,40 @@ export class CajaSyncAdapter implements SyncAdapter {
           const nombreVal = r.name || r.nombre || '';
           const fechaVal = r.created_at || r.fechaCreacion || new Date().toISOString();
           const ordenVal = r.order_index ?? r.orden ?? 0;
+          const deletedAtVal = r.deleted_at || null;
+          const deletedByVal = r.deleted_by || null;
+          const batchIdVal = r.deletion_batch_id || null;
 
           if (invIdVal) {
             const parentInv = await db.getFirstAsync('SELECT id FROM inventarios WHERE id = ?', [invIdVal]);
             if (!parentInv) {
-              await db.runAsync(
-                `INSERT OR IGNORE INTO inventarios (id, nombre, descripcion, fechaCreacion, estado, updated_at, sync_status) VALUES (?, 'Nuevo Lote', '', ?, 'Activo', ?, 'SYNCED')`,
-                [invIdVal, fechaVal, r.updated_at || fechaVal]
-              );
+              const { data: remoteInv } = await supabase.from('inventories').select('*').eq('id', invIdVal).maybeSingle();
+              if (remoteInv) {
+                const isDeleted = remoteInv.deleted_at || remoteInv.status === 0;
+                await db.runAsync(
+                  `INSERT OR REPLACE INTO inventarios (id, user_id, nombre, descripcion, fechaCreacion, estado, updated_at, deleted_at, deleted_by, deletion_batch_id, sync_status) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
+                  [
+                    remoteInv.id,
+                    remoteInv.user_id,
+                    remoteInv.name || remoteInv.nombre || 'Lote Sincronizado',
+                    remoteInv.description || remoteInv.descripcion || '',
+                    remoteInv.created_at || fechaVal,
+                    isDeleted ? 0 : 1,
+                    remoteInv.updated_at || fechaVal,
+                    remoteInv.deleted_at || null,
+                    remoteInv.deleted_by || null,
+                    remoteInv.deletion_batch_id || null,
+                  ]
+                );
+              }
             }
           }
 
           if (!local) {
             await db.runAsync(
-              `INSERT INTO cajas (id, inventarioId, nombre, fechaCreacion, orden, updated_at, sync_status) 
-               VALUES (?, ?, ?, ?, ?, ?, 'SYNCED')`,
+              `INSERT INTO cajas (id, inventarioId, nombre, fechaCreacion, orden, updated_at, deleted_at, deleted_by, deletion_batch_id, sync_status) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
               [
                 r.id,
                 invIdVal,
@@ -113,6 +153,9 @@ export class CajaSyncAdapter implements SyncAdapter {
                 fechaVal,
                 ordenVal,
                 r.updated_at,
+                deletedAtVal,
+                deletedByVal,
+                batchIdVal,
               ]
             );
             result.pulledCount++;
@@ -122,13 +165,16 @@ export class CajaSyncAdapter implements SyncAdapter {
 
             if (remoteTime >= localTime) {
               await db.runAsync(
-                `UPDATE cajas SET inventarioId = ?, nombre = ?, fechaCreacion = ?, orden = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
+                `UPDATE cajas SET inventarioId = ?, nombre = ?, fechaCreacion = ?, orden = ?, updated_at = ?, deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, sync_status = 'SYNCED' WHERE id = ?`,
                 [
                   invIdVal,
                   nombreVal,
                   fechaVal,
                   ordenVal,
                   r.updated_at,
+                  deletedAtVal,
+                  deletedByVal,
+                  batchIdVal,
                   r.id,
                 ]
               );

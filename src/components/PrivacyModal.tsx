@@ -62,7 +62,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ visible, onClose }) 
   const insets = useSafeAreaInsets();
 
   const handleContactDev = () => {
-    Linking.openURL('https://wa.me/').catch(() => {
+    Linking.openURL('https://wa.me/51980709494').catch(() => {
       Alert.alert('Contacto', 'Puedes enviar tus comentarios a través de los enlaces de contacto en el menú principal.');
     });
   };
@@ -138,7 +138,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ visible, onClose }) 
               ))}
             </View>
 
-            {/* Botón Único de Acción */}
+
             <View style={styles.actionsRow}>
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: currentTheme.primary }]}

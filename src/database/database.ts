@@ -1,6 +1,8 @@
 import { SQLiteDatabase } from 'expo-sqlite';
+import { generateUUID } from '../utils/uuid';
+
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
-  const DATABASE_VERSION = 13;
+  const DATABASE_VERSION = 14;
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
@@ -25,9 +27,12 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
           nombre TEXT NOT NULL,
           descripcion TEXT,
           fechaCreacion TEXT NOT NULL,
+          orden INTEGER DEFAULT 0,
           estado INTEGER NOT NULL DEFAULT 1,
           updated_at TEXT,
           deleted_at TEXT,
+          deleted_by TEXT,
+          deletion_batch_id TEXT,
           sync_status TEXT DEFAULT 'PENDING'
         );
         CREATE TABLE IF NOT EXISTS cajas (
@@ -36,8 +41,11 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
           nombre TEXT NOT NULL,
           fechaCreacion TEXT NOT NULL,
           orden INTEGER DEFAULT 0,
+          estado INTEGER NOT NULL DEFAULT 1,
           updated_at TEXT,
           deleted_at TEXT,
+          deleted_by TEXT,
+          deletion_batch_id TEXT,
           sync_status TEXT DEFAULT 'PENDING',
           FOREIGN KEY (inventarioId) REFERENCES inventarios (id) ON DELETE CASCADE
         );
@@ -58,12 +66,17 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
           alarmaNotificationId TEXT,
           updated_at TEXT,
           deleted_at TEXT,
+          deleted_by TEXT,
+          deletion_batch_id TEXT,
           sync_status TEXT DEFAULT 'PENDING',
           FOREIGN KEY (cajaId) REFERENCES cajas (id) ON DELETE CASCADE
         );
         -- Indexes for performance
         CREATE INDEX IF NOT EXISTS idx_cajas_inventario ON cajas(inventarioId);
+        CREATE INDEX IF NOT EXISTS idx_cajas_inv_deleted ON cajas(inventarioId, deleted_at);
         CREATE INDEX IF NOT EXISTS idx_prendas_caja ON prendas(cajaId);
+        CREATE INDEX IF NOT EXISTS idx_prendas_caja_deleted ON prendas(cajaId, deleted_at);
+        CREATE INDEX IF NOT EXISTS idx_prendas_caja_op ON prendas(cajaId, op);
         CREATE INDEX IF NOT EXISTS idx_prendas_estado ON prendas(estado);
         CREATE INDEX IF NOT EXISTS idx_prendas_fecha ON prendas(fechaCreacion);
         CREATE INDEX IF NOT EXISTS idx_cajas_orden ON cajas(orden);
@@ -221,6 +234,15 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     if (currentDbVersion === 12) {
       // Migración v13: Agregar campos de sincronización
       try {
+        await db.runAsync('ALTER TABLE inventarios ADD COLUMN estado INTEGER DEFAULT 1;');
+      } catch (e) { }
+      try {
+        await db.runAsync('ALTER TABLE cajas ADD COLUMN estado INTEGER DEFAULT 1;');
+      } catch (e) { }
+      try {
+        await db.runAsync('ALTER TABLE inventarios ADD COLUMN orden INTEGER DEFAULT 0;');
+      } catch (e) { }
+      try {
         await db.runAsync('ALTER TABLE inventarios ADD COLUMN user_id TEXT;');
       } catch (e) { }
       try {
@@ -263,6 +285,22 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       `);
       currentDbVersion = 13;
     }
+    if (currentDbVersion === 13) {
+      try { await db.runAsync('ALTER TABLE inventarios ADD COLUMN deleted_by TEXT;'); } catch (e) { }
+      try { await db.runAsync('ALTER TABLE inventarios ADD COLUMN deletion_batch_id TEXT;'); } catch (e) { }
+      try { await db.runAsync('ALTER TABLE cajas ADD COLUMN deleted_by TEXT;'); } catch (e) { }
+      try { await db.runAsync('ALTER TABLE cajas ADD COLUMN deletion_batch_id TEXT;'); } catch (e) { }
+      try { await db.runAsync('ALTER TABLE prendas ADD COLUMN deleted_by TEXT;'); } catch (e) { }
+      try { await db.runAsync('ALTER TABLE prendas ADD COLUMN deletion_batch_id TEXT;'); } catch (e) { }
+
+      await db.execAsync(`
+        CREATE INDEX IF NOT EXISTS idx_inventarios_del ON inventarios(deleted_at);
+        CREATE INDEX IF NOT EXISTS idx_cajas_del ON cajas(deleted_at);
+        CREATE INDEX IF NOT EXISTS idx_prendas_del ON prendas(deleted_at);
+        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 14);
+      `);
+      currentDbVersion = 14;
+    }
   }
 
   // Auto-corrección garantizada de columnas y tablas de respaldo para cualquier versión de base de datos
@@ -299,10 +337,19 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     await db.runAsync('ALTER TABLE prendas ADD COLUMN talla TEXT;').catch(() => { });
     await db.runAsync('ALTER TABLE prendas ADD COLUMN r2Key TEXT;').catch(() => { });
     await db.runAsync('ALTER TABLE prendas ADD COLUMN r2Key2 TEXT;').catch(() => { });
+
+    await db.runAsync('ALTER TABLE inventarios ADD COLUMN orden INTEGER DEFAULT 0;').catch(() => { });
+    await db.runAsync('ALTER TABLE inventarios ADD COLUMN deleted_by TEXT;').catch(() => { });
+    await db.runAsync('ALTER TABLE inventarios ADD COLUMN deletion_batch_id TEXT;').catch(() => { });
+    await db.runAsync('ALTER TABLE cajas ADD COLUMN deleted_by TEXT;').catch(() => { });
+    await db.runAsync('ALTER TABLE cajas ADD COLUMN deletion_batch_id TEXT;').catch(() => { });
+    await db.runAsync('ALTER TABLE prendas ADD COLUMN deleted_by TEXT;').catch(() => { });
+    await db.runAsync('ALTER TABLE prendas ADD COLUMN deletion_batch_id TEXT;').catch(() => { });
   } catch (e) {
     console.error('Error en auto-corrección de esquema:', e);
   }
 }
-export const generateId = () => {
-  return Date.now().toString() + Math.random().toString(36).substring(2, 9);
+
+export const generateId = (): string => {
+  return generateUUID();
 };

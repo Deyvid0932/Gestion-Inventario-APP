@@ -12,6 +12,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSQLiteContext } from 'expo-sqlite';
+import { InventarioService } from '../services/InventarioService';
+import { CajaService } from '../services/CajaService';
+import { PrendaService } from '../services/PrendaService';
+import { AuthManager } from '../services/AuthManager';
 import { useAppStore } from '../store/useAppStore';
 import { supabase } from '../database/supabase';
 import { RoleGuard } from './RoleGuard';
@@ -31,8 +35,10 @@ interface PendingDeletionItem {
 export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
   const db = useSQLiteContext();
   const currentTheme = useAppStore(state => state.currentTheme);
+  const user = useAppStore(state => state.user);
   const insets = useSafeAreaInsets();
 
+  const [activeTab, setActiveTab] = useState<'inventarios' | 'cajas' | 'prendas'>('inventarios');
   const [items, setItems] = useState<PendingDeletionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -40,10 +46,55 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
   const loadTrashItems = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await db.getAllAsync<PendingDeletionItem>(
+      const combined: PendingDeletionItem[] = [];
+
+      const deletedInventarios = await db.getAllAsync<{ id: string; nombre: string; deleted_at?: string; fechaCreacion: string }>(
+        `SELECT id, nombre, deleted_at, fechaCreacion FROM inventarios WHERE deleted_at IS NOT NULL`
+      );
+      for (const inv of deletedInventarios || []) {
+        combined.push({
+          id: `soft_inv_${inv.id}`,
+          tableName: 'inventarios',
+          recordId: inv.id,
+          createdAt: inv.deleted_at || inv.fechaCreacion || new Date().toISOString(),
+        });
+      }
+
+      const deletedCajas = await db.getAllAsync<{ id: string; nombre: string; deleted_at?: string; fechaCreacion: string }>(
+        `SELECT id, nombre, deleted_at, fechaCreacion FROM cajas WHERE deleted_at IS NOT NULL AND inventarioId NOT IN (SELECT id FROM inventarios WHERE deleted_at IS NOT NULL)`
+      );
+      for (const caja of deletedCajas || []) {
+        combined.push({
+          id: `soft_caja_${caja.id}`,
+          tableName: 'cajas',
+          recordId: caja.id,
+          createdAt: caja.deleted_at || caja.fechaCreacion || new Date().toISOString(),
+        });
+      }
+
+      const deletedPrendas = await db.getAllAsync<{ id: string; estilo: string; deleted_at?: string; fechaCreacion: string }>(
+        `SELECT id, estilo, deleted_at, fechaCreacion FROM prendas WHERE deleted_at IS NOT NULL AND cajaId NOT IN (SELECT id FROM cajas WHERE deleted_at IS NOT NULL)`
+      );
+      for (const prenda of deletedPrendas || []) {
+        combined.push({
+          id: `soft_prenda_${prenda.id}`,
+          tableName: 'prendas',
+          recordId: prenda.id,
+          createdAt: prenda.deleted_at || prenda.fechaCreacion || new Date().toISOString(),
+        });
+      }
+
+      const pendingRows = await db.getAllAsync<PendingDeletionItem>(
         `SELECT * FROM pending_deletions ORDER BY createdAt DESC`
       );
-      setItems(rows || []);
+      const existingRecordIds = new Set(combined.map(c => c.recordId));
+      for (const p of pendingRows || []) {
+        if (!existingRecordIds.has(p.recordId)) {
+          combined.push(p);
+        }
+      }
+
+      setItems(combined);
     } catch (e) {
       console.error('Error cargando elementos de la papelera:', e);
     } finally {
@@ -57,14 +108,41 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
     }
   }, [visible, loadTrashItems]);
 
+  const counts = React.useMemo(() => {
+    return {
+      inventarios: items.filter(i => i.tableName === 'inventarios').length,
+      cajas: items.filter(i => i.tableName === 'cajas').length,
+      prendas: items.filter(i => i.tableName === 'prendas').length,
+    };
+  }, [items]);
+
+  const displayedItems = React.useMemo(() => {
+    return items.filter(item => item.tableName === activeTab);
+  }, [items, activeTab]);
+
   const handleRestore = async (item: PendingDeletionItem) => {
     setProcessingId(item.id);
     try {
-      await db.runAsync(`DELETE FROM pending_deletions WHERE id = ?`, [item.id]);
-      Alert.alert('Restaurado', 'El registro fue removido de la cola de eliminación.');
+      let result: { success: boolean; error?: string } = { success: true };
+      if (item.tableName === 'inventarios') {
+        result = await InventarioService.restore(db, item.recordId, user?.id);
+      } else if (item.tableName === 'cajas') {
+        result = await CajaService.restore(db, item.recordId, user?.id);
+      } else if (item.tableName === 'prendas') {
+        result = await PrendaService.restore(db, item.recordId, user?.id);
+      }
+
+      if (!result.success) {
+        Alert.alert('No se puede restaurar', result.error || 'Ocurrió un fallo al restaurar el elemento.');
+        return;
+      }
+
+      await db.runAsync(`DELETE FROM pending_deletions WHERE recordId = ? OR id = ?`, [item.recordId, item.id]);
+      await AuthManager.refreshAllAppState(db);
+      Alert.alert('Restaurado', 'El elemento fue restaurado exitosamente.');
       await loadTrashItems();
-    } catch (e) {
-      Alert.alert('Error', 'No se pudo restaurar el elemento.');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'No se pudo restaurar el elemento.');
     } finally {
       setProcessingId(null);
     }
@@ -89,11 +167,23 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
                 chat_sessions: 'chat_sessions',
                 chat_history: 'chat_messages',
               };
-              const remoteTable = tableMap[item.tableName] || item.tableName;
-              try {
-                await supabase.from(remoteTable).delete().eq('id', item.recordId);
-              } catch (_) {}
-              await db.runAsync(`DELETE FROM pending_deletions WHERE id = ?`, [item.id]);
+              if (item.tableName === 'inventarios') {
+                await InventarioService.hardDelete(db, item.recordId, user?.id);
+              } else if (item.tableName === 'cajas') {
+                await CajaService.hardDelete(db, item.recordId, user?.id);
+              } else if (item.tableName === 'prendas') {
+                await PrendaService.hardDelete(db, item.recordId, user?.id);
+              } else {
+                const tableMap: Record<string, string> = {
+                  chat_sessions: 'chat_sessions',
+                  chat_history: 'chat_messages',
+                };
+                const remoteTable = tableMap[item.tableName] || item.tableName;
+                const { error } = await supabase.from(remoteTable).delete().eq('id', item.recordId);
+                if (!error) {
+                  await db.runAsync(`DELETE FROM pending_deletions WHERE id = ?`, [item.id]);
+                }
+              }
               await loadTrashItems();
             } catch (e) {
               console.error(e);
@@ -120,19 +210,36 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
             setLoading(true);
             try {
               for (const item of items) {
-                const tableMap: Record<string, string> = {
-                  inventarios: 'inventories',
-                  cajas: 'boxes',
-                  prendas: 'garments',
-                  chat_sessions: 'chat_sessions',
-                  chat_history: 'chat_messages',
-                };
-                const remoteTable = tableMap[item.tableName] || item.tableName;
-                try {
-                  await supabase.from(remoteTable).delete().eq('id', item.recordId);
-                } catch (_) {}
+                if (item.tableName === 'inventarios') {
+                  const cajas = await db.getAllAsync<{ id: string }>('SELECT id FROM cajas WHERE inventarioId = ?', [item.recordId]);
+                  const cajaIds = cajas.map(c => c.id);
+                  if (cajaIds.length > 0) {
+                    try { await supabase.from('garments').delete().in('caja_id', cajaIds); } catch (_) {}
+                    try { await supabase.from('boxes').delete().in('id', cajaIds); } catch (_) {}
+                  }
+                  const { error } = await supabase.from('inventories').delete().eq('id', item.recordId);
+                  if (error) {
+                    const deletionId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+                    await db.runAsync(`INSERT INTO pending_deletions (id, tableName, recordId, createdAt) VALUES (?, 'inventarios', ?, ?)`, [deletionId, item.recordId, new Date().toISOString()]);
+                  }
+                  await db.runAsync(`DELETE FROM prendas WHERE cajaId IN (SELECT id FROM cajas WHERE inventarioId = ?)`, [item.recordId]);
+                  await db.runAsync(`DELETE FROM cajas WHERE inventarioId = ?`, [item.recordId]);
+                  await db.runAsync(`DELETE FROM inventarios WHERE id = ?`, [item.recordId]);
+                } else {
+                  const tableMap: Record<string, string> = {
+                    inventarios: 'inventories',
+                    cajas: 'boxes',
+                    prendas: 'garments',
+                    chat_sessions: 'chat_sessions',
+                    chat_history: 'chat_messages',
+                  };
+                  const remoteTable = tableMap[item.tableName] || item.tableName;
+                  const { error } = await supabase.from(remoteTable).delete().eq('id', item.recordId);
+                  if (!error) {
+                    await db.runAsync(`DELETE FROM pending_deletions WHERE id = ?`, [item.id]);
+                  }
+                }
               }
-              await db.runAsync(`DELETE FROM pending_deletions`);
               await loadTrashItems();
             } catch (e) {
               console.error(e);
@@ -171,6 +278,11 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <RoleGuard roles={['Admin']}>
         <View style={styles.overlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={onClose}
+          />
           <View
             style={[
               styles.container,
@@ -194,15 +306,59 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
                 </View>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {items.length > 0 && (
-                  <TouchableOpacity onPress={handleEmptyTrash} style={[styles.emptyTrashBtn, { backgroundColor: '#EF444420' }]}>
-                    <Text style={styles.emptyTrashText}>Vaciar</Text>
-                  </TouchableOpacity>
-                )}
+
                 <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: currentTheme.border + '30' }]}>
                   <Ionicons name="close" size={20} color={currentTheme.text} />
                 </TouchableOpacity>
               </View>
+            </View>
+
+            {/* Barra de Pestañas: [ Inventarios ] [ Cajas ] [ Prendas ] */}
+            <View style={[styles.tabBar, { borderBottomColor: currentTheme.border }]}>
+              <TouchableOpacity
+                style={[styles.tabItem, activeTab === 'inventarios' && { backgroundColor: currentTheme.primary + '25', borderColor: currentTheme.primary }]}
+                onPress={() => setActiveTab('inventarios')}
+              >
+                <Ionicons
+                  name="file-tray-stacked-outline"
+                  size={14}
+                  color={activeTab === 'inventarios' ? currentTheme.primary : currentTheme.textSecondary}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.tabLabel, { color: activeTab === 'inventarios' ? currentTheme.primary : currentTheme.textSecondary }]}>
+                  Lotes ({counts.inventarios})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.tabItem, activeTab === 'cajas' && { backgroundColor: currentTheme.primary + '25', borderColor: currentTheme.primary }]}
+                onPress={() => setActiveTab('cajas')}
+              >
+                <Ionicons
+                  name="archive-outline"
+                  size={14}
+                  color={activeTab === 'cajas' ? currentTheme.primary : currentTheme.textSecondary}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.tabLabel, { color: activeTab === 'cajas' ? currentTheme.primary : currentTheme.textSecondary }]}>
+                  Cajas ({counts.cajas})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.tabItem, activeTab === 'prendas' && { backgroundColor: currentTheme.primary + '25', borderColor: currentTheme.primary }]}
+                onPress={() => setActiveTab('prendas')}
+              >
+                <Ionicons
+                  name="shirt-outline"
+                  size={14}
+                  color={activeTab === 'prendas' ? currentTheme.primary : currentTheme.textSecondary}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.tabLabel, { color: activeTab === 'prendas' ? currentTheme.primary : currentTheme.textSecondary }]}>
+                  Prendas ({counts.prendas})
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {loading ? (
@@ -210,19 +366,19 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
                 <ActivityIndicator size="large" color={currentTheme.primary} />
                 <Text style={{ color: currentTheme.textSecondary, marginTop: 12 }}>Cargando papelera...</Text>
               </View>
-            ) : items.length === 0 ? (
+            ) : displayedItems.length === 0 ? (
               <View style={styles.centerContainer}>
                 <View style={[styles.emptyIconCircle, { backgroundColor: currentTheme.primary + '15' }]}>
                   <Ionicons name="trash-outline" size={44} color={currentTheme.primary} />
                 </View>
-                <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>Papelera Vacía</Text>
+                <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>Sin {activeTab === 'inventarios' ? 'Lotes' : activeTab === 'cajas' ? 'Cajas' : 'Prendas'}</Text>
                 <Text style={[styles.emptyDesc, { color: currentTheme.textSecondary }]}>
-                  No hay ningún elemento pendiente de eliminación en este momento.
+                  No hay {activeTab === 'inventarios' ? 'lotes' : activeTab === 'cajas' ? 'cajas' : 'prendas'} en este apartado de la papelera.
                 </Text>
               </View>
             ) : (
               <FlatList
-                data={items}
+                data={displayedItems}
                 keyExtractor={item => item.id}
                 contentContainerStyle={{ paddingBottom: 20 }}
                 renderItem={({ item }) => (
@@ -313,6 +469,28 @@ const styles = StyleSheet.create({
   emptyTrashText: {
     color: '#EF4444',
     fontSize: 12,
+    fontWeight: '700',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    gap: 6,
+    borderBottomWidth: 1,
+    marginBottom: 12,
+  },
+  tabItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  tabLabel: {
+    fontSize: 11,
     fontWeight: '700',
   },
   closeBtn: {

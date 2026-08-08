@@ -15,15 +15,22 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useAppStore } from '../store/useAppStore';
+import { InventarioService } from '../services/InventarioService';
+import { CajaService } from '../services/CajaService';
+import { PrendaService } from '../services/PrendaService';
+import { AuthManager } from '../services/AuthManager';
 import { RootStackParamList } from '../types';
 import { supabase } from '../database/supabase';
 import { RoleGuard } from '../components/RoleGuard';
+import { EmptyState } from '../components/EmptyState';
 
 interface PendingDeletionItem {
   id: string;
   tableName: string;
   recordId: string;
+  title: string;
   createdAt: string;
+  deletedAt?: string | null;
 }
 
 export const TrashScreen: React.FC = () => {
@@ -33,6 +40,7 @@ export const TrashScreen: React.FC = () => {
   const user = useAppStore(state => state.user);
   const insets = useSafeAreaInsets();
 
+  const [activeTab, setActiveTab] = useState<'inventarios' | 'cajas' | 'prendas'>('inventarios');
   const [items, setItems] = useState<PendingDeletionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -40,10 +48,72 @@ export const TrashScreen: React.FC = () => {
   const loadTrashItems = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await db.getAllAsync<PendingDeletionItem>(
+      const combined: PendingDeletionItem[] = [];
+
+      // 1. Inventarios eliminados lógicamente
+      const deletedInventarios = await db.getAllAsync<{ id: string; nombre: string; deleted_at?: string; fechaCreacion: string }>(
+        `SELECT id, nombre, deleted_at, fechaCreacion FROM inventarios WHERE deleted_at IS NOT NULL`
+      );
+      for (const inv of deletedInventarios || []) {
+        combined.push({
+          id: `inv_${inv.id}`,
+          tableName: 'inventarios',
+          recordId: inv.id,
+          title: inv.nombre || 'Lote / Inventario',
+          createdAt: inv.deleted_at || inv.fechaCreacion || new Date().toISOString(),
+          deletedAt: inv.deleted_at,
+        });
+      }
+
+      // 2. Cajas eliminadas lógicamente (solo cajas borradas individualmente cuyo lote NO esté borrado)
+      const deletedCajas = await db.getAllAsync<{ id: string; nombre: string; deleted_at?: string; fechaCreacion: string }>(
+        `SELECT id, nombre, deleted_at, fechaCreacion FROM cajas WHERE deleted_at IS NOT NULL AND inventarioId NOT IN (SELECT id FROM inventarios WHERE deleted_at IS NOT NULL)`
+      );
+      for (const caja of deletedCajas || []) {
+        combined.push({
+          id: `caja_${caja.id}`,
+          tableName: 'cajas',
+          recordId: caja.id,
+          title: caja.nombre || 'Caja de Almacén',
+          createdAt: caja.deleted_at || caja.fechaCreacion || new Date().toISOString(),
+          deletedAt: caja.deleted_at,
+        });
+      }
+
+      // 3. Prendas eliminadas lógicamente (solo prendas borradas individualmente cuya caja NO esté borrada)
+      const deletedPrendas = await db.getAllAsync<{ id: string; estilo: string; color: string; deleted_at?: string; fechaCreacion: string }>(
+        `SELECT id, estilo, color, deleted_at, fechaCreacion FROM prendas WHERE deleted_at IS NOT NULL AND cajaId NOT IN (SELECT id FROM cajas WHERE deleted_at IS NOT NULL)`
+      );
+      for (const prenda of deletedPrendas || []) {
+        combined.push({
+          id: `prenda_${prenda.id}`,
+          tableName: 'prendas',
+          recordId: prenda.id,
+          title: `${prenda.estilo || 'Prenda'} - ${prenda.color || ''}`,
+          createdAt: prenda.deleted_at || prenda.fechaCreacion || new Date().toISOString(),
+          deletedAt: prenda.deleted_at,
+        });
+      }
+
+      // 4. Registros pendientes en cola pending_deletions (si no están duplicados)
+      const pendingRows = await db.getAllAsync<{ id: string; tableName: string; recordId: string; createdAt: string }>(
         `SELECT * FROM pending_deletions ORDER BY createdAt DESC`
       );
-      setItems(rows || []);
+      const existingRecordIds = new Set(combined.map(c => c.recordId));
+      for (const p of pendingRows || []) {
+        if (!existingRecordIds.has(p.recordId)) {
+          combined.push({
+            id: p.id,
+            tableName: p.tableName,
+            recordId: p.recordId,
+            title: `${p.tableName}: ${p.recordId}`,
+            createdAt: p.createdAt,
+            deletedAt: p.createdAt,
+          });
+        }
+      }
+
+      setItems(combined);
     } catch (e) {
       console.error('Error cargando elementos de la papelera:', e);
     } finally {
@@ -55,23 +125,90 @@ export const TrashScreen: React.FC = () => {
     loadTrashItems();
   }, [loadTrashItems]);
 
+  const counts = React.useMemo(() => {
+    return {
+      inventarios: items.filter(i => i.tableName === 'inventarios').length,
+      cajas: items.filter(i => i.tableName === 'cajas').length,
+      prendas: items.filter(i => i.tableName === 'prendas').length,
+    };
+  }, [items]);
+
+  const displayedItems = React.useMemo(() => {
+    return items.filter(item => item.tableName === activeTab);
+  }, [items, activeTab]);
+
+  const computeRemainingTime = (deletedAt?: string | null) => {
+    if (!deletedAt) return '48h restantes';
+    const deletedTime = new Date(deletedAt).getTime();
+    const expiresAt = deletedTime + 48 * 60 * 60 * 1000;
+    const diffMs = expiresAt - Date.now();
+    if (diffMs <= 0) return 'Vencido (pendiente de purga)';
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m restantes`;
+  };
+
   const handleRestore = async (item: PendingDeletionItem) => {
     setProcessingId(item.id);
     try {
-      await db.runAsync(`DELETE FROM pending_deletions WHERE id = ?`, [item.id]);
-      Alert.alert('Restaurado', 'El registro fue removido de la cola de eliminación.');
+      let result: { success: boolean; error?: string } = { success: true };
+      if (item.tableName === 'inventarios') {
+        result = await InventarioService.restore(db, item.recordId, user?.id);
+      } else if (item.tableName === 'cajas') {
+        result = await CajaService.restore(db, item.recordId, user?.id);
+      } else if (item.tableName === 'prendas') {
+        result = await PrendaService.restore(db, item.recordId, user?.id);
+      }
+
+      if (!result.success) {
+        Alert.alert('No se puede restaurar', result.error || 'Ocurrió un fallo al restaurar el elemento.');
+        return;
+      }
+
+      await db.runAsync(`DELETE FROM pending_deletions WHERE recordId = ? OR id = ?`, [item.recordId, item.id]);
+      await AuthManager.refreshAllAppState(db);
+      Alert.alert('Restaurado', 'El elemento fue restaurado exitosamente.');
       await loadTrashItems();
-    } catch (e) {
-      Alert.alert('Error', 'No se pudo restaurar el elemento.');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'No se pudo restaurar el elemento.');
     } finally {
       setProcessingId(null);
     }
   };
 
+  const deleteItemHelper = async (item: PendingDeletionItem) => {
+    let result: { success: boolean; error?: string } = { success: true };
+    if (item.tableName === 'inventarios') {
+      result = await InventarioService.hardDelete(db, item.recordId, user?.id);
+    } else if (item.tableName === 'cajas') {
+      result = await CajaService.hardDelete(db, item.recordId, user?.id);
+    } else if (item.tableName === 'prendas') {
+      result = await PrendaService.hardDelete(db, item.recordId, user?.id);
+    } else {
+      const tableMap: Record<string, string> = {
+        chat_sessions: 'chat_sessions',
+        chat_history: 'chat_messages',
+      };
+      const remoteTable = tableMap[item.tableName] || item.tableName;
+      try {
+        const { error } = await supabase.from(remoteTable).delete().eq('id', item.recordId);
+        if (error) throw new Error(error.message);
+      } catch (err: any) {
+        result = { success: false, error: err.message };
+      }
+    }
+
+    if (!result.success) {
+      throw new Error(result.error || 'Error al eliminar el registro de Supabase.');
+    }
+
+    await db.runAsync(`DELETE FROM pending_deletions WHERE recordId = ? OR id = ?`, [item.recordId, item.id]);
+  };
+
   const handlePermanentDelete = async (item: PendingDeletionItem) => {
     Alert.alert(
       '¿Eliminar Definitivamente?',
-      'Esta acción eliminará el registro de la nube y de la cola local de forma irreversible.',
+      'Esta acción eliminará el registro de la nube y de la base local de forma irreversible.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -80,21 +217,12 @@ export const TrashScreen: React.FC = () => {
           onPress: async () => {
             setProcessingId(item.id);
             try {
-              const tableMap: Record<string, string> = {
-                inventarios: 'inventories',
-                cajas: 'boxes',
-                prendas: 'garments',
-                chat_sessions: 'chat_sessions',
-                chat_history: 'chat_messages',
-              };
-              const remoteTable = tableMap[item.tableName] || item.tableName;
-              try {
-                await supabase.from(remoteTable).delete().eq('id', item.recordId);
-              } catch (_) {}
-              await db.runAsync(`DELETE FROM pending_deletions WHERE id = ?`, [item.id]);
+              await deleteItemHelper(item);
+              await AuthManager.refreshAllAppState(db);
               await loadTrashItems();
-            } catch (e) {
-              console.error(e);
+            } catch (e: any) {
+              console.error('Error al eliminar definitivamente:', e);
+              Alert.alert('Error', e.message || 'Ocurrió un error al eliminar el registro.');
             } finally {
               setProcessingId(null);
             }
@@ -108,7 +236,7 @@ export const TrashScreen: React.FC = () => {
     if (items.length === 0) return;
     Alert.alert(
       '¿Vaciar Papelera?',
-      'Se purgarán de forma definitiva todos los registros pendientes de eliminación.',
+      'Se purgarán de forma definitiva TODOS los registros de la papelera. Esta acción es irreversible.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -118,22 +246,13 @@ export const TrashScreen: React.FC = () => {
             setLoading(true);
             try {
               for (const item of items) {
-                const tableMap: Record<string, string> = {
-                  inventarios: 'inventories',
-                  cajas: 'boxes',
-                  prendas: 'garments',
-                  chat_sessions: 'chat_sessions',
-                  chat_history: 'chat_messages',
-                };
-                const remoteTable = tableMap[item.tableName] || item.tableName;
-                try {
-                  await supabase.from(remoteTable).delete().eq('id', item.recordId);
-                } catch (_) {}
+                await deleteItemHelper(item);
               }
-              await db.runAsync(`DELETE FROM pending_deletions`);
+              await AuthManager.refreshAllAppState(db);
               await loadTrashItems();
-            } catch (e) {
-              console.error(e);
+            } catch (e: any) {
+              console.error('Error al vaciar papelera:', e);
+              Alert.alert('Error al vaciar papelera', e.message || 'Ocurrió un fallo al purgar la papelera.');
             } finally {
               setLoading(false);
             }
@@ -169,7 +288,7 @@ export const TrashScreen: React.FC = () => {
     <RoleGuard roles={['Admin']}>
       <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
         <StatusBar barStyle="light-content" backgroundColor={currentTheme.background} />
-        
+
         {/* Header Pantalla Completa */}
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 16), backgroundColor: currentTheme.card, borderBottomColor: currentTheme.border }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -178,36 +297,77 @@ export const TrashScreen: React.FC = () => {
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={[styles.title, { color: currentTheme.text }]}>Papelera de Reciclaje</Text>
             <Text style={[styles.subtitle, { color: currentTheme.textSecondary }]}>
-              {items.length} elemento{items.length !== 1 ? 's' : ''} pendiente{items.length !== 1 ? 's' : ''}
+              {items.length} elemento{items.length !== 1 ? 's' : ''} en papelera (retención 48h)
             </Text>
           </View>
 
-          {items.length > 0 && (
-            <TouchableOpacity onPress={handleEmptyTrash} style={[styles.emptyTrashBtn, { backgroundColor: '#EF444420' }]}>
-              <Ionicons name="trash-bin-outline" size={18} color="#EF4444" style={{ marginRight: 4 }} />
-              <Text style={styles.emptyTrashText}>Vaciar</Text>
-            </TouchableOpacity>
-          )}
+
+        </View>
+
+        {/* Barra de Pestañas: [ Inventarios ] [ Cajas ] [ Prendas ] */}
+        <View style={[styles.tabBar, { backgroundColor: currentTheme.card, borderBottomColor: currentTheme.border }]}>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'inventarios' && { backgroundColor: currentTheme.primary + '25', borderColor: currentTheme.primary }]}
+            onPress={() => setActiveTab('inventarios')}
+          >
+            <Ionicons
+              name="file-tray-stacked-outline"
+              size={16}
+              color={activeTab === 'inventarios' ? currentTheme.primary : currentTheme.textSecondary}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.tabLabel, { color: activeTab === 'inventarios' ? currentTheme.primary : currentTheme.textSecondary }]}>
+              Lotes ({counts.inventarios})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'cajas' && { backgroundColor: currentTheme.primary + '25', borderColor: currentTheme.primary }]}
+            onPress={() => setActiveTab('cajas')}
+          >
+            <Ionicons
+              name="archive-outline"
+              size={16}
+              color={activeTab === 'cajas' ? currentTheme.primary : currentTheme.textSecondary}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.tabLabel, { color: activeTab === 'cajas' ? currentTheme.primary : currentTheme.textSecondary }]}>
+              Cajas ({counts.cajas})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'prendas' && { backgroundColor: currentTheme.primary + '25', borderColor: currentTheme.primary }]}
+            onPress={() => setActiveTab('prendas')}
+          >
+            <Ionicons
+              name="shirt-outline"
+              size={16}
+              color={activeTab === 'prendas' ? currentTheme.primary : currentTheme.textSecondary}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.tabLabel, { color: activeTab === 'prendas' ? currentTheme.primary : currentTheme.textSecondary }]}>
+              Prendas ({counts.prendas})
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {loading ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={currentTheme.primary} />
-            <Text style={{ color: currentTheme.textSecondary, marginTop: 12 }}>Cargando elementos pendientes...</Text>
+            <Text style={{ color: currentTheme.textSecondary, marginTop: 12 }}>Cargando papelera...</Text>
           </View>
-        ) : items.length === 0 ? (
-          <View style={styles.centerContainer}>
-            <View style={[styles.emptyIconCircle, { backgroundColor: currentTheme.primary + '15' }]}>
-              <Ionicons name="trash-outline" size={48} color={currentTheme.primary} />
-            </View>
-            <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>Papelera Vacía</Text>
-            <Text style={[styles.emptyDesc, { color: currentTheme.textSecondary }]}>
-              No hay ningún elemento pendiente de eliminación remota en este momento.
-            </Text>
-          </View>
+        ) : displayedItems.length === 0 ? (
+          <EmptyState
+            iconName="trash-outline"
+            title={`Sin ${activeTab === 'inventarios' ? 'Lotes' : activeTab === 'cajas' ? 'Cajas' : 'Prendas'} en Papelera`}
+            description={`No hay ${activeTab === 'inventarios' ? 'lotes' : activeTab === 'cajas' ? 'cajas' : 'prendas'} eliminados en este apartado.`}
+            currentTheme={currentTheme}
+            delay={100}
+          />
         ) : (
           <FlatList
-            data={items}
+            data={displayedItems}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => (
@@ -217,10 +377,10 @@ export const TrashScreen: React.FC = () => {
                     <Ionicons name={getEntityIcon(item.tableName) as any} size={22} color={currentTheme.primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.cardTitle, { color: currentTheme.text }]}>{getEntityName(item.tableName)}</Text>
-                    <Text style={[styles.cardSub, { color: currentTheme.textSecondary }]}>ID: {item.recordId}</Text>
-                    <Text style={[styles.cardDate, { color: currentTheme.textSecondary }]}>
-                      Eliminado: {new Date(item.createdAt).toLocaleString('es-ES')}
+                    <Text style={[styles.cardTitle, { color: currentTheme.text }]}>{item.title || getEntityName(item.tableName)}</Text>
+                    <Text style={[styles.cardSub, { color: currentTheme.textSecondary }]}>{getEntityName(item.tableName)} (ID: {item.recordId})</Text>
+                    <Text style={[styles.cardDate, { color: '#F59E0B', fontWeight: '600' }]}>
+                      ⏳ {computeRemainingTime(item.deletedAt)}
                     </Text>
                   </View>
                 </View>
@@ -297,30 +457,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  tabBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    borderBottomWidth: 1,
+  },
+  tabItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  tabLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   centerContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 6,
-  },
-  emptyDesc: {
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
+
   listContent: {
     padding: 16,
   },

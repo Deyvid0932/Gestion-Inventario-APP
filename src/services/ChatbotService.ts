@@ -262,22 +262,18 @@ export const ChatbotService = {
     }
   },
 
-  deleteSession: async (db: SQLiteDatabase, sessionId: string, userId?: string | null): Promise<void> => {
+  deleteSession: async (db: SQLiteDatabase, sessionId: string, _userId?: string | null): Promise<void> => {
     try {
       await db.runAsync('DELETE FROM chat_history WHERE sessionId = ?', [sessionId]);
       await db.runAsync('DELETE FROM chat_sessions WHERE id = ?', [sessionId]);
 
-      if (userId) {
-        await db.runAsync(
-          "INSERT OR REPLACE INTO pending_deletions (id, tableName, recordId, createdAt) VALUES (?, 'chat_sessions', ?, ?)",
-          [Date.now().toString() + '_' + sessionId, sessionId, new Date().toISOString()]
-        ).catch(() => {});
+      await db.runAsync(
+        "INSERT OR REPLACE INTO pending_deletions (id, tableName, recordId, createdAt) VALUES (?, 'chat_sessions', ?, ?)",
+        [Date.now().toString() + '_' + sessionId, sessionId, new Date().toISOString()]
+      ).catch(() => {});
 
-        Promise.all([
-          supabase.from('chat_messages').delete().eq('session_id', sessionId),
-          supabase.from('chat_sessions').delete().eq('id', sessionId)
-        ]).catch(() => {});
-      }
+      try { await supabase.from('chat_messages').delete().eq('session_id', sessionId); } catch (_) {}
+      try { await supabase.from('chat_sessions').delete().eq('id', sessionId); } catch (_) {}
     } catch (e) {
       console.error('Error deleting chat session', e);
     }

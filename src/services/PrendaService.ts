@@ -2,7 +2,9 @@ import { SQLiteDatabase } from 'expo-sqlite';
 import { Prenda } from '../types';
 import { supabase } from '../database/supabase';
 import { R2Service } from './r2Service';
+import { generateUUID } from '../utils/uuid';
 import { AuthManager } from './AuthManager';
+import { SyncScheduler } from '../sync/SyncScheduler';
 
 export const PrendaService = {
   addPrenda: async (db: SQLiteDatabase, prenda: Prenda) => {
@@ -130,35 +132,23 @@ export const PrendaService = {
         [id]
       );
 
-      let remoteDeleted = false;
-
       if (userId) {
-        try {
-          const { error } = await supabase.from('garments').delete().eq('id', id);
-          if (!error) {
-            remoteDeleted = true;
-            if (prenda?.r2Key) {
-              await R2Service.deletePhotoFromR2(prenda.r2Key).catch(() => {});
-            }
-            if (prenda?.r2Key2) {
-              await R2Service.deletePhotoFromR2(prenda.r2Key2).catch(() => {});
-            }
-          }
-        } catch (netErr) {
-          console.warn('Fallo eliminación remota inmediata, guardando en cola de pendientes:', netErr);
+        const { error } = await supabase.rpc('hard_delete_garment', { p_garment_id: id });
+        if (error) {
+          const { error: gErr } = await supabase.from('garments').delete().eq('id', id);
+          if (gErr) throw new Error(`Error al eliminar prenda en Supabase: ${gErr.message}`);
         }
       }
 
-      await db.withTransactionAsync(async () => {
-        if (userId && !remoteDeleted) {
-          const deletionId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-          await db.runAsync(
-            `INSERT INTO pending_deletions (id, tableName, recordId, createdAt) VALUES (?, 'prendas', ?, ?)`,
-            [deletionId, id, new Date().toISOString()]
-          ).catch(() => {});
-        }
-        await db.runAsync(`DELETE FROM prendas WHERE id = ?`, [id]);
-      });
+      if (prenda?.r2Key) {
+        await R2Service.deletePhotoFromR2(prenda.r2Key).catch(() => {});
+      }
+      if (prenda?.r2Key2) {
+        await R2Service.deletePhotoFromR2(prenda.r2Key2).catch(() => {});
+      }
+
+      await db.runAsync(`DELETE FROM prendas WHERE id = ?`, [id]);
+      await db.runAsync(`DELETE FROM pending_deletions WHERE recordId = ? OR id = ?`, [id, id]);
 
       return { success: true };
     } catch (e: any) {
@@ -167,11 +157,63 @@ export const PrendaService = {
     }
   },
 
+  softDelete: async (db: SQLiteDatabase, id: string, userId?: string | null) => {
+    try {
+      const now = new Date().toISOString();
+      const batchId = generateUUID();
+
+      await db.runAsync(
+        `UPDATE prendas SET estado = 0, deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
+        [now, userId || null, batchId, now, id]
+      );
+
+      if (userId) {
+        SyncScheduler.schedulePush(db, userId);
+      }
+
+      return { success: true };
+    } catch (e: any) {
+      console.error('Error en softDelete de prenda:', e);
+      return { success: false, error: e.message || 'Error al mover la prenda a la papelera.' };
+    }
+  },
+
+  restore: async (db: SQLiteDatabase, id: string, userId?: string | null) => {
+    try {
+      const parentCaja = await db.getFirstAsync<{ deleted_at?: string | null }>(
+        `SELECT deleted_at FROM cajas WHERE id = (SELECT cajaId FROM prendas WHERE id = ?)`,
+        [id]
+      );
+      if (parentCaja && parentCaja.deleted_at !== null && parentCaja.deleted_at !== undefined) {
+        return {
+          success: false,
+          error: 'No se puede restaurar la prenda porque su caja está en la papelera.',
+        };
+      }
+
+      const now = new Date().toISOString();
+
+      await db.runAsync(
+        `UPDATE prendas SET estado = 1, deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
+        [now, id]
+      );
+
+      if (userId) {
+        SyncScheduler.schedulePush(db, userId);
+      }
+
+      return { success: true };
+    } catch (e: any) {
+      console.error('Error al restaurar prenda:', e);
+      return { success: false, error: e.message || 'Error al restaurar la prenda.' };
+    }
+  },
+
   getAllPrendasByCaja: async (db: SQLiteDatabase, cajaId: string, search: string = '') => {
     try {
       if (search.trim() === '') {
         return await db.getAllAsync<Prenda>(
-          'SELECT * FROM prendas WHERE cajaId = ? ORDER BY fechaCreacion DESC',
+          'SELECT * FROM prendas WHERE cajaId = ? AND deleted_at IS NULL ORDER BY fechaCreacion DESC',
           [cajaId]
         );
       }
@@ -182,7 +224,7 @@ export const PrendaService = {
 
       return await db.getAllAsync<Prenda>(
         `SELECT * FROM prendas 
-         WHERE cajaId = ? AND (op LIKE ? OR estilo LIKE ? OR color LIKE ? OR talla LIKE ?) 
+         WHERE cajaId = ? AND deleted_at IS NULL AND (op LIKE ? OR estilo LIKE ? OR color LIKE ? OR talla LIKE ?) 
          ORDER BY 
           (CASE 
             WHEN op = ? OR estilo = ? OR color = ? OR talla = ? THEN 0

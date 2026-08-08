@@ -48,7 +48,7 @@ export const ExportModal = ({ visible, onClose, data: propData }: ExportModalPro
           FROM prendas p
           JOIN cajas c ON p.cajaId = c.id
           JOIN inventarios i ON c.inventarioId = i.id
-          ORDER BY c.nombre ASC, p.fechaCreacion DESC
+          ORDER BY i.nombre ASC, c.nombre ASC, p.fechaCreacion DESC
         `)
           .then(rows => {
             setExportData(rows || []);
@@ -64,26 +64,112 @@ export const ExportModal = ({ visible, onClose, data: propData }: ExportModalPro
     }
   }, [visible, propData, db]);
 
-  // Cajas disponibles a partir de los datos
-  const availableBoxes = useMemo(() => {
-    return Array.from(new Set(exportData.map(item => item.cajaNombre))).filter(Boolean);
+  // Estructura jerárquica: Inventario -> Cajas -> Prendas
+  const inventariosGrouped = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+
+    exportData.forEach(item => {
+      const invName = item.inventarioNombre || 'Inventario Sin Nombre';
+      const boxName = item.cajaNombre || 'Caja Sin Nombre';
+
+      if (!map.has(invName)) {
+        map.set(invName, new Map<string, number>());
+      }
+      const boxMap = map.get(invName)!;
+      boxMap.set(boxName, (boxMap.get(boxName) || 0) + 1);
+    });
+
+    const result: {
+      nombre: string;
+      totalPrendas: number;
+      cajas: { nombre: string; prendaCount: number; key: string }[];
+    }[] = [];
+
+    map.forEach((boxMap, invName) => {
+      const cajas: { nombre: string; prendaCount: number; key: string }[] = [];
+      let totalPrendas = 0;
+
+      boxMap.forEach((count, boxName) => {
+        cajas.push({
+          nombre: boxName,
+          prendaCount: count,
+          key: `${invName}___${boxName}`,
+        });
+        totalPrendas += count;
+      });
+
+      result.push({
+        nombre: invName,
+        totalPrendas,
+        cajas,
+      });
+    });
+
+    return result;
   }, [exportData]);
 
-  const [selectedBoxes, setSelectedBoxes] = useState<string[]>([]);
-  const [separateBySheet, setSeparateBySheet] = useState(false);
+  // Claves compuestas de todas las cajas disponibles
+  const allBoxKeys = useMemo(() => {
+    const keys: string[] = [];
+    inventariosGrouped.forEach(inv => {
+      inv.cajas.forEach(c => keys.push(c.key));
+    });
+    return keys;
+  }, [inventariosGrouped]);
 
-  // Auto-seleccionar todas las cajas cuando se cargan los datos o abre el modal
+  const [selectedBoxKeys, setSelectedBoxKeys] = useState<string[]>([]);
+  const [expandedInventarios, setExpandedInventarios] = useState<string[]>([]);
+  const [separateBySheet, setSeparateBySheet] = useState(false);
+  const [customInvOrder, setCustomInvOrder] = useState<string[]>([]);
+
+  // Sincronizar el orden de inventarios cuando cambian los datos
   useEffect(() => {
-    if (visible && availableBoxes.length > 0) {
-      setSelectedBoxes(availableBoxes);
+    if (inventariosGrouped.length > 0) {
+      setCustomInvOrder(prev => {
+        const names = inventariosGrouped.map(g => g.nombre);
+        if (prev.length === 0) return names;
+        const newNames = names.filter(n => !prev.includes(n));
+        return [...prev.filter(n => names.includes(n)), ...newNames];
+      });
     }
-  }, [visible, availableBoxes]);
+  }, [inventariosGrouped]);
+
+  const orderedInventariosGrouped = useMemo(() => {
+    if (customInvOrder.length === 0) return inventariosGrouped;
+    const map = new Map(inventariosGrouped.map(g => [g.nombre, g]));
+    const result: typeof inventariosGrouped = [];
+    customInvOrder.forEach(name => {
+      const g = map.get(name);
+      if (g) result.push(g);
+    });
+    inventariosGrouped.forEach(g => {
+      if (!result.includes(g)) result.push(g);
+    });
+    return result;
+  }, [inventariosGrouped, customInvOrder]);
+
+  const moveInventarioPosition = (index: number, direction: 'up' | 'down') => {
+    const newOrder = orderedInventariosGrouped.map(g => g.nombre);
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newOrder.length) return;
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[targetIndex];
+    newOrder[targetIndex] = temp;
+    setCustomInvOrder(newOrder);
+  };
+
+  useEffect(() => {
+    if (visible && allBoxKeys.length > 0) {
+      setSelectedBoxKeys(allBoxKeys);
+      setExpandedInventarios([]);
+    }
+  }, [visible, allBoxKeys]);
 
   const [selectedColumns, selectSetColumns] = useState({
     op: false,
     estilo: true,
     color: true,
-    ubicacion: false,
+    ubicacion: true,
     estado: false,
   });
 
@@ -91,41 +177,58 @@ export const ExportModal = ({ visible, onClose, data: propData }: ExportModalPro
     selectSetColumns(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const toggleBox = (boxName: string) => {
-    if (selectedBoxes.includes(boxName)) {
-      setSelectedBoxes(prev => prev.filter(name => name !== boxName));
+  const toggleInventarioExpand = (invName: string) => {
+    setExpandedInventarios(prev =>
+      prev.includes(invName) ? prev.filter(name => name !== invName) : [...prev, invName]
+    );
+  };
+
+  const toggleSingleBox = (key: string) => {
+    setSelectedBoxKeys(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
+  const toggleEntireInventarioSelection = (invName: string) => {
+    const invGroup = inventariosGrouped.find(g => g.nombre === invName);
+    if (!invGroup) return;
+
+    const invKeys = invGroup.cajas.map(c => c.key);
+    const allSelected = invKeys.every(k => selectedBoxKeys.includes(k));
+
+    if (allSelected) {
+      setSelectedBoxKeys(prev => prev.filter(k => !invKeys.includes(k)));
     } else {
-      setSelectedBoxes(prev => [...prev, boxName]);
+      setSelectedBoxKeys(prev => Array.from(new Set([...prev, ...invKeys])));
     }
   };
 
-  const selectAllBoxes = () => {
-    if (selectedBoxes.length === availableBoxes.length) {
-      setSelectedBoxes([]);
+  const selectAllEverything = () => {
+    if (selectedBoxKeys.length === allBoxKeys.length) {
+      setSelectedBoxKeys([]);
     } else {
-      setSelectedBoxes(availableBoxes);
+      setSelectedBoxKeys(allBoxKeys);
     }
   };
 
   const handleExport = () => {
-    if (selectedBoxes.length === 0) {
+    if (selectedBoxKeys.length === 0) {
       Alert.alert('Atención', 'Selecciona al menos una caja para generar la exportación.');
       return;
     }
 
-    const dataFiltrada = exportData.filter(item => selectedBoxes.includes(item.cajaNombre));
+    const dataFiltrada = exportData.filter(item => {
+      const invName = item.inventarioNombre || 'Inventario Sin Nombre';
+      const boxName = item.cajaNombre || 'Caja Sin Nombre';
+      return selectedBoxKeys.includes(`${invName}___${boxName}`);
+    });
 
     if (dataFiltrada.length === 0) {
-      Alert.alert('Sin Datos', 'No hay prendas para exportar en las cajas seleccionadas.');
+      Alert.alert('Sin Datos', 'No hay prendas para exportar en la selección actual.');
       return;
     }
 
-    let nombreArchivo = '';
-    if (selectedBoxes.length === 1) {
-      nombreArchivo = `Reporte_${selectedBoxes[0]}`;
-    } else {
-      nombreArchivo = `Reporte_Inventario_${selectedBoxes.length}_Cajas`;
-    }
+    const nombreArchivo = `Reporte_Inventario_${selectedBoxKeys.length}_Cajas`;
 
     const dataFinal = dataFiltrada.map(item => {
       const row: any = {};
@@ -161,7 +264,7 @@ export const ExportModal = ({ visible, onClose, data: propData }: ExportModalPro
                   backgroundColor: currentTheme.card,
                   borderColor: currentTheme.border,
                   shadowColor: currentTheme.borderShadow || '#000',
-                  maxHeight: '85%',
+                  maxHeight: '88%',
                   paddingBottom: Math.max(insets.bottom + 16, 24),
                 },
               ]}
@@ -171,15 +274,22 @@ export const ExportModal = ({ visible, onClose, data: propData }: ExportModalPro
               {/* Header */}
               <View style={styles.headerRow}>
                 <View style={styles.titleContainer}>
-                  <Ionicons name="document-text-outline" size={24} color={currentTheme.primary} style={{ marginRight: 8 }} />
-                  <Text style={[styles.modalTitle, { color: currentTheme.text }]} allowFontScaling={true}>
-                    Exportar a Excel
-                  </Text>
+                  <View style={[styles.headerIconCircle, { backgroundColor: currentTheme.primary + '18' }]}>
+                    <Ionicons name="stats-chart" size={20} color={currentTheme.primary} />
+                  </View>
+                  <View>
+                    <Text style={[styles.modalTitle, { color: currentTheme.text }]} allowFontScaling={true}>
+                      Exportación Profesional
+                    </Text>
+                    <Text style={[styles.modalSubtitle, { color: currentTheme.textSecondary }]}>
+                      Selecciona inventarios, cajas y columnas
+                    </Text>
+                  </View>
                 </View>
                 <TouchableOpacity
                   onPress={onClose}
                   style={[styles.closeBtn, { backgroundColor: currentTheme.border + '30' }]}
-                  accessibilityLabel="Cerrar modal de exportación"
+                  accessibilityLabel="Cerrar modal"
                 >
                   <Ionicons name="close" size={20} color={currentTheme.text} />
                 </TouchableOpacity>
@@ -189,67 +299,186 @@ export const ExportModal = ({ visible, onClose, data: propData }: ExportModalPro
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={currentTheme.primary} />
                   <Text style={[styles.loadingText, { color: currentTheme.textSecondary }]}>
-                    Cargando inventario para exportar...
+                    Cargando estructura de inventarios...
                   </Text>
                 </View>
               ) : (
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                  {/* Sección: Cajas */}
+                  {/* Sección: Inventarios y Cajas Acordeón */}
                   <View style={styles.sectionHeader}>
-                    <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>
-                      CAJAS A INCLUIR ({availableBoxes.length})
-                    </Text>
-                    {availableBoxes.length > 0 && (
-                      <TouchableOpacity onPress={selectAllBoxes}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="layers-outline" size={16} color={currentTheme.primary} />
+                      <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary, marginBottom: 0 }]}>
+                        INVENTARIOS Y CAJAS ({inventariosGrouped.length} lotes)
+                      </Text>
+                    </View>
+                    {allBoxKeys.length > 0 && (
+                      <TouchableOpacity onPress={selectAllEverything}>
                         <Text style={[styles.selectAllText, { color: currentTheme.primary }]}>
-                          {selectedBoxes.length === availableBoxes.length ? 'Desmarcar todas' : 'Todas'}
+                          {selectedBoxKeys.length === allBoxKeys.length ? 'Desmarcar todo' : 'Marcar todo'}
                         </Text>
                       </TouchableOpacity>
                     )}
                   </View>
 
-                  {availableBoxes.length === 0 ? (
+                  {orderedInventariosGrouped.length === 0 ? (
                     <View style={[styles.emptyBoxCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
                       <Ionicons name="cube-outline" size={32} color={currentTheme.textSecondary} style={{ marginBottom: 6 }} />
                       <Text style={[styles.emptyBoxText, { color: currentTheme.textSecondary }]}>
-                        No hay prendas registradas en la base de datos para exportar.
+                        No hay prendas o cajas registradas en la base de datos para exportar.
                       </Text>
                     </View>
                   ) : (
-                    <View style={styles.chipsContainer}>
-                      {availableBoxes.map(box => {
-                        const isSelected = selectedBoxes.includes(box);
+                    <View style={styles.accordionContainer}>
+                      {orderedInventariosGrouped.map((inv, index) => {
+                        const isExpanded = expandedInventarios.includes(inv.nombre);
+                        const invKeys = inv.cajas.map(c => c.key);
+                        const selectedCountInInv = invKeys.filter(k => selectedBoxKeys.includes(k)).length;
+                        const isFullySelected = selectedCountInInv === invKeys.length;
+                        const isPartiallySelected = selectedCountInInv > 0 && selectedCountInInv < invKeys.length;
+
                         return (
-                          <TouchableOpacity
-                            key={box}
-                            onPress={() => toggleBox(box)}
-                            activeOpacity={0.7}
+                          <View
+                            key={inv.nombre}
                             style={[
-                              styles.chip,
+                              styles.inventoryCard,
                               {
-                                backgroundColor: isSelected ? currentTheme.primary + '18' : currentTheme.background,
-                                borderColor: isSelected ? currentTheme.primary : currentTheme.border,
+                                backgroundColor: currentTheme.background,
+                                borderColor: isExpanded ? currentTheme.primary + '50' : currentTheme.border,
                               },
                             ]}
                           >
-                            <Ionicons
-                              name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
-                              size={16}
-                              color={isSelected ? currentTheme.primary : currentTheme.textSecondary}
-                              style={{ marginRight: 6 }}
-                            />
-                            <Text
-                              style={[
-                                styles.chipText,
-                                {
-                                  color: isSelected ? currentTheme.primary : currentTheme.text,
-                                  fontWeight: isSelected ? '700' : '500',
-                                },
-                              ]}
-                            >
-                              {box}
-                            </Text>
-                          </TouchableOpacity>
+                            {/* Encabezado del Inventario / Lote */}
+                            <View style={styles.inventoryHeader}>
+                              {/* Controles de posición (Subir / Bajar) */}
+                              {orderedInventariosGrouped.length > 1 && (
+                                <View style={styles.reorderBtnsColumn}>
+                                  <TouchableOpacity
+                                    disabled={index === 0}
+                                    onPress={() => moveInventarioPosition(index, 'up')}
+                                    style={[styles.reorderBtn, { opacity: index === 0 ? 0.25 : 1 }]}
+                                    accessibilityLabel="Mover lote arriba"
+                                  >
+                                    <Ionicons name="chevron-up" size={14} color={currentTheme.primary} />
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    disabled={index === orderedInventariosGrouped.length - 1}
+                                    onPress={() => moveInventarioPosition(index, 'down')}
+                                    style={[styles.reorderBtn, { opacity: index === orderedInventariosGrouped.length - 1 ? 0.25 : 1 }]}
+                                    accessibilityLabel="Mover lote abajo"
+                                  >
+                                    <Ionicons name="chevron-down" size={14} color={currentTheme.primary} />
+                                  </TouchableOpacity>
+                                </View>
+                              )}
+
+                              {/* Checkbox de selección completa de inventario */}
+                              <TouchableOpacity
+                                activeOpacity={0.7}
+                                onPress={() => toggleEntireInventarioSelection(inv.nombre)}
+                                style={styles.invCheckboxTouch}
+                              >
+                                <Ionicons
+                                  name={
+                                    isFullySelected
+                                      ? 'checkbox'
+                                      : isPartiallySelected
+                                      ? 'remove-circle'
+                                      : 'square-outline'
+                                  }
+                                  size={22}
+                                  color={
+                                    isFullySelected || isPartiallySelected
+                                      ? currentTheme.primary
+                                      : currentTheme.textSecondary
+                                  }
+                                />
+                              </TouchableOpacity>
+
+                              {/* Título y badge interactivos para expandir/colapsar */}
+                              <TouchableOpacity
+                                activeOpacity={0.8}
+                                onPress={() => toggleInventarioExpand(inv.nombre)}
+                                style={styles.invTitleArea}
+                              >
+                                <Ionicons name="folder-open" size={18} color={currentTheme.primary} style={{ marginRight: 8 }} />
+                                <View style={{ flex: 1 }}>
+                                  <Text style={[styles.inventoryTitle, { color: currentTheme.text }]} numberOfLines={1}>
+                                    {inv.nombre}
+                                  </Text>
+                                  <Text style={[styles.inventoryMeta, { color: currentTheme.textSecondary }]}>
+                                    {inv.cajas.length} caja{inv.cajas.length !== 1 ? 's' : ''} · {inv.totalPrendas} prenda{inv.totalPrendas !== 1 ? 's' : ''}
+                                  </Text>
+                                </View>
+
+                                {/* Badge numérico de cajas seleccionadas */}
+                                <View style={[styles.countBadge, { backgroundColor: currentTheme.primary + '15' }]}>
+                                  <Text style={[styles.countBadgeText, { color: currentTheme.primary }]}>
+                                    {selectedCountInInv}/{inv.cajas.length}
+                                  </Text>
+                                </View>
+
+                                {/* Chevron de expansión */}
+                                <Ionicons
+                                  name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                                  size={18}
+                                  color={currentTheme.textSecondary}
+                                  style={{ marginLeft: 6 }}
+                                />
+                              </TouchableOpacity>
+                            </View>
+
+                            {/* Cajas hijas dentro del Inventario (Desplegable) */}
+                            {isExpanded && (
+                              <View style={[styles.boxesSubContainer, { borderTopColor: currentTheme.border }]}>
+                                {inv.cajas.map(box => {
+                                  const isBoxSelected = selectedBoxKeys.includes(box.key);
+                                  return (
+                                    <TouchableOpacity
+                                      key={box.key}
+                                      activeOpacity={0.7}
+                                      onPress={() => toggleSingleBox(box.key)}
+                                      style={[
+                                        styles.boxRow,
+                                        {
+                                          backgroundColor: isBoxSelected
+                                            ? currentTheme.primary + '12'
+                                            : currentTheme.card,
+                                          borderColor: isBoxSelected ? currentTheme.primary + '40' : currentTheme.border,
+                                        },
+                                      ]}
+                                    >
+                                      <Ionicons
+                                        name={isBoxSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                                        size={18}
+                                        color={isBoxSelected ? currentTheme.primary : currentTheme.textSecondary}
+                                        style={{ marginRight: 8 }}
+                                      />
+                                      <Ionicons name="cube-outline" size={16} color={currentTheme.textSecondary} style={{ marginRight: 6 }} />
+                                      <Text
+                                        style={[
+                                          styles.boxRowText,
+                                          {
+                                            color: isBoxSelected ? currentTheme.primary : currentTheme.text,
+                                            fontWeight: isBoxSelected ? '700' : '500',
+                                          },
+                                        ]}
+                                        numberOfLines={1}
+                                      >
+                                        {box.nombre}
+                                      </Text>
+
+                                      <View style={[styles.prendaCountChip, { backgroundColor: currentTheme.border + '40' }]}>
+                                        <Text style={[styles.prendaCountText, { color: currentTheme.textSecondary }]}>
+                                          {box.prendaCount} p.
+                                        </Text>
+                                      </View>
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </View>
+                            )}
+                          </View>
                         );
                       })}
                     </View>
@@ -257,7 +486,7 @@ export const ExportModal = ({ visible, onClose, data: propData }: ExportModalPro
 
                   {/* Sección: Columnas del Reporte */}
                   <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary, marginTop: 18 }]}>
-                    COLUMNAS DEL REPORTE
+                    COLUMNAS DEL REPORTE EXCEL
                   </Text>
                   <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
                     {[
@@ -290,13 +519,13 @@ export const ExportModal = ({ visible, onClose, data: propData }: ExportModalPro
                   </View>
 
                   {/* Sección: Opciones Avanzadas */}
-                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>OPCIONES DE EXCEL</Text>
+                  <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>OPCIONES AVANZADAS</Text>
                   <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
                     <View style={styles.switchRow}>
                       <View style={{ flex: 1, marginRight: 10 }}>
-                        <Text style={[styles.switchTitle, { color: currentTheme.text }]}>Separar por Hojas</Text>
+                        <Text style={[styles.switchTitle, { color: currentTheme.text }]}>Separar por Hojas (Pestañas)</Text>
                         <Text style={[styles.switchSubtitle, { color: currentTheme.textSecondary }]}>
-                          Crea una pestaña individual en el archivo Excel por cada caja
+                          Crea una pestaña individual en Excel por cada caja seleccionada
                         </Text>
                       </View>
                       <Switch
@@ -313,15 +542,19 @@ export const ExportModal = ({ visible, onClose, data: propData }: ExportModalPro
                     style={[
                       styles.exportBtn,
                       {
-                        backgroundColor: availableBoxes.length > 0 && selectedBoxes.length > 0 ? currentTheme.primary : currentTheme.border,
+                        backgroundColor: selectedBoxKeys.length > 0 ? currentTheme.primary : currentTheme.border,
                       },
                     ]}
                     onPress={handleExport}
-                    disabled={availableBoxes.length === 0 || selectedBoxes.length === 0}
+                    disabled={selectedBoxKeys.length === 0}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="stats-chart-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.exportBtnText}>Generar Reporte Excel</Text>
+                    <Ionicons name="document-text" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.exportBtnText}>
+                      {selectedBoxKeys.length > 0
+                        ? `Exportar Excel (${selectedBoxKeys.length} caja${selectedBoxKeys.length !== 1 ? 's' : ''})`
+                        : 'Selecciona al menos una caja'}
+                    </Text>
                   </TouchableOpacity>
                 </ScrollView>
               )}
@@ -336,7 +569,7 @@ export const ExportModal = ({ visible, onClose, data: propData }: ExportModalPro
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
@@ -348,7 +581,7 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   dragIndicator: {
-    width: 36,
+    width: 38,
     height: 4,
     backgroundColor: '#CCCCCC',
     borderRadius: 2,
@@ -364,10 +597,23 @@ const styles = StyleSheet.create({
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+  },
+  headerIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  modalSubtitle: {
+    fontSize: 11,
+    marginTop: 1,
   },
   closeBtn: {
     width: 34,
@@ -392,7 +638,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   sectionSubtitle: {
     fontSize: 11,
@@ -416,22 +662,85 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
   },
-  chipsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 10,
+  accordionContainer: {
+    gap: 10,
+    marginBottom: 12,
   },
-  chip: {
+  inventoryCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  inventoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  reorderBtnsColumn: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingRight: 6,
+    gap: 2,
+  },
+  reorderBtn: {
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  invCheckboxTouch: {
+    paddingRight: 8,
+  },
+  invTitleArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  inventoryTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  inventoryMeta: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  countBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginRight: 4,
+  },
+  countBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  boxesSubContainer: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    gap: 6,
+  },
+  boxRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.5,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1,
   },
-  chipText: {
+  boxRowText: {
+    flex: 1,
     fontSize: 13,
+  },
+  prendaCountChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  prendaCountText: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   menuGroup: {
     borderRadius: 14,

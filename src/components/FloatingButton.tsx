@@ -22,7 +22,6 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
 }) => {
 
   const currentTheme = useAppStore(state => state.currentTheme);
-  const themeMode = useAppStore(state => state.themeMode);;
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -58,7 +57,7 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
             }
           ]}
         >
-          <Ionicons name={icon as any} size={28} color={themeMode === 'light' ? '#FFF' : '#000'} />
+          <Ionicons name={icon as any} size={28} color={currentTheme.primaryText} />
         </Animated.View>
       </TouchableOpacity>
     </RoleGuard>

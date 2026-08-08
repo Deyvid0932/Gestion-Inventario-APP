@@ -30,7 +30,8 @@ import { PrendaService } from '../services/PrendaService';
 import { InventarioService } from '../services/InventarioService';
 import { CajaService } from '../services/CajaService';
 import { AuthManager } from '../services/AuthManager';
-import { SynchronizationEngine } from '../sync/SynchronizationEngine';
+import { SyncScheduler } from '../sync/SyncScheduler';
+import { R2Service } from '../services/r2Service';
 import { AlarmService } from '../services/AlarmService';
 import { usePrenda } from '../hooks/usePrenda';
 import { Ionicons } from '@expo/vector-icons';
@@ -74,6 +75,22 @@ export const FormScreen = () => {
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadR2Images = async () => {
+      if (initialData && entityType === 'prenda') {
+        const uri1 = await R2Service.getResolvedImageUri(initialData.fotoUri, initialData.r2Key);
+        const uri2 = await R2Service.getResolvedImageUri(initialData.fotoUri2, initialData.r2Key2);
+        if (isMounted) {
+          if (uri1) setImageUri(uri1);
+          if (uri2) setImageUri2(uri2);
+        }
+      }
+    };
+    loadR2Images();
+    return () => { isMounted = false; };
+  }, [initialData?.fotoUri, initialData?.fotoUri2, initialData?.r2Key, initialData?.r2Key2]);
 
   const triggerShake = useCallback(() => {
     Animated.sequence([
@@ -289,7 +306,7 @@ export const FormScreen = () => {
 
       const currentUser = useAppStore.getState().user;
       if (currentUser?.id) {
-        SynchronizationEngine.pushAllPending(db, currentUser.id).catch(() => {});
+        SyncScheduler.schedulePush(db, currentUser.id);
       }
 
       navigation.goBack();
@@ -514,7 +531,7 @@ export const FormScreen = () => {
                       value={alarmEnabled}
                       onValueChange={(val) => {
                         setAlarmEnabled(val);
-                        if (val) AlarmService.requestPermissions();
+                        if (val) AlarmService.requestPermissions().catch(() => {});
                       }}
                       trackColor={{ false: '#767577', true: currentTheme.primary }}
                       thumbColor={alarmEnabled ? '#FFFFFF' : '#f4f3f4'}

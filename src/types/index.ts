@@ -13,6 +13,10 @@ export interface Inventario {
   estado: 'Activo' | 'Inactivo' | number;
   updated_at?: string;
   deleted_at?: string | null;
+  deleted_by?: string | null;
+  deletion_batch_id?: string | null;
+  orden?: number;
+  order?: number;
   sync_status?: SyncStatus;
 }
 
@@ -34,6 +38,8 @@ export interface Caja {
   orden?: number;
   updated_at?: string;
   deleted_at?: string | null;
+  deleted_by?: string | null;
+  deletion_batch_id?: string | null;
   sync_status?: SyncStatus;
 }
 
@@ -66,6 +72,8 @@ export interface Prenda {
   alarmaNotificationId?: string | null;
   updated_at?: string;
   deleted_at?: string | null;
+  deleted_by?: string | null;
+  deletion_batch_id?: string | null;
   sync_status?: SyncStatus;
 }
 
@@ -89,11 +97,11 @@ export type RootStackParamList = {
 };
 
 export type BottomTabParamList = {
+  Home: undefined;
   Inventarios: undefined;
-  Stats: undefined;
-  Chatbot: undefined;
   History: undefined;
-  GarmentDetails: { cajaId: string; nombreCaja: string };
+  Chatbot: undefined;
+  Settings: undefined;
 };
 
 export interface ChatSession {

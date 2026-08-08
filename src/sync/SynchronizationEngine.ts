@@ -8,6 +8,7 @@ import { ChatSessionSyncAdapter } from './adapters/ChatSessionSyncAdapter';
 import { ChatHistorySyncAdapter } from './adapters/ChatHistorySyncAdapter';
 import { supabase } from '../database/supabase';
 import { useAppStore } from '../store/useAppStore';
+import { R2Service } from '../services/r2Service';
 
 const LAST_SYNC_KEY = 'last_sync_timestamp';
 
@@ -48,18 +49,18 @@ class SynchronizationEngineClass {
 
   async getPendingCount(db: SQLiteDatabase): Promise<number> {
     try {
-      let count = 0;
-      for (const adapter of this.adapters) {
-        const res = await db.getFirstAsync<{ total: number }>(
-          `SELECT count(*) as total FROM ${adapter.tableName} WHERE sync_status = 'PENDING' OR sync_status = 'FAILED'`
-        );
-        count += res?.total || 0;
-      }
-      const deletionsRes = await db.getFirstAsync<{ total: number }>(
-        `SELECT count(*) as total FROM pending_deletions`
-      );
-      count += deletionsRes?.total || 0;
-      return count;
+      const sql = `
+        SELECT (
+          (SELECT COUNT(*) FROM inventarios WHERE sync_status = 'PENDING' OR sync_status = 'FAILED') +
+          (SELECT COUNT(*) FROM cajas WHERE sync_status = 'PENDING' OR sync_status = 'FAILED') +
+          (SELECT COUNT(*) FROM prendas WHERE sync_status = 'PENDING' OR sync_status = 'FAILED') +
+          (SELECT COUNT(*) FROM chat_sessions WHERE sync_status = 'PENDING' OR sync_status = 'FAILED') +
+          (SELECT COUNT(*) FROM chat_history WHERE sync_status = 'PENDING' OR sync_status = 'FAILED') +
+          (SELECT COUNT(*) FROM pending_deletions)
+        ) as total
+      `;
+      const res = await db.getFirstAsync<{ total: number }>(sql);
+      return res?.total || 0;
     } catch {
       return 0;
     }
@@ -67,11 +68,13 @@ class SynchronizationEngineClass {
 
   async recoverStuckSyncing(db: SQLiteDatabase): Promise<void> {
     try {
-      for (const adapter of this.adapters) {
-        await db.runAsync(
-          `UPDATE ${adapter.tableName} SET sync_status = 'PENDING' WHERE sync_status = 'SYNCING'`
-        ).catch(() => {});
-      }
+      await db.execAsync(`
+        UPDATE inventarios SET sync_status = 'PENDING' WHERE sync_status = 'SYNCING';
+        UPDATE cajas SET sync_status = 'PENDING' WHERE sync_status = 'SYNCING';
+        UPDATE prendas SET sync_status = 'PENDING' WHERE sync_status = 'SYNCING';
+        UPDATE chat_sessions SET sync_status = 'PENDING' WHERE sync_status = 'SYNCING';
+        UPDATE chat_history SET sync_status = 'PENDING' WHERE sync_status = 'SYNCING';
+      `);
     } catch (e) {}
   }
 
@@ -92,14 +95,72 @@ class SynchronizationEngineClass {
         chat_messages: 'chat_messages',
       };
 
+      const deletedIds: string[] = [];
+
       for (const item of pendingDeletions) {
         const targetRemoteTable = tableMap[item.tableName] || item.tableName;
+
+        try {
+          if (targetRemoteTable === 'inventories') {
+            const { data: remoteBoxes } = await supabase
+              .from('boxes')
+              .select('id')
+              .eq('inventory_id', item.recordId);
+
+            if (remoteBoxes && remoteBoxes.length > 0) {
+              const boxIds = remoteBoxes.map(b => b.id);
+              const { data: garments } = await supabase
+                .from('garments')
+                .select('r2_key, r2_key_2')
+                .in('box_id', boxIds);
+
+              for (const g of garments || []) {
+                if (g.r2_key) await R2Service.deletePhotoFromR2(g.r2_key).catch(() => {});
+                if (g.r2_key_2) await R2Service.deletePhotoFromR2(g.r2_key_2).catch(() => {});
+              }
+
+              await supabase.from('garments').delete().in('box_id', boxIds);
+              await supabase.from('boxes').delete().in('id', boxIds);
+            }
+          } else if (targetRemoteTable === 'boxes') {
+            const { data: garments } = await supabase
+              .from('garments')
+              .select('r2_key, r2_key_2')
+              .eq('box_id', item.recordId);
+
+            for (const g of garments || []) {
+              if (g.r2_key) await R2Service.deletePhotoFromR2(g.r2_key).catch(() => {});
+              if (g.r2_key_2) await R2Service.deletePhotoFromR2(g.r2_key_2).catch(() => {});
+            }
+
+            await supabase.from('garments').delete().eq('box_id', item.recordId);
+          } else if (targetRemoteTable === 'garments') {
+            const { data: garment } = await supabase
+              .from('garments')
+              .select('r2_key, r2_key_2')
+              .eq('id', item.recordId)
+              .maybeSingle();
+
+            if (garment) {
+              if (garment.r2_key) await R2Service.deletePhotoFromR2(garment.r2_key).catch(() => {});
+              if (garment.r2_key_2) await R2Service.deletePhotoFromR2(garment.r2_key_2).catch(() => {});
+            }
+          }
+        } catch (cascadeErr) {
+          console.warn(`[SyncEngine] Error en limpieza en cascada para ${item.recordId}:`, cascadeErr);
+        }
+
         const { error } = await supabase.from(targetRemoteTable).delete().eq('id', item.recordId);
         if (!error) {
-          await db.runAsync(`DELETE FROM pending_deletions WHERE id = ?`, [item.id]);
+          deletedIds.push(item.id);
         } else {
           console.warn(`[SyncEngine] Error al eliminar registro ${item.recordId} de ${targetRemoteTable} en Supabase:`, error.message);
         }
+      }
+
+      if (deletedIds.length > 0) {
+        const placeholders = deletedIds.map(() => '?').join(',');
+        await db.runAsync(`DELETE FROM pending_deletions WHERE id IN (${placeholders})`, deletedIds);
       }
     } catch (e) {}
   }
@@ -122,6 +183,10 @@ class SynchronizationEngineClass {
           if (res.errors) totalResult.errors?.push(...res.errors);
         }
       }
+
+      if (totalResult.pushedCount > 0 && totalResult.success) {
+        await this.setLastSyncTime();
+      }
     } catch (e: any) {
       totalResult.success = false;
     }
@@ -132,6 +197,7 @@ class SynchronizationEngineClass {
     const totalResult: SyncResult = { success: true, pushedCount: 0, pulledCount: 0, errors: [] };
     
     try {
+      const syncStartedAt = new Date().toISOString();
       const localCount = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM inventarios');
       const isEmpty = !localCount || localCount.count === 0;
       const since = (forceFull || isEmpty) ? null : await this.getLastSyncTime();
@@ -146,7 +212,7 @@ class SynchronizationEngineClass {
       }
 
       if (totalResult.success) {
-        await this.setLastSyncTime();
+        await this.setLastSyncTime(syncStartedAt);
       }
     } catch (e: any) {
       totalResult.success = false;

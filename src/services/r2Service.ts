@@ -31,8 +31,6 @@ export const R2Service = {
         },
       });
 
-      console.log('📡 Invocando upload-photo a Supabase Edge Function...');
-      console.log('📌 RAW DATA:', JSON.stringify(data, null, 2));
 
       if (error) {
         let serverErrorMsg = error.message;
@@ -73,13 +71,11 @@ export const R2Service = {
       });
 
       if (error || !data?.signedUrl) {
-        console.error('Error al obtener Signed URL de R2:', error || data?.error);
         return null;
       }
 
       return data.signedUrl as string;
     } catch (e: any) {
-      console.error('Excepción en R2Service.getSignedUrlFromR2:', e);
       return null;
     }
   },
@@ -109,4 +105,88 @@ export const R2Service = {
       return false;
     }
   },
+
+  /**
+   * Resuelve la URI de visualización para una prenda.
+   * Si localUri es válida (file:// o /) y existe en disco local, la retorna inmediatamente.
+   * De lo contrario, descarga la imagen desde Cloudflare R2 a disco local permanente para permitir acceso 100% offline.
+   */
+  getResolvedImageUri: async (
+    localUri?: string | null,
+    r2Key?: string | null
+  ): Promise<string | null> => {
+    try {
+      // 1. Probar primero si hay URI local válida (file://, http/s, o /)
+      if (localUri && localUri.trim() !== '') {
+        let formatted = localUri.trim();
+        if (formatted.startsWith('/') && !formatted.startsWith('file://')) {
+          formatted = `file://${formatted}`;
+        }
+        if (formatted.startsWith('file://') || formatted.startsWith('http://') || formatted.startsWith('https://')) {
+          if (formatted.startsWith('file://')) {
+            const info = await FileSystem.getInfoAsync(formatted).catch(() => null);
+            if (info && info.exists) {
+              return formatted;
+            }
+          } else {
+            return formatted;
+          }
+        }
+      }
+
+      // 2. Si no existe en disco local o no hay localUri, consultar r2Key
+      if (r2Key && r2Key.trim() !== '') {
+        const cleanKey = r2Key.trim();
+        const safeFileName = `cache_${cleanKey.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
+        const localCachePath = `${FileSystem.documentDirectory}${safeFileName}`;
+
+        // Verificar si la foto ya fue descargada a disco local previamente (Disponibilidad Offline)
+        const cacheInfo = await FileSystem.getInfoAsync(localCachePath).catch(() => null);
+        if (cacheInfo && cacheInfo.exists) {
+          return localCachePath;
+        }
+
+        const now = Date.now();
+        const cached = r2UrlCache.get(cleanKey);
+        if (cached && cached.expiresAt > now && cached.url) {
+          return cached.url;
+        }
+
+        // Obtener Signed URL desde Cloudflare R2 (requiere conexión)
+        const signedUrl = await R2Service.getSignedUrlFromR2(cleanKey);
+        if (signedUrl) {
+          r2UrlCache.set(cleanKey, { url: signedUrl, expiresAt: now + 50 * 60 * 1000 });
+
+          // Descargar en segundo plano a disco local para consumo offline permanente
+          FileSystem.downloadAsync(signedUrl, localCachePath)
+            .then(({ status }) => {
+              if (status === 200) {
+                r2UrlCache.set(cleanKey, { url: localCachePath, expiresAt: now + 365 * 24 * 60 * 60 * 1000 });
+              }
+            })
+            .catch(() => {});
+
+          return signedUrl;
+        } else {
+          // Si no hay conexión (offline) y teníamos una URL en caché previa, usarla como fallback
+          if (cached && cached.url) {
+            return cached.url;
+          }
+          r2UrlCache.set(cleanKey, { url: null, expiresAt: now + 2 * 60 * 1000 });
+        }
+      }
+
+      if (localUri) {
+        return localUri.startsWith('/') && !localUri.startsWith('file://') ? `file://${localUri}` : localUri;
+      }
+      return null;
+    } catch (e) {
+      if (localUri) {
+        return localUri.startsWith('/') && !localUri.startsWith('file://') ? `file://${localUri}` : localUri;
+      }
+      return null;
+    }
+  },
 };
+
+const r2UrlCache = new Map<string, { url: string | null; expiresAt: number }>();

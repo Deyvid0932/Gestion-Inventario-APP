@@ -31,25 +31,36 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
           }
         }
         let isoCreatedAt = new Date().toISOString();
-        if (typeof row.timestamp === 'number') {
+        if (typeof row.timestamp === 'number' && row.timestamp > 0) {
           isoCreatedAt = new Date(row.timestamp).toISOString();
-        } else if (typeof row.created_at === 'number') {
+        } else if (typeof row.created_at === 'number' && row.created_at > 0) {
           isoCreatedAt = new Date(row.created_at).toISOString();
-        } else if (row.timestamp) {
+        } else if (row.timestamp && typeof row.timestamp === 'string') {
           try { isoCreatedAt = new Date(row.timestamp).toISOString(); } catch (_) {}
-        } else if (row.created_at) {
+        } else if (row.created_at && typeof row.created_at === 'string') {
           try { isoCreatedAt = new Date(row.created_at).toISOString(); } catch (_) {}
         }
 
+        let isoUpdatedAt = new Date().toISOString();
+        if (row.updated_at && typeof row.updated_at === 'string') {
+          try { isoUpdatedAt = new Date(row.updated_at).toISOString(); } catch (_) {}
+        } else if (typeof row.updatedAt === 'number' && row.updatedAt > 0) {
+          isoUpdatedAt = new Date(row.updatedAt).toISOString();
+        }
+
+        const tsNumber = typeof row.timestamp === 'number' && row.timestamp > 0 
+          ? row.timestamp 
+          : (row.created_at && typeof row.created_at === 'number' ? row.created_at : new Date(isoCreatedAt).getTime());
+
         return {
-          id: row.id,
-          session_id: row.session_id ?? row.sessionId,
-          sender: row.sender,
-          content: row.content ?? row.text,
+          id: String(row.id),
+          session_id: String(row.session_id ?? row.sessionId),
+          sender: String(row.sender || 'user'),
+          content: String(row.content ?? row.text ?? ''),
           matches_json: parsedMatches,
           engine_used: row.engine_used ?? row.engineUsed ?? null,
-          created_at: isoCreatedAt,
-          updated_at: row.updated_at || new Date().toISOString(),
+          created_at: tsNumber,
+          updated_at: isoUpdatedAt,
         };
       });
 
@@ -119,10 +130,11 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
           if (sessionIdVal) {
             const parentSession = await db.getFirstAsync('SELECT id FROM chat_sessions WHERE id = ?', [sessionIdVal]);
             if (!parentSession) {
+              const numericTimestamp = new Date(timestampVal).getTime();
               await db.runAsync(
                 `INSERT OR IGNORE INTO chat_sessions (id, user_id, title, createdAt, updatedAt, updated_at, sync_status) 
                  VALUES (?, ?, 'Chat Sincronizado', ?, ?, ?, 'SYNCED')`,
-                [sessionIdVal, _userId || '', timestampVal, timestampVal, r.updated_at || new Date().toISOString()]
+                [sessionIdVal, _userId || '', numericTimestamp, numericTimestamp, r.updated_at || new Date().toISOString()]
               );
             }
           } else {

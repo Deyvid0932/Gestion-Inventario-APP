@@ -33,17 +33,47 @@ export const AuthManager = {
   // Refrescar todos los datos de la app desde SQLite a Zustand reactivo
   refreshAllAppState: async (db: SQLiteDatabase): Promise<void> => {
     try {
-      const freshInventarios = await db.getAllAsync<any>(
-        `SELECT i.*, 
-                (SELECT COUNT(*) FROM cajas WHERE inventarioId = i.id) as totalCajas,
-                COUNT(p.id) as totalPrendas,
-                SUM(CASE WHEN p.estado = 1 THEN 1 ELSE 0 END) as prendasEscaneadas
-         FROM inventarios i 
-         LEFT JOIN cajas c ON c.inventarioId = i.id
-         LEFT JOIN prendas p ON p.cajaId = c.id
-         GROUP BY i.id
-         ORDER BY i.fechaCreacion DESC`
-      );
+      // Limpiar automáticamente registros vacíos creados por sincronización si no contienen cajas/prendas activas
+      await db.runAsync(`
+        DELETE FROM inventarios 
+        WHERE (nombre = 'Nuevo Lote' OR nombre = 'Lote Sincronizado') 
+          AND id NOT IN (SELECT DISTINCT inventarioId FROM cajas WHERE deleted_at IS NULL);
+      `).catch(() => {});
+
+      await db.runAsync(`
+        DELETE FROM cajas 
+        WHERE (nombre = 'Caja Sincronizada' OR nombre = 'Nueva Caja') 
+          AND id NOT IN (SELECT DISTINCT cajaId FROM prendas WHERE deleted_at IS NULL);
+      `).catch(() => {});
+
+      let freshInventarios: any[] = [];
+      try {
+        freshInventarios = await db.getAllAsync<any>(
+          `SELECT i.*, 
+                  (SELECT COUNT(*) FROM cajas WHERE inventarioId = i.id AND deleted_at IS NULL) as totalCajas,
+                  COUNT(CASE WHEN p.deleted_at IS NULL THEN p.id ELSE NULL END) as totalPrendas,
+                  SUM(CASE WHEN p.estado = 1 AND p.deleted_at IS NULL THEN 1 ELSE 0 END) as prendasEscaneadas
+           FROM inventarios i 
+           LEFT JOIN cajas c ON c.inventarioId = i.id AND c.deleted_at IS NULL
+           LEFT JOIN prendas p ON p.cajaId = c.id AND p.deleted_at IS NULL
+           WHERE i.deleted_at IS NULL
+           GROUP BY i.id
+           ORDER BY i.orden ASC, i.fechaCreacion DESC`
+        );
+      } catch (_e) {
+        freshInventarios = await db.getAllAsync<any>(
+          `SELECT i.*, 
+                  (SELECT COUNT(*) FROM cajas WHERE inventarioId = i.id AND deleted_at IS NULL) as totalCajas,
+                  COUNT(CASE WHEN p.deleted_at IS NULL THEN p.id ELSE NULL END) as totalPrendas,
+                  SUM(CASE WHEN p.estado = 1 AND p.deleted_at IS NULL THEN 1 ELSE 0 END) as prendasEscaneadas
+           FROM inventarios i 
+           LEFT JOIN cajas c ON c.inventarioId = i.id AND c.deleted_at IS NULL
+           LEFT JOIN prendas p ON p.cajaId = c.id AND p.deleted_at IS NULL
+           WHERE i.deleted_at IS NULL
+           GROUP BY i.id
+           ORDER BY i.fechaCreacion DESC`
+        );
+      }
       useAppStore.getState().setInventarios(freshInventarios);
     } catch (e) {
       console.error('Error al refrescar estado de la app:', e);

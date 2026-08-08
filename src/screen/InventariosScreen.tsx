@@ -16,13 +16,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '../store/useAppStore';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import InventarioCard from '../components/InventarioCard';
-import { DashboardSummaryCard } from '../components/DashboardSummaryCard';
+import { EmptyState } from '../components/EmptyState';
 import { InventarioService } from '../services/InventarioService';
 import { SynchronizationEngine } from '../sync/SynchronizationEngine';
 import { AuthManager } from '../services/AuthManager';
 import { useRoles } from '../hooks/useRoles';
+import { InventarioStats } from '../types';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -42,6 +44,7 @@ export const InventariosScreen = () => {
 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const lastNavTime = useRef(0);
 
   const loadAppState = useCallback(async (showSkeleton = false) => {
@@ -89,7 +92,7 @@ export const InventariosScreen = () => {
     navigation.navigate(routeName as any, params);
   }, [navigation]);
 
-  const handleNavigateToCajas = (id: string, nombre: string) => {
+  const handleNavigateToCajas = useCallback((id: string, nombre: string) => {
     const now = Date.now();
     if (now - lastNavTime.current < 300) return;
     lastNavTime.current = now;
@@ -99,21 +102,66 @@ export const InventariosScreen = () => {
       inventarioId: id,
       nombreInventario: nombre,
     });
-  };
+  }, [navigation, setPrendas]);
 
-  const deleteInventario = async (id: string) => {
+  const deleteInventario = useCallback(async (id: string) => {
     try {
-      const result = await InventarioService.hardDelete(db, id, user?.id);
+      let result = await InventarioService.softDelete(db, id, user?.id);
       if (!result.success) {
-        Alert.alert('Error al eliminar', result.error || 'No se pudo eliminar el lote.');
-        return;
+        console.warn('softDelete falló, ejecutando hardDelete de respaldo:', result.error);
+        result = await InventarioService.hardDelete(db, id, user?.id);
       }
       await AuthManager.refreshAllAppState(db);
     } catch (error) {
-      console.error('Error deleting inventario:', error);
-      Alert.alert('Error', 'Ocurrió un error al eliminar el lote.');
+      console.error('Excepción en deleteInventario, intentando hardDelete de respaldo:', error);
+      try {
+        await InventarioService.hardDelete(db, id, user?.id);
+        await AuthManager.refreshAllAppState(db);
+      } catch (innerErr) {
+        console.error('Fallo definitivo en deleteInventario:', innerErr);
+        Alert.alert('Error', 'No se pudo eliminar el lote.');
+      }
     }
-  };
+  }, [db, user?.id]);
+
+  const handleDragEnd = useCallback(({ data }: { data: InventarioStats[] }) => {
+    setIsDragging(false);
+
+    // Defer data update to next frame so DraggableFlatList can finish its
+    // internal drag-release animation before we trigger a list re-render.
+    requestAnimationFrame(() => {
+      useAppStore.getState().setInventarios(data);
+      const newOrderings = data.map((item, index) => ({
+        id: item.id,
+        orden: index
+      }));
+      InventarioService.updateInventariosOrder(db, newOrderings, user?.id).catch(error => {
+        console.error("Error al actualizar el orden de inventarios:", error);
+        loadAppState(false);
+      });
+    });
+  }, [db, loadAppState, user?.id]);
+
+  const handleCardPress = useCallback((id: string, nombre: string) => {
+    handleNavigateToCajas(id, nombre);
+  }, [handleNavigateToCajas]);
+
+  const handleCardEdit = useCallback((id: string, nombre: string, descripcion: string) => {
+    navigateSafe('Form', { mode: 'BASIC', entityType: 'inventario', initialData: { id, nombre, descripcion } });
+  }, [navigateSafe]);
+
+  const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<InventarioStats>) => (
+    <InventarioCard
+      item={item}
+      theme={currentTheme}
+      canEdit={canEdit}
+      drag={drag}
+      isActive={isActive}
+      onPress={() => handleCardPress(item.id, item.nombre)}
+      onEdit={() => handleCardEdit(item.id, item.nombre, item.descripcion || '')}
+      onDelete={() => deleteInventario(item.id)}
+    />
+  ), [currentTheme, canEdit, handleCardPress, handleCardEdit, deleteInventario]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: currentTheme.background }}>
@@ -124,55 +172,46 @@ export const InventariosScreen = () => {
           <SkeletonLoader theme={currentTheme} />
         ) : (
           <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
-            <Reanimated.FlatList
-              key={themeMode}
+            <DraggableFlatList
+              key={`inventarios-${themeMode}`}
               extraData={themeMode}
               data={inventarios}
-              itemLayoutAnimation={LinearTransition.springify()}
+              renderItem={renderItem}
+              keyExtractor={item => item.id}
+              onDragBegin={() => setIsDragging(true)}
+              onDragEnd={handleDragEnd}
+              containerStyle={{ flex: 1, overflow: 'visible' }}
+              animationConfig={{ damping: 20, stiffness: 200, mass: 0.8 }}
+              autoscrollSpeed={200}
+              autoscrollThreshold={80}
+              dragHitSlop={{ top: -4, bottom: -4, left: 0, right: 0 }}
+              contentContainerStyle={[
+                styles.listContent,
+                inventarios.length === 0 && { flexGrow: 1, paddingTop: 40 }
+              ]}
+              initialNumToRender={10}
+              maxToRenderPerBatch={10}
+              windowSize={5}
               refreshControl={
                 <RefreshControl
+                  enabled={!isDragging && !refreshing}
                   refreshing={refreshing}
                   onRefresh={handleRefreshOrSync}
                   tintColor={currentTheme.primary}
                   colors={[currentTheme.primary]}
                 />
               }
-              renderItem={({ item }) => (
-                <Reanimated.View exiting={FadeOut.duration(300)}>
-                  <InventarioCard
-                    item={item}
-                    theme={currentTheme}
-                    canEdit={canEdit}
-                    onPress={() => handleNavigateToCajas(item.id, item.nombre)}
-                    onEdit={() => navigateSafe('Form', { mode: 'BASIC', entityType: 'inventario', initialData: { id: item.id, nombre: item.nombre, descripcion: item.descripcion || '' } })}
-                    onDelete={() => deleteInventario(item.id)}
-                  />
-                </Reanimated.View>
-              )}
-              keyExtractor={item => item.id.toString()}
-              contentContainerStyle={styles.listContent}
-              initialNumToRender={10}
-              maxToRenderPerBatch={10}
-              windowSize={5}
-              removeClippedSubviews={true}
+              removeClippedSubviews={false}
               alwaysBounceVertical={true}
               overScrollMode="always"
-              ListFooterComponent={<DashboardSummaryCard />}
               ListEmptyComponent={
-                <Reanimated.View
-                  style={styles.emptyContainer}
-                  entering={FadeIn.duration(400)}
-                >
-                  <View style={styles.emptyContainer}>
-                    <View style={[styles.emptyIconCircle, { backgroundColor: currentTheme.card }]}>
-                      <Ionicons name="cube-outline" size={80} color={currentTheme.primary} />
-                    </View>
-                    <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>¡Lotes Vacíos!</Text>
-                    <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
-                      Parece que aún no has creado inventarios. Toca el botón + para comenzar.
-                    </Text>
-                  </View>
-                </Reanimated.View>
+                <EmptyState
+                  iconName="cube-outline"
+                  title="¡Lotes Vacíos!"
+                  description="Parece que aún no has creado inventarios. Toca el botón + para comenzar."
+                  currentTheme={currentTheme}
+                  delay={400}
+                />
               }
             />
           </View>
@@ -199,30 +238,5 @@ const styles = StyleSheet.create({
     padding: 18,
     paddingBottom: 90,
     flexGrow: 1,
-    justifyContent: 'space-between',
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 25,
-  },
-  emptyIconCircle: {
-    width: 86.5,
-    height: 86.5,
-    borderRadius: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
   },
 });

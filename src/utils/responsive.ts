@@ -7,25 +7,21 @@ const guidelineBaseWidth = 375;
 const guidelineBaseHeight = 812;
 
 /**
- * Escala horizontal proporcional al ancho de la pantalla.
- * Ideal para: width, marginHorizontal, paddingHorizontal.
+ * Escala horizontal proporcional al ancho de la pantalla. Ideal para: width, marginHorizontal, paddingHorizontal.
  */
 export const scale = (size: number): number => {
   return (SCREEN_WIDTH / guidelineBaseWidth) * size;
 };
 
 /**
- * Escala vertical proporcional al alto de la pantalla.
- * Ideal para: height, marginVertical, paddingVertical.
+ * Escala vertical proporcional al alto de la pantalla. Ideal para: height, marginVertical, paddingVertical.
  */
 export const verticalScale = (size: number): number => {
   return (SCREEN_HEIGHT / guidelineBaseHeight) * size;
 };
 
 /**
- * Escala moderada. Permite ajustar un elemento proporcionalmente sin que crezca demasiado en pantallas grandes.
- * Ideal para: fontSize, borderRadius, padding general.
- * @param factor Valor entre 0 y 1 (por defecto 0.5) que controla la agresividad del escalado.
+ * Escala moderada. Permite ajustar un elemento proporcionalmente sin que crezca demasiado en pantallas grandes. Ideal para: fontSize, borderRadius, padding general. @param factor Valor entre 0 y 1 (por defecto 0.5) que controla la agresividad del escalado.
  */
 export const moderateScale = (size: number, factor = 0.5): number => {
   return Math.round(size + (scale(size) - size) * factor);

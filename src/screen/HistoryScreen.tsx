@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   RefreshControl,
   Animated,
-  useWindowDimensions
+  useWindowDimensions,
+  Platform
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -21,6 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import { getColorHex } from '../utils/colorUtils';
 import { ExportModal } from '../components/ExportModal';
+import { EmptyState } from '../components/EmptyState';
 
 const getRelativeDateLabel = (dateString: string) => {
   const date = new Date(dateString);
@@ -246,16 +248,17 @@ export const HistoryScreen = () => {
             initialNumToRender={10}
             maxToRenderPerBatch={10}
             windowSize={5}
-            removeClippedSubviews={true}
+            removeClippedSubviews={Platform.OS === 'android'}
             getItemLayout={(_, index) => ({ length: 142, offset: 142 * index, index })}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchHistory(false); }} tintColor={currentTheme.primary} />}
             ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Ionicons name={status === 'Activo' ? "checkmark-circle-outline" : "close-circle-outline"} size={80} color={currentTheme.border} />
-                <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
-                  No hay prendas {status.toLowerCase()}s
-                </Text>
-              </View>
+              <EmptyState
+                iconName={status === 'Activo' ? "checkmark-circle-outline" : (status === 'Inactivo' ? "close-circle-outline" : "alarm-outline")}
+                title={`No hay prendas ${status.toLowerCase()}s`}
+                description={`No se encontraron resultados para la búsqueda o filtro actual.`}
+                currentTheme={currentTheme}
+                delay={200}
+              />
             }
           />
         </Animated.View>
@@ -297,11 +300,4 @@ const styles = StyleSheet.create({
   opText: { fontSize: 12, fontWeight: '500' },
   colorSwatch: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5 },
   locationText: { fontSize: 14, fontWeight: '500', fontStyle: 'italic' },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: 0.5
-  },
-  emptyText: { fontSize: 16, fontWeight: '600', marginTop: 15 },
 });

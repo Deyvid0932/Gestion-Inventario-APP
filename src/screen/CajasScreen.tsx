@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -19,6 +19,7 @@ import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flat
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CajaService } from '../services/CajaService';
 import { AuthManager } from '../services/AuthManager';
+import { EmptyState } from '../components/EmptyState';
 import CajaCard from '../components/CajaCard';
 import { useRoles } from '../hooks/useRoles';
 
@@ -41,16 +42,17 @@ export const CajasScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isUpdatingOrder, setIsUpdatingOrder] = useState(false);
-  const lastNavTime = React.useRef(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const lastNavTime = useRef(0);
 
   const fetchCajas = useCallback(async (showLoading = true) => {
     if (!db) return;
     if (showLoading) setLoading(true);
     try {
       const result = await db.getAllAsync<CajaWithStats>(
-        `SELECT c.*, (SELECT COUNT(*) FROM prendas WHERE cajaId = c.id) as itemCount 
+        `SELECT c.*, (SELECT COUNT(*) FROM prendas WHERE cajaId = c.id AND deleted_at IS NULL) as itemCount 
          FROM cajas c 
-         WHERE c.inventarioId = ? 
+         WHERE c.inventarioId = ? AND c.deleted_at IS NULL
          ORDER BY c.orden ASC, c.fechaCreacion DESC`,
         [inventarioId]
       );
@@ -73,7 +75,7 @@ export const CajasScreen = () => {
     useCallback(() => {
       if (db) {
         fetchCajas(cajas.length === 0);
-        AuthManager.refreshAllAppState(db);
+        AuthManager.refreshAllAppState(db).catch(e => console.error('[CajasScreen] refreshAllAppState error:', e));
       }
     }, [db, fetchCajas, cajas.length])
   );
@@ -94,23 +96,23 @@ export const CajasScreen = () => {
     });
   }, [navigation]);
 
-  const handleDragEnd = useCallback(async ({ data }: { data: CajaWithStats[] }) => {
-    setCajas(data);
-    setIsUpdatingOrder(true);
+  const handleDragEnd = useCallback(({ data }: { data: CajaWithStats[] }) => {
+    setIsDragging(false);
 
-    try {
+    // Defer data update to next frame so DraggableFlatList can finish its
+    // internal drag-release animation before we trigger a list re-render.
+    requestAnimationFrame(() => {
+      setCajas(data);
       const newOrderings = data.map((item, index) => ({
         id: item.id,
         orden: index
       }));
-      await CajaService.updateCajasOrder(db, newOrderings);
-    } catch (error) {
-      console.error("Error updating order:", error);
-      fetchCajas(false);
-    } finally {
-      setIsUpdatingOrder(false);
-    }
-  }, [db, fetchCajas]);
+      CajaService.updateCajasOrder(db, newOrderings, user?.id).catch(error => {
+        console.error("Error updating order:", error);
+        fetchCajas(false);
+      });
+    });
+  }, [db, fetchCajas, user?.id]);
 
   const deleteCaja = useCallback(async (id: string, nombre: string) => {
     Alert.alert(
@@ -123,13 +125,13 @@ export const CajasScreen = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              const res = await CajaService.hardDelete(db, id, user?.id);
+              const res = await CajaService.softDelete(db, id, user?.id);
               if (!res.success) {
-                Alert.alert('Error al eliminar', res.error || 'No se pudo eliminar la caja.');
+                Alert.alert('Error al eliminar', res.error || 'No se pudo mover la caja a la papelera.');
                 return;
               }
               fetchCajas(false);
-              AuthManager.refreshAllAppState(db);
+              await AuthManager.refreshAllAppState(db);
             } catch (error) {
               console.error('Error al borrar caja:', error);
               Alert.alert('Error', 'Ocurrió un error al eliminar la caja.');
@@ -140,20 +142,26 @@ export const CajasScreen = () => {
     );
   }, [db, fetchCajas, user?.id]);
 
+  const handleCardPress = useCallback((id: string, nombre: string) => {
+    handleNavigateToPrendas(id, nombre);
+  }, [handleNavigateToPrendas]);
+
+  const handleCardEdit = useCallback((id: string, nombre: string) => {
+    navigateSafe('Form', { mode: 'NAME_ONLY', entityType: 'caja', initialData: { id, nombre } });
+  }, [navigateSafe]);
+
   const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<CajaWithStats>) => (
-    <View>
-      <CajaCard
-        item={item}
-        theme={currentTheme}
-        canEdit={canEdit}
-        onPress={() => handleNavigateToPrendas(item.id, item.nombre)}
-        onEdit={() => navigateSafe('Form', { mode: 'NAME_ONLY', entityType: 'caja', initialData: { id: item.id, nombre: item.nombre } })}
-        onDelete={() => deleteCaja(item.id, item.nombre)}
-        drag={canEdit ? drag : () => {}}
-        isActive={isActive}
-      />
-    </View>
-  ), [currentTheme, navigateSafe, deleteCaja, handleNavigateToPrendas, canEdit]);
+    <CajaCard
+      item={item}
+      theme={currentTheme}
+      canEdit={canEdit}
+      onPress={handleCardPress}
+      onEdit={handleCardEdit}
+      onDelete={deleteCaja}
+      drag={drag}
+      isActive={isActive}
+    />
+  ), [currentTheme, handleCardPress, handleCardEdit, deleteCaja, canEdit]);
 
   const showSkeleton = !db || (loading && cajas.length === 0);
 
@@ -172,18 +180,23 @@ export const CajasScreen = () => {
               data={cajas}
               renderItem={renderItem}
               keyExtractor={item => item.id}
+              onDragBegin={() => setIsDragging(true)}
               onDragEnd={handleDragEnd}
               contentContainerStyle={[
                 styles.listContent,
-                cajas.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+                cajas.length === 0 && { flexGrow: 1, paddingTop: 40 }
               ]}
-              activationDistance={10}
-              containerStyle={{ flex: 1 }}
+              containerStyle={{ flex: 1, overflow: 'visible' }}
+              animationConfig={{ damping: 20, stiffness: 200, mass: 0.8 }}
+              autoscrollSpeed={200}
+              autoscrollThreshold={80}
+              dragHitSlop={{ top: -4, bottom: -4, left: 0, right: 0 }}
               initialNumToRender={10}
               maxToRenderPerBatch={10}
               windowSize={5}
               refreshControl={
                 <RefreshControl
+                  enabled={!isDragging && !refreshing}
                   refreshing={refreshing}
                   onRefresh={onRefresh}
                   tintColor={currentTheme.primary}
@@ -191,13 +204,13 @@ export const CajasScreen = () => {
                 />
               }
               ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="cube-outline" size={80} color={currentTheme.primary} />
-                  <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>No hay cajas</Text>
-                  <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
-                    Toca el botón + para agregar una caja a este lote.
-                  </Text>
-                </View>
+                <EmptyState
+                  iconName="cube-outline"
+                  title="No hay cajas"
+                  description="Toca el botón + para agregar una caja a este lote."
+                  currentTheme={currentTheme}
+                  delay={100}
+                />
               }
             />
           )}
@@ -221,22 +234,6 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 16,
     paddingBottom: 100,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 16,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center',
   },
 });
 
