@@ -127,10 +127,6 @@ export const ChatbotScreen = () => {
   }, [navigation]);
 
   const handleSend = async (textToSend?: string) => {
-    if (!hasRole(['Admin', 'Editor'])) {
-      Alert.alert('Acceso Restringido', 'El rol Viewer solo tiene permisos de lectura y no puede realizar consultas a la Inteligencia Artificial.');
-      return;
-    }
 
     if (!currentSessionId) return;
     const userText = typeof textToSend === 'string' ? textToSend : input;

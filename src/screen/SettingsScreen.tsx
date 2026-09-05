@@ -29,6 +29,7 @@ import { UserManagementModal } from '../components/UserManagementModal';
 import { TrashModal } from '../components/TrashModal';
 import { Navbar } from '../components/Navbar';
 import { maskEmail } from '../utils/maskUtils';
+import { SettingsService } from '../services/SettingsService';
 
 type SyncStatusType = 'synced' | 'syncing' | 'offline' | 'error';
 

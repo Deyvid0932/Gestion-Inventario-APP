@@ -55,7 +55,6 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
           op TEXT,
           estilo TEXT NOT NULL,
           color TEXT NOT NULL,
-          talla TEXT,
           fotoUri TEXT,
           fotoUri2 TEXT,
           r2Key TEXT,
@@ -84,6 +83,8 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         CREATE INDEX IF NOT EXISTS idx_inventarios_sync ON inventarios(sync_status);
         CREATE INDEX IF NOT EXISTS idx_cajas_sync ON cajas(sync_status);
         CREATE INDEX IF NOT EXISTS idx_prendas_sync ON prendas(sync_status);
+        CREATE INDEX IF NOT EXISTS idx_prendas_color ON prendas(color);
+        CREATE INDEX IF NOT EXISTS idx_prendas_estilo ON prendas(estilo);
         CREATE TABLE IF NOT EXISTS chat_sessions (
           id TEXT PRIMARY KEY NOT NULL,
           user_id TEXT,

@@ -205,8 +205,17 @@ const CajaContentsScreen = () => {
   }, [navigation]);
 
   const handleItemPress = useCallback((item: Prenda) => {
+    if (!hasRole(['Admin', 'Editor'])) {
+      Alert.alert('Acceso Restringido', 'Tu rol actual solo permite lectura. No tienes permisos para modificar registros.');
+      return;
+    }
     if (Object.keys(selectedPrendas).filter(k => selectedPrendas[k]).length > 0) toggleSelectPrenda(item.id);
     else {
+      if (!hasRole(['Admin', 'Editor'])) {
+        Alert.alert('Acceso Restringido', 'Tu rol actual solo permite lectura. No tienes permisos para modificar registros.');
+        return;
+      }
+
       navigateSafe('Form', {
         mode: 'ADVANCED',
         entityType: 'prenda',
@@ -317,7 +326,7 @@ const CajaContentsScreen = () => {
         isHighlighted={item.id === highlightedId}
         canEdit={canEdit}
         onPress={() => handleItemPress(item)}
-        onLongPress={() => toggleSelectPrenda(item.id)}
+        onLongPress={canEdit ? () => toggleSelectPrenda(item.id) : undefined}
         onDelete={() => deletePrenda(item.id)}
         onToggleStatus={() => {
           if (!canEdit) {
@@ -354,6 +363,15 @@ const CajaContentsScreen = () => {
     );
   }, [currentTheme, selectedPrendas, highlightedId, handleItemPress, toggleSelectPrenda, deletePrenda, togglePrendaStatus, fetchPrendas, hasRole]);
 
+  const handleNew = () => {
+    if (!hasRole(['Admin', 'Editor'])) {
+      Alert.alert('Acceso Restringido', 'Tu rol actual (Viewer) solo permite lectura. No tienes permisos para crear registros.');
+      return;
+    }
+
+    navigateSafe('Form', { entityType: 'prenda', parentId: cajaId, mode: 'BASIC' });
+  };
+
   const showSkeleton = !db || (loading && localPrendas.length === 0);
 
   return (
@@ -377,7 +395,7 @@ const CajaContentsScreen = () => {
             <TouchableOpacity
               activeOpacity={0.7}
               style={[styles.glassButton, { backgroundColor: currentTheme.card, borderColor: currentTheme.primary + '40', borderWidth: 1 }]}
-              onPress={() => navigateSafe('Form', { entityType: 'prenda', parentId: cajaId, mode: 'BASIC' })}
+              onPress={handleNew}
             >
               <Ionicons name="add" size={22} color={currentTheme.primary} />
               <Text style={[styles.glassButtonText, { color: currentTheme.text }]}>Nuevo</Text>

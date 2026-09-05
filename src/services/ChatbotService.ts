@@ -2,6 +2,7 @@ import { SQLiteDatabase } from 'expo-sqlite';
 import { supabase } from '../database/supabase';
 import { SearchResult } from '../utils/nlpEngine';
 import { ChatSession } from '../types';
+import { SettingsService } from './SettingsService';
 
 export interface ChatMessage {
   id: string;
@@ -30,112 +31,72 @@ const BASE_QUERY = `
 `;
 
 const extractOP = (text: string): string | null => {
-  const match = text.match(/\b(?:op|o\/p|orden|order)?\s*[:#-]?\s*(\d{5,8})\b/i);
+  const match = text.match(/\b(?:op|o\/p)?\s*[:#-]?\s*(\d{4,10})\b/i);
   return match ? match[1] : null;
-};
-
-const extractColor = (text: string): string | null => {
-  const colors = [
-    'NEGRO', 'BLANCO', 'ROJO', 'AZUL', 'VERDE', 'AMARILLO', 'GRIS',
-    'MARRON', 'ROSADO', 'PURPURA', 'CELESTE', 'BEIGE', 'MARINO',
-    'NAVY', 'BLACK', 'WHITE', 'RED', 'BLUE', 'GREEN'
-  ];
-
-  const upper = text.toUpperCase();
-  for (const c of colors) {
-    if (upper.includes(c)) return c;
-  }
-  return null;
-};
-
-const searchLocal = async (
-  db: SQLiteDatabase,
-  message: string
-): Promise<{ text: string; matches: SearchResult[] }> => {
-  const input = message.trim();
-  if (!input) {
-    return { text: '¿Qué estilo, OP o color deseas buscar?', matches: [] };
-  }
-
-  // 1. OP (única)
-  const op = extractOP(input);
-  if (op) {
-    const rows = await db.getAllAsync<SearchResult>(
-      `${BASE_QUERY} WHERE p.op LIKE ? LIMIT 20`,
-      [`%${op}%`]
-    );
-
-    if (rows.length === 0) {
-      return { text: `No se encontraron prendas con la OP "${op}".`, matches: [] };
-    }
-    return {
-      text: `Se encontraron ${rows.length} prendas asociadas a la OP "${op}":`,
-      matches: rows
-    };
-  }
-
-  // 2. Color
-  const color = extractColor(input);
-  if (color) {
-    const rows = await db.getAllAsync<SearchResult>(
-      `${BASE_QUERY} WHERE UPPER(p.color) LIKE ? LIMIT 20`,
-      [`%${color}%`]
-    );
-
-    if (rows.length === 0) {
-      return { text: `No se encontraron prendas con el color "${color}".`, matches: [] };
-    }
-    return {
-      text: `Se encontraron ${rows.length} prendas del color "${color}":`,
-      matches: rows
-    };
-  }
-
-  // 3. Estilo por defecto
-  const rows = await db.getAllAsync<SearchResult>(
-    `${BASE_QUERY} WHERE UPPER(p.estilo) LIKE ? LIMIT 20`,
-    [`%${input.toUpperCase()}%`]
-  );
-
-  if (rows.length === 0) {
-    return { text: `No encontré coincidencias para "${input}". Intenta buscando por estilo (ej: KHM 030 001), OP o color.`, matches: [] };
-  }
-  return {
-    text: `Se encontraron ${rows.length} prendas asociadas al estilo "${input}":`,
-    matches: rows
-  };
 };
 
 const executeSearch = async (
   db: SQLiteDatabase,
   tipo: string,
-  valor: string
+  valor: string,
+  terminos?: string[]
 ): Promise<{ text: string; matches: SearchResult[] }> => {
   if (tipo === 'OP') {
     const opVal = valor.replace(/\D/g, '') || valor;
     const rows = await db.getAllAsync<SearchResult>(
-      `${BASE_QUERY} WHERE p.op LIKE ? LIMIT 20`,
-      [`%${opVal}%`]
+      `${BASE_QUERY} WHERE (REPLACE(p.op, ' ', '') LIKE ? OR p.op LIKE ?) LIMIT 20`,
+      [`%${opVal}%`, `%${opVal}%`]
     );
     if (rows.length === 0) return { text: `No se encontraron prendas para la OP "${valor}".`, matches: [] };
     return { text: `Encontré ${rows.length} prendas para la OP "${valor}":`, matches: rows };
   }
 
   if (tipo === 'COLOR') {
+    const searchTerms = Array.from(
+      new Set(
+        [valor, ...(terminos || [])]
+          .filter(Boolean)
+          .map(t => t.trim().toUpperCase())
+      )
+    );
+
+    const placeholders = searchTerms.map(() => 'UPPER(p.color) LIKE ?').join(' OR ');
+    const params = searchTerms.map(t => `%${t}%`);
+  
     const rows = await db.getAllAsync<SearchResult>(
-      `${BASE_QUERY} WHERE UPPER(p.color) LIKE ? LIMIT 20`,
-      [`%${valor.toUpperCase()}%`]
+      `${BASE_QUERY} WHERE (${placeholders}) LIMIT 20`,
+      params
     );
     if (rows.length === 0) return { text: `No se encontraron prendas del color "${valor}".`, matches: [] };
     return { text: `Encontré ${rows.length} prendas del color "${valor}":`, matches: rows };
   }
 
   if (tipo === 'ESTILO') {
+    const cleanStyle = valor.trim().toUpperCase();
+    const noSpaces = cleanStyle.replace(/[\s\-_]/g, '');
+
     const rows = await db.getAllAsync<SearchResult>(
-      `${BASE_QUERY} WHERE UPPER(p.estilo) LIKE ? LIMIT 20`,
-      [`%${valor.toUpperCase()}%`]
+      `${BASE_QUERY} WHERE (
+        REPLACE(REPLACE(REPLACE(UPPER(p.estilo), ' ', ''), '-', ''), '_', '') LIKE ?
+        OR UPPER(p.estilo) LIKE ?
+      ) LIMIT 20`,
+      [`%${noSpaces}%`, `%${cleanStyle}%`]
     );
-    if (rows.length === 0) return { text: `No se encontraron prendas con el estilo "${valor}".`, matches: [] };
+
+    if (rows.length === 0) {
+      const fallbackRows = await db.getAllAsync<SearchResult>(
+        `${BASE_QUERY} WHERE (
+          REPLACE(p.op, ' ', '') LIKE ?
+          OR UPPER(p.color) LIKE ?
+          OR UPPER(p.estilo) LIKE ?
+        ) LIMIT 20`,
+        [`%${noSpaces}%`, `%${cleanStyle}%`, `%${cleanStyle}%`]
+      );
+      if (fallbackRows.length > 0) {
+        return { text: `Encontré ${fallbackRows.length} prendas que coinciden con "${valor}":`, matches: fallbackRows };
+      }
+      return { text: `No se encontraron prendas con el estilo "${valor}".`, matches: [] };
+    }
     return { text: `Encontré ${rows.length} prendas para el estilo "${valor}":`, matches: rows };
   }
 
@@ -155,72 +116,193 @@ const executeSearch = async (
     const lista = detalle.map(c => `• ${c.nombre}: ${c.cantidad} prendas`).join('\n');
     return { text: `📊 Resumen del inventario:\n\nTotal de cajas: ${totalCajas?.total || 0}\n\n${lista}`, matches: [] };
   }
+
   return executeSearch(db, 'ESTILO', valor);
 };
 
-const askGroqToClassify = async (
-  message: string,
-  history: ChatMessage[]
-): Promise<{ tipo: string; valor: string } | null> => {
-  const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY;
-  if (!apiKey) return null;
+const searchLocal = async (db: SQLiteDatabase, message: string): Promise<{ text: string; matches: SearchResult[] }> => {
+  const input = message.trim();
+  if (!input) {
+    return { text: '¿Qué estilo, OP o color deseas buscar?', matches: [] };
+  }
 
-  const prompt = `
-Eres la IA clasificadora de intenciones para Topytop Kith.
-Clasifica la consulta del usuario.
-Historial reciente:
-${history.map(h => `${h.sender}: ${h.text}`).join('\n')}
+  const op = extractOP(input);
+  if (op && (/^\d{4,10}$/.test(input) || /op/i.test(input))) {
+    return executeSearch(db, 'OP', op);
+  }
 
-Usuario: "${message}"
+  const cleanUpper = input.toUpperCase();
+  const colorRows = await db.getAllAsync<SearchResult>(
+    `${BASE_QUERY} WHERE UPPER(p.color) LIKE ? LIMIT 20`,
+    [`%${cleanUpper}%`]
+  );
+  if (colorRows.length > 0) {
+    return { text: `Encontré ${colorRows.length} prendas del color "${input}":`, matches: colorRows };
+  }
 
-Responde UNICAMENTE en JSON con formato:
-{"tipo": "SALUDO" | "CONVERSACION" | "LIBRE" | "OP" | "COLOR" | "ESTILO" | "CAJA" | "INVENTARIO", "valor": "extraido_o_respuesta"}
-`;
+  return executeSearch(db, 'ESTILO', input);
+};
+
+let cachedGroqModels: string[] = [];
+let lastGroqModelsFetch = 0;
+
+const getActiveGroqModels = async (cleanKey: string): Promise<string[]> => {
+  const now = Date.now();
+  if (cachedGroqModels.length > 0 && now - lastGroqModelsFetch < 1000 * 60 * 30) {
+    return cachedGroqModels;
+  }
 
   try {
-    const response = await fetch(
-      'https://api.groq.com/openai/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.2,
-          max_tokens: 600
-        })
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: {
+        Authorization: `Bearer ${cleanKey}`,
+        Accept: 'application/json'
       }
-    );
+    });
 
-    const responseText = await response.text();
-    let data: any;
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.data)) {
+        const available = data.data
+          .map((m: any) => m.id)
+          .filter((id: string) => !id.includes('whisper') && !id.includes('safeguard') && !id.includes('guard'));
 
-    try {
-      data = JSON.parse(responseText);
-    } catch {
-      console.error('[Groq] La respuesta no es JSON:', responseText);
-      return null;
+        if (available.length > 0) {
+          cachedGroqModels = available;
+          lastGroqModelsFetch = now;
+          return cachedGroqModels;
+        }
+      }
     }
+  } catch (_) {}
 
-    const rawText = data.choices?.[0]?.message?.content?.trim() || '';
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return null;
-    }
+  return [
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'gemma2-9b-it',
+    'mixtral-8x7b-32768',
+    'qwen-2.5-32b'
+  ];
+};
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    return {
-      tipo: (parsed.tipo || 'LIBRE').toUpperCase(),
-      valor: String(parsed.valor || message)
-    };
+const askGroqToClassify = async (
+  db: SQLiteDatabase,
+  message: string,
+  history: ChatMessage[]
+): Promise<{ tipo: string; valor: string; terminos?: string[] } | null> => {
+  let apiKey = '';
+  try {
+    apiKey = await SettingsService.getSetting(db, 'groq_api_key', '');
+  } catch (_) {}
 
-  } catch (e) {
-    console.error('❌ ERROR CRÍTICO DE PARSEO:', (e as Error).message);
-    return null;
+  if (!apiKey || apiKey.trim() === '') {
+    apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY || '';
   }
+
+  const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
+  if (!cleanKey) return null;
+
+  const systemContent = `Eres el Asistente Inteligente de Inventario para Topytop Kith.
+Tu objetivo es responder de manera amable, coherente, precisa y útil.
+
+Debes responder SIEMPRE en formato JSON válido con esta estructura:
+{
+  "tipo": "SALUDO" | "CONVERSACION" | "OP" | "ESTILO" | "COLOR" | "CAJA" | "INVENTARIO",
+  "valor": "tu respuesta conversacional elocuente O el término exacto a buscar",
+  "terminos": ["sinonimo1", "sinonimo2"]
+}
+
+Reglas de clasificación:
+1. "OP": Si el usuario busca o escribe un número de orden u OP (ej: "3324738", "OP 12345"). En "valor" pon los dígitos.
+2. "ESTILO": Si el usuario busca un código de estilo o prenda textil (ej: "KHM 030 039", "KHK 001", "PO-100"). En "valor" pon el código.
+3. "COLOR": Si el usuario busca prendas por color (ej: "black", "negro", "azul"). En "valor" pon el color y en "terminos" sus traducciones.
+4. "CAJA": Si el usuario pregunta por una caja (ej: "Caja 1"). En "valor" pon el nombre de la caja.
+5. "INVENTARIO": Si pide un resumen del inventario. En "valor" pon "general".
+6. "SALUDO": Si el usuario saluda (ej: "Hola", "Buenos días", "Alo"). En "valor" da un saludo cordial invitando a consultar el inventario.
+7. "CONVERSACION": Para cualquier otra frase, comentario, charla o pregunta libre (ej: "Perú es clave", "¿Cómo estás?", etc.). En "valor" genera una respuesta coherente, inteligente y contextual.`;
+
+  // Historial previo en formato nativo de chat de OpenAI/Groq
+  const previousTurns = history
+    .filter(h => h.text !== message)
+    .slice(0, 6)
+    .reverse()
+    .map(h => ({
+      role: (h.sender === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: h.text
+    }));
+
+  const messagesPayload = [
+    { role: 'system' as const, content: systemContent },
+    ...previousTurns,
+    { role: 'user' as const, content: message }
+  ];
+
+  const models = await getActiveGroqModels(cleanKey);
+
+  for (const modelName of models) {
+    try {
+      const response = await fetch(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${cleanKey}`
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages: messagesPayload,
+            temperature: 0.6,
+            max_tokens: 500
+          })
+        }
+      );
+
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        //console.error(`[Groq] ${modelName} HTTP ${response.status}:`, responseText);
+        continue;
+      }
+
+      let data: any;
+
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        console.error(`[Groq] ${modelName} JSON parse falló. Respuesta cruda:`, responseText);
+        continue;
+      }
+
+      const rawText = data.choices?.[0]?.message?.content?.trim() || '';
+      console.log(`[Groq] ${modelName} respuesta del modelo:`, rawText);
+
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+       // console.error(`[Groq] ${modelName} No encontró JSON en la respuesta:`, rawText);
+        continue;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      const parsedValor = parsed.valor ?? parsed.mensaje ?? parsed.response ?? parsed.respuesta ?? parsed.text ?? parsed.texto ?? parsed.extraido ?? message;
+      const parsedTipo = (parsed.tipo ?? parsed.type ?? (parsed.op ? 'OP' : parsed.color ? 'COLOR' : parsed.estilo ? 'ESTILO' : 'LIBRE')).toUpperCase();
+      const parsedTerminos = Array.isArray(parsed.terminos) ? parsed.terminos : undefined;
+
+      return {
+        tipo: parsedTipo,
+        valor: String(parsedValor || message),
+        terminos: parsedTerminos
+      };
+
+    } catch (err) {
+    console.error(`[Groq] ${modelName} excepción de red:`, err);
+    }
+  }
+
+  console.error('[Groq] Los 5 modelos fallaron, usando motor local');
+
+  return null;
 };
 
 export const ChatbotService = {
@@ -353,18 +435,21 @@ export const ChatbotService = {
 
   searchAndRespond: async (db: SQLiteDatabase, message: string, sessionId: string): Promise<{ text: string, matches: SearchResult[], engineUsed: 'ia' | 'local' }> => {
     const history = await ChatbotService.getHistoryBySession(db, sessionId);
-    const classification = await askGroqToClassify(message, history.slice(0, 10));
+    const classification = await askGroqToClassify(db, message, history.slice(0, 10));
 
     if (classification) {
       if (classification.tipo === 'SALUDO') {
-        return { text: '¡Hola! 👋 Soy tu asistente de inventario Topytop Kith. Puedes buscar por estilo, OP o color. ¿Qué necesitas?', matches: [], engineUsed: 'ia' };
+        const greeting = (classification.valor && classification.valor !== message && classification.valor.trim() !== '')
+          ? classification.valor
+          : '¡Hola! 👋 Soy tu asistente de inventario Topytop Kith. Puedes buscar por estilo, OP o color. ¿Qué necesitas?';
+        return { text: greeting, matches: [], engineUsed: 'ia' };
       }
 
       if (classification.tipo === 'LIBRE' || classification.tipo === 'CONVERSACION') {
         return { text: classification.valor, matches: [], engineUsed: 'ia' };
       }
 
-      const searchRes = await executeSearch(db, classification.tipo, classification.valor);
+      const searchRes = await executeSearch(db, classification.tipo, classification.valor, classification.terminos);
       return { ...searchRes, engineUsed: 'ia' };
     }
 
