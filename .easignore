@@ -1,0 +1,15 @@
+.git/
+.expo/
+.recovery/
+node_modules/
+dist/
+web-build/
+coverage/
+*.log
+*.tsbuildinfo
+android/
+ios/
+.agent/
+.expo/
+supabase/
+

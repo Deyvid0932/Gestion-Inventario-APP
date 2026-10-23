@@ -1,6 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import { SyncAdapter, SyncResult } from '../SyncAdapter';
 import { supabase } from '../../database/supabase';
+import { withSerializedTransaction } from '../../database/serializedTransaction';
 
 export class ChatSessionSyncAdapter implements SyncAdapter {
   tableName = 'chat_sessions';
@@ -75,84 +76,92 @@ export class ChatSessionSyncAdapter implements SyncAdapter {
     return result;
   }
 
-  async pullRemote(db: SQLiteDatabase, userId: string, since: string | null): Promise<SyncResult> {
-    const result: SyncResult = { success: true, pushedCount: 0, pulledCount: 0 };
+  /** Fase 1: Solo HTTP */
+  async fetchRemote(userId: string, since: string | null): Promise<any[] | null> {
     try {
       let query = supabase.from('chat_sessions').select('*').eq('user_id', userId);
       if (since) {
         query = query.gt('updated_at', since);
       }
-
-      const { data: remoteRows, error } = await query;
+      const { data, error } = await query;
       if (error) {
-        console.error('Error al hacer pull de chat_sessions desde Supabase:', error);
-        result.success = false;
-        result.errors = [error.message];
-        return result;
+        console.error('Error fetching chat_sessions from Supabase:', error);
+        return null;
       }
+      return data;
+    } catch (e) {
+      console.error('Exception in ChatSessionSyncAdapter.fetchRemote:', e);
+      return null;
+    }
+  }
 
-      if (!remoteRows) {
-        return result;
-      }
+  /** Fase 2: Solo SQLite */
+  async applyRemote(db: SQLiteDatabase, userId: string, since: string | null, remoteRows: any[]): Promise<SyncResult> {
+    const result: SyncResult = { success: true, pushedCount: 0, pulledCount: 0 };
+    try {
+      if (!remoteRows) return result;
 
-      await db.withTransactionAsync(async () => {
-        if (since === null) {
-          const remoteIds = new Set(remoteRows.map(r => r.id));
-          const localRows = await db.getAllAsync<{ id: string }>('SELECT id FROM chat_sessions WHERE user_id = ?', [userId]);
+      await withSerializedTransaction(db, async () => {
+        if (since === null && remoteRows.length > 0) {
+          const remoteIds = new Set(remoteRows.map(r => String(r.id)));
+          const localRows = await db.getAllAsync<{ id: string }>(
+            `SELECT id FROM chat_sessions WHERE user_id = ? AND sync_status = 'SYNCED'`,
+            [userId]
+          );
           for (const localRow of localRows) {
-            if (!remoteIds.has(localRow.id)) {
+            if (!remoteIds.has(String(localRow.id))) {
               await db.runAsync('DELETE FROM chat_history WHERE sessionId = ?', [localRow.id]);
               await db.runAsync('DELETE FROM chat_sessions WHERE id = ?', [localRow.id]);
             }
           }
         }
 
+        const pendingDelRows = await db.getAllAsync<{ recordId: string }>(
+          `SELECT recordId FROM pending_deletions WHERE tableName = 'chat_sessions'`
+        );
+        const pendingDelIds = new Set(pendingDelRows.map(p => p.recordId));
+
         for (const r of remoteRows) {
-          const local = await db.getFirstAsync<any>('SELECT * FROM chat_sessions WHERE id = ?', [r.id]);
+          if (pendingDelIds.has(r.id)) continue;
+
           const createdAtVal = typeof r.created_at === 'number' ? r.created_at : (r.created_at ? new Date(r.created_at).getTime() : (r.createdAt || Date.now()));
           const updatedAtVal = r.updated_at ? new Date(r.updated_at).getTime() : (r.updatedAt || Date.now());
 
-          if (!local) {
-            await db.runAsync(
-              `INSERT INTO chat_sessions (id, user_id, title, createdAt, updatedAt, updated_at, sync_status) 
-               VALUES (?, ?, ?, ?, ?, ?, 'SYNCED')`,
-              [
-                r.id,
-                r.user_id,
-                r.title,
-                createdAtVal,
-                updatedAtVal,
-                r.updated_at || new Date().toISOString(),
-              ]
-            );
-            result.pulledCount++;
-          } else {
-            const localTime = local.updated_at ? new Date(local.updated_at).getTime() : 0;
-            const remoteTime = r.updated_at ? new Date(r.updated_at).getTime() : 0;
-
-            if (remoteTime >= localTime) {
-              await db.runAsync(
-                `UPDATE chat_sessions SET user_id = ?, title = ?, createdAt = ?, updatedAt = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
-                [
-                  r.user_id,
-                  r.title,
-                  createdAtVal,
-                  updatedAtVal,
-                  r.updated_at || new Date().toISOString(),
-                  r.id,
-                ]
-              );
-              result.pulledCount++;
-            }
-          }
+          await db.runAsync(
+            `INSERT INTO chat_sessions (id, user_id, title, createdAt, updatedAt, updated_at, sync_status) 
+             VALUES (?, ?, ?, ?, ?, ?, 'SYNCED')
+             ON CONFLICT(id) DO UPDATE SET
+               user_id = excluded.user_id,
+               title = excluded.title,
+               createdAt = excluded.createdAt,
+               updatedAt = excluded.updatedAt,
+               updated_at = excluded.updated_at,
+               sync_status = 'SYNCED'
+             WHERE excluded.updated_at >= chat_sessions.updated_at OR chat_sessions.updated_at IS NULL`,
+            [
+              r.id,
+              r.user_id,
+              r.title,
+              createdAtVal,
+              updatedAtVal,
+              r.updated_at || new Date().toISOString(),
+            ]
+          );
+          result.pulledCount++;
         }
       });
     } catch (e: any) {
-      console.error('Excepción en ChatSessionSyncAdapter.pullRemote:', e);
+      console.error('Exception in ChatSessionSyncAdapter.applyRemote:', e);
       result.success = false;
       result.errors = [e.message || String(e)];
     }
     return result;
+  }
+
+  async pullRemote(db: SQLiteDatabase, userId: string, since: string | null): Promise<SyncResult> {
+    const data = await this.fetchRemote(userId, since);
+    if (data === null) return { success: false, pushedCount: 0, pulledCount: 0, errors: ['Fetch failed'] };
+    return this.applyRemote(db, userId, since, data);
   }
 
   async cleanForUser(db: SQLiteDatabase): Promise<void> {

@@ -1,4 +1,4 @@
-import { R2Service } from '../../src/services/r2Service';
+import { R2Service } from '../../src/services/cloud/r2Service';
 import { supabase } from '../../src/database/supabase';
 
 jest.mock('../../src/database/supabase', () => ({

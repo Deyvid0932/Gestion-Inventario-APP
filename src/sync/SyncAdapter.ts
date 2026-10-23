@@ -11,6 +11,8 @@ export interface SyncAdapter {
   tableName: string;
   pushLocal(db: SQLiteDatabase, userId: string): Promise<SyncResult>;
   pullRemote(db: SQLiteDatabase, userId: string, since: string | null): Promise<SyncResult>;
+  fetchRemote?(userId: string, since: string | null): Promise<any>;
+  applyRemote?(db: SQLiteDatabase, userId: string, since: string | null, prefetchedData: any): Promise<SyncResult>;
   cleanForUser(db: SQLiteDatabase): Promise<void>;
   adoptForUser(db: SQLiteDatabase, userId: string): Promise<void>;
 }

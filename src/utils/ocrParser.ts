@@ -1,13 +1,23 @@
-export const processOCRText = (rawText: string, cajaId: string) => {
+export interface ExtractedGarmentOCR {
+  id: string;
+  op: string;
+  style: string;
+  color: string;
+  box_id: string;
+  status: number;
+  created_at: string;
+}
+
+export const processOCRText = (rawText: string, boxId: string): ExtractedGarmentOCR[] => {
     const normalizedText = rawText.replace(/[|\\/]/g, ' ');
     const lines = normalizedText.split('\n');
     const now = Date.now();
 
-    return lines.map((line, index) => {
+    const items = lines.map((line, index) => {
         const cleanLine = line.trim().toUpperCase();
-        const estiloRegex = /(KH[A-Z]*)\s*([0-9OQ]{3})\s*([0-9OQ]{2,3})/i;
+        const styleRegex = /(KH[A-Z]*)\s*([0-9OQ]{3})\s*([0-9OQ]{2,3})/i;
 
-        const match = cleanLine.match(estiloRegex);
+        const match = cleanLine.match(styleRegex);
 
         if (match) {
             let [fullMatch, prefix, part1, part2] = match;
@@ -15,22 +25,29 @@ export const processOCRText = (rawText: string, cajaId: string) => {
             const normalizeNumbers = (text: string) =>
                 text.replace(/[OQ]/g, '0').replace(/[IL]/g, '1');
 
-            const estiloFinal = `${prefix} ${normalizeNumbers(part1)} ${normalizeNumbers(part2)}`.trim();
+            const styleFinal = `${prefix} ${normalizeNumbers(part1)} ${normalizeNumbers(part2)}`.trim();
 
-            const estiloIndex = cleanLine.indexOf(fullMatch);
+            const styleIndex = cleanLine.indexOf(fullMatch);
 
-            const textoPrevio = cleanLine.substring(0, estiloIndex).trim();
+            const prevText = cleanLine.substring(0, styleIndex).trim();
             let opFinal = '';
 
-            if (textoPrevio) {
-                const opMatch = textoPrevio.match(/([0-9OQIL]{4,10})/i);
+            if (prevText) {
+                const opMatch = prevText.match(/([0-9OQIL]{4,10})/i);
                 if (opMatch) {
                     opFinal = normalizeNumbers(opMatch[0]);
                 }
             }
 
-            const restoDeLinea = cleanLine.substring(estiloIndex + fullMatch.length);
-            const colorClean = restoDeLinea.replace(/^[:\-\|\s]+/, '').trim();
+            if (!opFinal) {
+                const opExplicit = cleanLine.match(/(?:OP|O\.P\.|0P|LOTE)\s*[:\-]?\s*([0-9OQIL]{4,10})/i);
+                if (opExplicit) {
+                    opFinal = normalizeNumbers(opExplicit[1]);
+                }
+            }
+
+            const remainderLine = cleanLine.substring(styleIndex + fullMatch.length);
+            const colorClean = remainderLine.replace(/^[:\-\|\s]+/, '').trim();
             const colorFinal = colorClean.length > 0 ? colorClean : "S/C";
 
             const invertedIndex = (lines.length - index).toString().padStart(3, '0');
@@ -40,38 +57,40 @@ export const processOCRText = (rawText: string, cajaId: string) => {
             return {
                 id: `${now}_${invertedIndex}_${Math.random().toString(36).substring(2, 5)}`,
                 op: opFinal,
-                estilo: estiloFinal,
+                style: styleFinal,
                 color: colorFinal,
-                cajaId: cajaId,
-                estado: 1,
-                fechaCreacion: createdAt
+                box_id: boxId,
+                status: 1,
+                created_at: createdAt
             };
         }
 
         return null;
-    }).filter(item => item !== null);
+    });
+
+    return items.filter((item): item is ExtractedGarmentOCR => item !== null);
 };
 
 export const extractLabelData = (rawText: string) => {
     const normalizedText = rawText.replace(/[|\\/]/g, ' ').toUpperCase();
-    const result = { op: '', estilo: '', color: '' };
+    const result = { op: '', style: '', color: '' };
 
-    const estiloRegex = /(KH[A-Z]*)\s*([0-9OQ]{3})\s*([0-9OQ]{2,3})/i;
-    const estiloMatch = normalizedText.match(estiloRegex);
-    if (estiloMatch) {
+    const styleRegex = /(KH[A-Z]*)\s*([0-9OQ]{3})\s*([0-9OQ]{2,3})/i;
+    const styleMatch = normalizedText.match(styleRegex);
+    if (styleMatch) {
         const normalizeNumbers = (text: string) => text.replace(/[OQ]/g, '0').replace(/[IL]/g, '1');
-        result.estilo = `${estiloMatch[1]} ${normalizeNumbers(estiloMatch[2])} ${normalizeNumbers(estiloMatch[3])}`.trim();
+        result.style = `${styleMatch[1]} ${normalizeNumbers(styleMatch[2])} ${normalizeNumbers(styleMatch[3])}`.trim();
 
-        const idx = normalizedText.indexOf(estiloMatch[0]);
-        const antesDelEstilo = normalizedText.substring(0, idx).trim();
-        const opMatchPrev = antesDelEstilo.match(/([0-9OQIL]{4,10})/i);
+        const idx = normalizedText.indexOf(styleMatch[0]);
+        const prevText = normalizedText.substring(0, idx).trim();
+        const opMatchPrev = prevText.match(/([0-9OQIL]{4,10})/i);
         if (opMatchPrev) {
             result.op = normalizeNumbers(opMatchPrev[0]);
         }
 
-        const despuesDelEstilo = normalizedText.substring(idx + estiloMatch[0].length).replace(/^[:\-\|\s]+/, '').trim();
-        if (despuesDelEstilo) {
-            result.color = despuesDelEstilo;
+        const remainder = normalizedText.substring(idx + styleMatch[0].length).replace(/^[:\-\|\s]+/, '').trim();
+        if (remainder) {
+            result.color = remainder;
         }
     }
 

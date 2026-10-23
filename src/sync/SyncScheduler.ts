@@ -7,6 +7,7 @@ class SyncSchedulerClass {
   private hasPendingSync = false;
   private activeDb: SQLiteDatabase | null = null;
   private activeUserId: string | null = null;
+  private retryAttempt = 0;
 
   /**
    * Encola una solicitud de push diferida (debounce configurable, por defecto 1500ms).
@@ -18,6 +19,7 @@ class SyncSchedulerClass {
     this.activeDb = db;
     this.activeUserId = userId;
     this.hasPendingSync = true;
+    this.retryAttempt = 0;
 
     if (this.pendingTimer) {
       clearTimeout(this.pendingTimer);
@@ -38,6 +40,7 @@ class SyncSchedulerClass {
     this.activeDb = db;
     this.activeUserId = userId;
     this.hasPendingSync = true;
+    this.retryAttempt = 0;
 
     if (this.pendingTimer) {
       clearTimeout(this.pendingTimer);
@@ -63,16 +66,33 @@ class SyncSchedulerClass {
     const targetUser = this.activeUserId;
 
     try {
-      await SynchronizationEngine.pushAllPending(targetDb, targetUser);
+      const result = await SynchronizationEngine.pushAllPending(targetDb, targetUser);
+      if (result.success) {
+        this.retryAttempt = 0;
+      } else {
+        console.warn('[SyncScheduler] Subida incompleta; quedan cambios pendientes:', result.errors);
+        this.queueRetry();
+      }
     } catch (error) {
       console.error('[SyncScheduler] Error al procesar pushAllPending:', error);
+      this.queueRetry();
     } finally {
       this.isSyncing = false;
       // Si se programaron nuevos cambios mientras se ejecutaba la sincronización, procesar siguiente ciclo
-      if (this.hasPendingSync && this.activeDb && this.activeUserId) {
+      if (this.hasPendingSync && !this.pendingTimer && this.activeDb && this.activeUserId) {
         this.triggerScheduledPush();
       }
     }
+  }
+
+  private queueRetry(): void {
+    if (this.hasPendingSync || this.retryAttempt >= 3) return;
+    const delay = [3000, 10000, 30000][this.retryAttempt++];
+    this.hasPendingSync = true;
+    this.pendingTimer = setTimeout(() => {
+      this.pendingTimer = null;
+      this.triggerScheduledPush();
+    }, delay);
   }
 }
 

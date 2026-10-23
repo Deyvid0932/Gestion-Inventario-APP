@@ -54,13 +54,23 @@ export const colorMap: Record<string, string> = {
   'black y white': '#2F2F2F',   
 };
 
-export const getColorHex = (colorName: string | undefined | null) => {
+// Pre-calculado una sola vez en memoria a nivel de módulo (O(1) en tiempo de render)
+const SORTED_COLOR_ENTRIES: [string, string][] = Object.entries(colorMap).sort((a, b) => b[0].length - a[0].length);
+
+export const getColorHex = (colorName: string | undefined | null): string => {
   if (!colorName) return '#8E8E93';
   const lower = colorName.toLowerCase().trim();
   
-  const sortedEntries = Object.entries(colorMap).sort((a, b) => b[0].length - a[0].length);
-  for (const [name, hex] of sortedEntries) {
+  // Coincidencia directa O(1) si existe exactamente en el diccionario
+  if (colorMap[lower]) {
+    return colorMap[lower];
+  }
+  
+  // Búsqueda substring sobre el array pre-ordenado sin re-ordenar
+  for (let i = 0; i < SORTED_COLOR_ENTRIES.length; i++) {
+    const [name, hex] = SORTED_COLOR_ENTRIES[i];
     if (lower.includes(name)) return hex;
   }
   return '#8E8E93';
 };
+
