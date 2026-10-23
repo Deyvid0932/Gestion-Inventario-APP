@@ -1,6 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import { SyncAdapter, SyncResult } from '../SyncAdapter';
 import { supabase } from '../../database/supabase';
+import { withSerializedTransaction } from '../../database/serializedTransaction';
 
 export class ChatHistorySyncAdapter implements SyncAdapter {
   tableName = 'chat_history';
@@ -30,22 +31,44 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
             parsedMatches = null;
           }
         }
+        let isoCreatedAt = new Date().toISOString();
+        if (typeof row.timestamp === 'number' && row.timestamp > 0) {
+          isoCreatedAt = new Date(row.timestamp).toISOString();
+        } else if (typeof row.created_at === 'number' && row.created_at > 0) {
+          isoCreatedAt = new Date(row.created_at).toISOString();
+        } else if (row.timestamp && typeof row.timestamp === 'string') {
+          try { isoCreatedAt = new Date(row.timestamp).toISOString(); } catch (_) {}
+        } else if (row.created_at && typeof row.created_at === 'string') {
+          try { isoCreatedAt = new Date(row.created_at).toISOString(); } catch (_) {}
+        }
+
+        let isoUpdatedAt = new Date().toISOString();
+        if (row.updated_at && typeof row.updated_at === 'string') {
+          try { isoUpdatedAt = new Date(row.updated_at).toISOString(); } catch (_) {}
+        } else if (typeof row.updatedAt === 'number' && row.updatedAt > 0) {
+          isoUpdatedAt = new Date(row.updatedAt).toISOString();
+        }
+
+        const tsNumber = typeof row.timestamp === 'number' && row.timestamp > 0 
+          ? row.timestamp 
+          : (row.created_at && typeof row.created_at === 'number' ? row.created_at : new Date(isoCreatedAt).getTime());
+
         return {
-          id: row.id,
-          "sessionId": row.sessionId,
-          sender: row.sender,
-          text: row.text,
+          id: String(row.id),
+          session_id: String(row.session_id ?? row.sessionId),
+          sender: String(row.sender || 'user'),
+          content: String(row.content ?? row.text ?? ''),
           matches_json: parsedMatches,
-          "engineUsed": row.engineUsed || null,
-          timestamp: row.timestamp,
-          updated_at: row.updated_at || new Date().toISOString(),
+          engine_used: row.engine_used ?? row.engineUsed ?? null,
+          created_at: tsNumber,
+          updated_at: isoUpdatedAt,
         };
       });
 
-      const { error } = await supabase.from('chat_history').upsert(payload, { onConflict: 'id' });
+      const { error } = await supabase.from('chat_messages').upsert(payload, { onConflict: 'id' });
 
       if (error) {
-        console.error('Error al hacer push de chat_history a Supabase:', error);
+        console.error('Error al hacer push de chat_messages a Supabase:', error);
         for (const id of ids) {
           await db.runAsync(`UPDATE chat_history SET sync_status = 'FAILED' WHERE id = ?`, [id]);
         }
@@ -65,86 +88,136 @@ export class ChatHistorySyncAdapter implements SyncAdapter {
     return result;
   }
 
-  async pullRemote(db: SQLiteDatabase, _userId: string, since: string | null): Promise<SyncResult> {
-    const result: SyncResult = { success: true, pushedCount: 0, pulledCount: 0 };
+  /** Fase 1: Solo HTTP - requiere session IDs del usuario (se obtienen de SQLite antes del pre-fetch) */
+  async fetchRemote(userId: string, since: string | null, sessionIds?: string[]): Promise<any[] | null> {
     try {
-      let query = supabase.from('chat_history').select('*');
+      if (!sessionIds || sessionIds.length === 0) return [];
+
+      let query = supabase.from('chat_messages').select('*').in('session_id', sessionIds);
       if (since) {
         query = query.gt('updated_at', since);
       }
-
-      const { data: remoteRows, error } = await query;
+      const { data, error } = await query;
       if (error) {
-        console.error('Error al hacer pull de chat_history desde Supabase:', error);
-        result.success = false;
-        result.errors = [error.message];
-        return result;
+        console.error('Error fetching chat_messages from Supabase:', error);
+        return null;
       }
+      return data;
+    } catch (e) {
+      console.error('Exception in ChatHistorySyncAdapter.fetchRemote:', e);
+      return null;
+    }
+  }
 
-      if (!remoteRows) {
-        return result;
-      }
+  /** Fase 2: Solo SQLite */
+  async applyRemote(db: SQLiteDatabase, userId: string, since: string | null, remoteRows: any[]): Promise<SyncResult> {
+    const result: SyncResult = { success: true, pushedCount: 0, pulledCount: 0 };
+    try {
+      if (!remoteRows || remoteRows.length === 0) return result;
 
-      await db.withTransactionAsync(async () => {
-        if (since === null) {
-          const remoteIds = new Set(remoteRows.map(r => r.id));
-          const localRows = await db.getAllAsync<{ id: string }>('SELECT id FROM chat_history');
-          for (const localRow of localRows) {
-            if (!remoteIds.has(localRow.id)) {
-              await db.runAsync('DELETE FROM chat_history WHERE id = ?', [localRow.id]);
+      await withSerializedTransaction(db, async () => {
+        if (since === null && remoteRows.length > 0) {
+          const remoteIds = new Set(remoteRows.map(r => String(r.id)));
+          const sessionIdsInScope = Array.from(new Set(remoteRows.map(r => String(r.session_id || r.sessionId)).filter(Boolean)));
+          if (sessionIdsInScope.length > 0) {
+            const placeholders = sessionIdsInScope.map(() => '?').join(',');
+            const localRows = await db.getAllAsync<{ id: string }>(
+              `SELECT id FROM chat_history WHERE sessionId IN (${placeholders}) AND sync_status = 'SYNCED'`,
+              sessionIdsInScope
+            );
+            for (const localRow of localRows) {
+              if (!remoteIds.has(String(localRow.id))) {
+                await db.runAsync('DELETE FROM chat_history WHERE id = ?', [localRow.id]);
+              }
             }
           }
         }
 
+        // Precargar IDs de sesiones existentes en SQLite y las marcadas para eliminación
+        const localSessionRows = await db.getAllAsync<{ id: string }>('SELECT id FROM chat_sessions');
+        const localSessionIds = new Set(localSessionRows.map(s => s.id));
+
+        const pendingDelRows = await db.getAllAsync<{ recordId: string }>(
+          `SELECT recordId FROM pending_deletions WHERE tableName = 'chat_sessions'`
+        );
+        const pendingDelIds = new Set(pendingDelRows.map(p => p.recordId));
+
         for (const r of remoteRows) {
-          const local = await db.getFirstAsync<any>('SELECT * FROM chat_history WHERE id = ?', [r.id]);
           const matchesStr = r.matches_json ? (typeof r.matches_json === 'string' ? r.matches_json : JSON.stringify(r.matches_json)) : null;
+          const sessionIdVal = r.session_id || r.sessionId;
+          const textVal = r.content || r.text || '';
+          const engineVal = r.engine_used || r.engineUsed || null;
+          const numericTimestamp = typeof r.timestamp === 'number' && r.timestamp > 0
+            ? r.timestamp
+            : (typeof r.created_at === 'number' && r.created_at > 0
+                ? r.created_at
+                : new Date(r.created_at || r.timestamp || Date.now()).getTime());
 
-          if (!local) {
-            await db.runAsync(
-              `INSERT INTO chat_history (id, sessionId, sender, text, matches_json, engineUsed, timestamp, updated_at, sync_status) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
-              [
-                r.id,
-                r.sessionId,
-                r.sender,
-                r.text,
-                matchesStr,
-                r.engineUsed || null,
-                r.timestamp,
-                r.updated_at,
-              ]
-            );
-            result.pulledCount++;
-          } else {
-            const localTime = local.updated_at ? new Date(local.updated_at).getTime() : 0;
-            const remoteTime = r.updated_at ? new Date(r.updated_at).getTime() : 0;
-
-            if (remoteTime >= localTime) {
-              await db.runAsync(
-                `UPDATE chat_history SET sessionId = ?, sender = ?, text = ?, matches_json = ?, engineUsed = ?, timestamp = ?, updated_at = ?, sync_status = 'SYNCED' WHERE id = ?`,
-                [
-                  r.sessionId,
-                  r.sender,
-                  r.text,
-                  matchesStr,
-                  r.engineUsed || null,
-                  r.timestamp,
-                  r.updated_at,
-                  r.id,
-                ]
-              );
-              result.pulledCount++;
-            }
+          // Si la sesión pertenece a una eliminada pendiente, descartar el mensaje
+          if (sessionIdVal && pendingDelIds.has(sessionIdVal)) {
+            continue;
           }
+
+          // Garantizar integridad referencial de Foreign Key (sessionId -> chat_sessions.id)
+          if (sessionIdVal) {
+            if (!localSessionIds.has(sessionIdVal)) {
+              await db.runAsync(
+                `INSERT OR IGNORE INTO chat_sessions (id, user_id, title, createdAt, updatedAt, updated_at, sync_status) 
+                 VALUES (?, ?, 'Nueva conversación', ?, ?, ?, 'SYNCED')`,
+                [sessionIdVal, userId || '', numericTimestamp, numericTimestamp, r.updated_at || new Date().toISOString()]
+              );
+              localSessionIds.add(sessionIdVal);
+            }
+          } else {
+            // Si el registro de Supabase carece de session_id, omitirlo para no violar la Foreign Key
+            continue;
+          }
+
+          await db.runAsync(
+            `INSERT INTO chat_history (id, sessionId, sender, text, matches_json, engineUsed, timestamp, updated_at, sync_status) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')
+             ON CONFLICT(id) DO UPDATE SET
+               sessionId = excluded.sessionId,
+               sender = excluded.sender,
+               text = excluded.text,
+               matches_json = excluded.matches_json,
+               engineUsed = excluded.engineUsed,
+               timestamp = excluded.timestamp,
+               updated_at = excluded.updated_at,
+               sync_status = 'SYNCED'
+             WHERE excluded.updated_at >= chat_history.updated_at OR chat_history.updated_at IS NULL`,
+            [
+              r.id,
+              sessionIdVal,
+              r.sender,
+              textVal,
+              matchesStr,
+              engineVal,
+              numericTimestamp,
+              r.updated_at,
+            ]
+          );
+          result.pulledCount++;
         }
       });
     } catch (e: any) {
-      console.error('Excepción en ChatHistorySyncAdapter.pullRemote:', e);
+      console.error('Exception in ChatHistorySyncAdapter.applyRemote:', e);
       result.success = false;
       result.errors = [e.message || String(e)];
     }
     return result;
+  }
+
+  async pullRemote(db: SQLiteDatabase, userId: string, since: string | null): Promise<SyncResult> {
+    // Necesita session IDs de SQLite primero
+    const userSessionRows = await db.getAllAsync<{ id: string }>(
+      `SELECT id FROM chat_sessions WHERE (user_id = ? OR user_id IS NULL OR user_id = '') AND deleted_at IS NULL`,
+      [userId]
+    );
+    const sessionIds = userSessionRows?.map(s => s.id) || [];
+    const data = await this.fetchRemote(userId, since, sessionIds);
+    if (data === null) return { success: false, pushedCount: 0, pulledCount: 0, errors: ['Fetch failed'] };
+    return this.applyRemote(db, userId, since, data);
   }
 
   async cleanForUser(db: SQLiteDatabase): Promise<void> {

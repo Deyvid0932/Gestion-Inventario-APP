@@ -1,20 +1,22 @@
 import React, { useEffect } from 'react';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { InventariosScreen } from '../screen/InventariosScreen';
-import CajaContentsScreen from '../screen/CajaContentsScreen';
-import { HistoryScreen } from '../screen/HistoryScreen';
-import { StatsScreen } from '../screen/StatsScreen';
-import { ChatbotScreen } from '../screen/ChatbotScreen';
-import { OnboardingScreen } from '../screen/OnboardingScreen';
+import { InventoriesScreen } from '../screens/InventoriesScreen';
+import { BoxesScreen } from '../screens/BoxesScreen';
+import { BoxContentsScreen } from '../screens/BoxContentsScreen';
+import { HistoryScreen } from '../screens/HistoryScreen';
+import { StatsScreen } from '../screens/StatsScreen';
+import { ChatbotScreen } from '../screens/ChatbotScreen';
+import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { RootStackParamList, BottomTabParamList } from '../types';
 import { useAppStore } from '../store/useAppStore';
-import { CajasScreen } from '../screen/CajasScreen';
-import { FormScreen } from '../screen/FormScreen';
-
-import { LoadingModal } from '../components/LoadingModal';
-import { navigationRef } from '../../App';
+import { FormScreen } from '../screens/FormScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
+import { TrashScreen } from '../screens/TrashScreen';
+import { LoadingModal } from '../components';
+import { InactiveAccountModal } from '../components';
+import { navigationRef } from './navigationRef';
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -23,42 +25,28 @@ const MainStack = () => {
   const currentTheme = useAppStore(state => state.currentTheme);
 
   return (
-    <Stack.Navigator 
+    <Stack.Navigator
       initialRouteName="MainTabs"
-      screenOptions={{ 
-        animation: 'fade_from_bottom',
+      screenOptions={{
         headerShown: false,
         gestureEnabled: true,
+        cardShadowEnabled: false,
+        cardOverlayEnabled: false,
         cardStyle: { backgroundColor: currentTheme.background },
-        transitionSpec: {
-          open: { animation: 'spring', config: { stiffness: 1000, damping: 500, mass: 3, overshootClamping: true, restDisplacementThreshold: 0.01, restSpeedThreshold: 0.01 } },
-          close: { animation: 'spring', config: { stiffness: 1000, damping: 500, mass: 3, overshootClamping: true, restDisplacementThreshold: 0.01, restSpeedThreshold: 0.01 } },
-        },
-        cardStyleInterpolator: ({ current, layouts }) => {
-          return {
-            cardStyle: {
-              opacity: current.progress,
-              transform: [
-                {
-                  translateX: current.progress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [layouts.screen.width * 0.1, 0],
-                  }),
-                },
-              ],
-            },
-          };
-        },
+        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
       }}
     >
       <Stack.Screen name="MainTabs" component={TabNavigator} />
-      <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-      <Stack.Screen name="Cajas" component={CajasScreen} />
-      <Stack.Screen name="ExcelGrid" component={CajaContentsScreen} />
+      <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ gestureEnabled: false }} />
+      <Stack.Screen name="Boxes" component={BoxesScreen} options={{ gestureEnabled: false }} />
+      <Stack.Screen name="BoxContents" component={BoxContentsScreen} options={{ gestureEnabled: false }} />
+      <Stack.Screen name="Trash" component={TrashScreen} />
       <Stack.Screen name="Form" component={FormScreen} />
     </Stack.Navigator>
   );
 };
+
+
 
 const TabNavigator = () => {
   const currentTheme = useAppStore(state => state.currentTheme);
@@ -70,14 +58,16 @@ const TabNavigator = () => {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap;
 
-          if (route.name === 'Inventarios') {
-            iconName = focused ? 'file-tray-stacked' : 'file-tray-stacked-outline';
-          } else if (route.name === 'Stats') {
-            iconName = focused ? 'stats-chart' : 'stats-chart-outline';
-          } else if (route.name === 'Chatbot') {
-            iconName = focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline';
+          if (route.name === 'Home') {
+            iconName = focused ? 'home' : 'home-outline';
+          } else if (route.name === 'Inventories') {
+            iconName = focused ? 'cube' : 'cube-outline';
           } else if (route.name === 'History') {
-            iconName = focused ? 'time' : 'time-outline';
+            iconName = focused ? 'search' : 'search-outline';
+          } else if (route.name === 'Chatbot') {
+            iconName = focused ? 'sparkles' : 'sparkles-outline';
+          } else if (route.name === 'Settings') {
+            iconName = focused ? 'settings' : 'settings-outline';
           } else {
             iconName = 'help';
           }
@@ -92,10 +82,11 @@ const TabNavigator = () => {
         },
       })}
     >
-      <Tab.Screen name="Inventarios" component={InventariosScreen} options={{ title: 'Lotes' }} />
-      <Tab.Screen name="Stats" component={StatsScreen} options={{ title: 'Estadísticas' }} />
+      <Tab.Screen name="Home" component={StatsScreen} options={{ title: 'Home' }} />
+      <Tab.Screen name="Inventories" component={InventoriesScreen} options={{ title: 'Lotes' }} />
+      <Tab.Screen name="History" component={HistoryScreen} options={{ title: 'Buscar' }} />
       <Tab.Screen name="Chatbot" component={ChatbotScreen} options={{ title: 'Asistente' }} />
-      <Tab.Screen name="History" component={HistoryScreen} options={{ title: 'Historial' }} />
+      <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Ajustes' }} />
     </Tab.Navigator>
   );
 };
@@ -117,13 +108,14 @@ export const AppNavigation = () => {
     }
   }, [hasCompletedOnboarding]);
 
-  const showLoading = isSyncing || isAuthLoading;
-  const loadingMsg = isAuthLoading ? 'Iniciando Sesión...' : (syncMessage || 'Sincronizando Datos...');
+  const showLoading = isAuthLoading || (isSyncing && syncMessage === 'Limpiando...');
+  const loadingMsg = isAuthLoading ? 'Iniciando Sesión...' : (syncMessage || 'Limpiando...');
 
   return (
     <>
       <MainStack />
       <LoadingModal visible={showLoading} message={loadingMsg} />
+      <InactiveAccountModal />
     </>
   );
 };

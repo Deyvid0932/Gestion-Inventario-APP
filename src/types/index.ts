@@ -1,87 +1,140 @@
 export type SyncStatus = 'PENDING' | 'SYNCING' | 'SYNCED' | 'FAILED';
 
-export interface Inventario {
+export interface Inventory {
   id: string;
   user_id?: string | null;
-  nombre: string;
-  descripcion: string;
-  fechaCreacion: string;
-  estado: 'Activo' | 'Inactivo';
-  updated_at?: string;
-  deleted_at?: string | null;
-  sync_status?: SyncStatus;
-}
-
-export interface InventarioStats extends Inventario {
-  totalCajas?: number;
-  totalPrendas: number;
-  prendasEscaneadas: number;
-}
-
-export interface Caja {
-  id: string;
-  inventarioId: string;
-  nombre: string;
-  fechaCreacion: string;
+  name: string;
+  description?: string | null;
+  order_index?: number;
   orden?: number;
-  updated_at?: string;
+  status: 1 | 0;
+  created_at: string;
+  updated_at?: string | null;
   deleted_at?: string | null;
+  deleted_by?: string | null;
+  deletion_batch_id?: string | null;
   sync_status?: SyncStatus;
 }
 
-export interface CajaWithStats extends Caja {
+export interface InventoryStats extends Inventory {
+  totalBoxes?: number;
+  totalGarments: number;
+  scannedGarments?: number;
+}
+
+export interface Box {
+  id: string;
+  inventory_id: string;
+  name: string;
+  order_index?: number;
+  orden?: number;
+  status?: 1 | 0;
+  created_at: string;
+  updated_at?: string | null;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  deletion_batch_id?: string | null;
+  sync_status?: SyncStatus;
+}
+
+export interface BoxWithStats extends Box {
   itemCount: number;
 }
 
-export interface Prenda {
+export type StorageLocation = 'LOCAL' | 'CLOUD' | 'BOTH';
+
+export interface GarmentImage {
   id: string;
-  cajaId: string;
-  op: string;
-  estilo: string;
-  color: string;
-  talla?: string;
-  estado: 1 | 0;
-  fotoUri?: string | null;
-  fotoUri2?: string | null;
-  r2Key?: string | null;
-  r2Key2?: string | null;
-  fechaCreacion?: string;
-  alarmaFechaHora?: string | null;
-  alarmaNotificationId?: string | null;
-  updated_at?: string;
+  garment_id: string;
+  uri?: string | null;
+  storage_key?: string | null;
+  storage: StorageLocation;
+  order_index: number;
+  is_primary: boolean | number;
+  created_at: string;
+  updated_at?: string | null;
   deleted_at?: string | null;
+  deleted_by?: string | null;
+  deletion_batch_id?: string | null;
   sync_status?: SyncStatus;
 }
 
-export interface HistoryItem extends Prenda {
-  cajaNombre: string;
-  inventarioNombre: string;
+export type AlarmStatus = 'PENDING' | 'TRIGGERED' | 'EXPIRED' | 'DISMISSED';
+
+export interface GarmentAlarm {
+  id: string;
+  garment_id: string;
+  alarm_datetime: string;
+  expires_at?: string | null;
+  notification_id?: string | null;
+  status: AlarmStatus;
+  created_at: string;
+  updated_at?: string | null;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  deletion_batch_id?: string | null;
+  sync_status?: SyncStatus;
 }
+
+export interface Garment {
+  id: string;
+  box_id: string;
+  op: string;
+  style: string;
+  color: string;
+  size?: string;
+  shipping_at?: string | null;
+  status: 1 | 0;
+  created_at: string;
+  updated_at?: string | null;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  deletion_batch_id?: string | null;
+  sync_status?: SyncStatus;
+
+  photo_uri?: string | null;
+  photo_uri_2?: string | null;
+  alarm_datetime?: string | null;
+  alarm_notification_id?: string | null;
+  images?: GarmentImage[];
+  alarms?: GarmentAlarm[];
+
+  box_name?: string;
+  inventory_name?: string;
+}
+
+export type HistoryItem = Garment;
 
 export type RootStackParamList = {
   Onboarding: undefined;
   MainTabs: undefined;
-  Cajas: { inventarioId: string; nombreInventario: string };
-  ExcelGrid: { cajaId: string; nombreCaja: string; targetPrendaId?: string };
+  Boxes: { inventoryId: string; inventoryName: string; boxCount?: number };
+  BoxContents: { boxId: string; boxName: string; targetGarmentId?: string; inventoryName?: string };
+  Trash: undefined;
   Form: {
     mode: 'BASIC' | 'NAME_ONLY' | 'ADVANCED';
-    entityType: 'inventario' | 'caja' | 'prenda';
+    entityType: 'inventory' | 'box' | 'garment';
     parentId?: string;
     initialData?: Record<string, any>;
   };
 };
 
 export type BottomTabParamList = {
-  Inventarios: undefined;
-  Stats: undefined;
-  Chatbot: undefined;
+  Home: undefined;
+  Inventories: undefined;
   History: undefined;
-  GarmentDetails: { cajaId: string; nombreCaja: string };
+  Chatbot: undefined;
+  Settings: undefined;
 };
 
 export interface ChatSession {
   id: string;
+  user_id?: string | null;
   title: string;
+  created_at?: number | string;
   createdAt: number;
+  updated_at?: number | string;
   updatedAt: number;
 }
+
+export * from './roles';

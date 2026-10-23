@@ -52,15 +52,15 @@ export const levenshteinDistance = (a: string, b: string): number => {
 export interface SearchResult {
   id: string;
   op: string;
-  estilo: string;
+  style: string;
   color: string;
-  estado: number;
-  fotoUri: string | null;
-  cajaId: string;
-  cajaNombre: string;
-  inventarioNombre: string;
-  inventarioId: string;
-  alarmaFechaHora?: string | null;
+  status: number;
+  photo_uri?: string | null;
+  box_id: string;
+  box_name: string;
+  inventory_name: string;
+  inventory_id: string;
+  alarm_datetime?: string | null;
   score?: number;
 }
 
@@ -78,10 +78,10 @@ export const rankResults = (results: SearchResult[], searchTerms: string[], orig
     let levenshteinPenalty = 0;
 
     const opNorm = item.op ? normalizeText(item.op) : '';
-    const estiloNorm = item.estilo ? normalizeText(item.estilo) : '';
+    const styleNorm = item.style ? normalizeText(item.style) : '';
     const colorNorm = item.color ? normalizeText(item.color) : '';
-    const cajaNorm = item.cajaNombre ? normalizeText(item.cajaNombre) : '';
-    const invNorm = item.inventarioNombre ? normalizeText(item.inventarioNombre) : '';
+    const boxNorm = item.box_name ? normalizeText(item.box_name) : '';
+    const invNorm = item.inventory_name ? normalizeText(item.inventory_name) : '';
 
     for (const term of searchTerms) {
       let termMatched = false;
@@ -97,7 +97,7 @@ export const rankResults = (results: SearchResult[], searchTerms: string[], orig
       }
 
       if (hasCajaKeyword) {
-        if (cajaNorm === term || cajaNorm.includes(term)) {
+        if (boxNorm === term || boxNorm.includes(term)) {
           matchScore += 100;
           termMatched = true;
         }
@@ -118,14 +118,14 @@ export const rankResults = (results: SearchResult[], searchTerms: string[], orig
       }
 
       if (hasEstiloKeyword) {
-        if (estiloNorm === term || estiloNorm.includes(term)) {
+        if (styleNorm === term || styleNorm.includes(term)) {
           matchScore += 100;
           termMatched = true;
         }
       }
 
       if (!termMatched) {
-        const properties = [opNorm, estiloNorm, colorNorm, cajaNorm, invNorm];
+        const properties = [opNorm, styleNorm, colorNorm, boxNorm, invNorm];
         for (const prop of properties) {
           if (!prop) continue;
           if (prop === term) {
@@ -139,7 +139,7 @@ export const rankResults = (results: SearchResult[], searchTerms: string[], orig
       }
 
       if (!termMatched && term.length >= 3) {
-        const properties = [opNorm, estiloNorm, colorNorm, cajaNorm, invNorm];
+        const properties = [opNorm, styleNorm, colorNorm, boxNorm, invNorm];
         let minPropDist = Number.MAX_SAFE_INTEGER;
         for (const prop of properties) {
           if (!prop) continue;

@@ -2,9 +2,10 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SQLiteDatabase } from 'expo-sqlite';
 import { User, Session } from '@supabase/supabase-js';
-import { getTheme, ColorSchemeType, theme } from '../style/theme';
-import { Prenda, InventarioStats } from '../types';
-import { SettingsService } from '../services/SettingsService';
+import { getTheme, ColorSchemeType, theme } from '../styles/theme';
+import { Garment, InventoryStats } from '../types';
+import { SettingsService } from '../services/device/SettingsService';
+import { UserProfile, RoleName } from '../types/roles';
 
 const ONBOARDING_KEY = 'has_completed_onboarding_v1';
 
@@ -19,15 +20,25 @@ interface AppState {
   // Supabase Auth & Sync State
   user: User | null;
   session: Session | null;
+  userProfile: UserProfile | null;
+  userRoles: RoleName[];
+  isAccountActive: boolean;
+  isRoleLoading: boolean;
   isAuthLoading: boolean;
   isSyncing: boolean;
   syncMessage: string;
   lastSyncTime: string | null;
+  dataRevision: number;
+  isOnline: boolean;
   setUser: (user: User | null) => void;
   setSession: (session: Session | null) => void;
+  setUserProfileAndRoles: (profile: UserProfile | null, roles: RoleName[], isActive?: boolean) => void;
+  setIsRoleLoading: (loading: boolean) => void;
   setIsAuthLoading: (loading: boolean) => void;
   setSyncing: (isSyncing: boolean, message?: string) => void;
   setLastSyncTime: (time: string | null) => void;
+  bumpDataRevision: () => void;
+  setIsOnline: (isOnline: boolean) => void;
   logout: () => void;
 
   // Onboarding State
@@ -35,18 +46,25 @@ interface AppState {
   checkOnboardingStatus: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
 
-  // Estado Reactivo de Datos
-  inventarios: InventarioStats[];
-  prendas: Prenda[];
-  selectedPrendas: Record<string, boolean>;
+  // Data State (Pure English standard)
+  inventories: InventoryStats[];
+  garments: Garment[];
+  selectedGarments: Record<string, boolean>;
+  exportSelectionDraft: {
+    fileName: string;
+    selectedColumns: { op: boolean; style: boolean; color: boolean; location: boolean; status: boolean };
+    separateBySheet: boolean;
+    formatVersion?: number;
+  } | null;
   
-  setInventarios: (inventarios: InventarioStats[]) => void;
-  setPrendas: (prendas: Prenda[]) => void;
-  addPrendaToState: (prenda: Prenda) => void;
-  updatePrendaInState: (id: string, updates: Partial<Prenda>) => void;
-  toggleSelectPrenda: (id: string) => void;
-  clearSelectedPrendas: () => void;
-  selectAllPrendas: (ids: string[]) => void;
+  setInventories: (inventories: InventoryStats[]) => void;
+  setGarments: (garments: Garment[]) => void;
+  addGarmentToState: (garment: Garment) => void;
+  updateGarmentInState: (id: string, updates: Partial<Garment>) => void;
+  toggleSelectGarment: (id: string) => void;
+  clearSelectedGarments: () => void;
+  setExportSelectionDraft: (draft: AppState['exportSelectionDraft']) => void;
+  selectAllGarments: (ids: string[]) => void;
   clearAllState: () => void;
 }
 
@@ -64,7 +82,7 @@ export const useAppStore = create<AppState>((set) => ({
         currentTheme: getTheme(settings.colorScheme, settings.themeMode)
       });
     } catch (e) {
-      console.error('Error cargando tema desde SQLite:', e);
+      console.error('Error loading theme from SQLite:', e);
     }
   },
   
@@ -92,16 +110,38 @@ export const useAppStore = create<AppState>((set) => ({
   // Auth State
   user: null,
   session: null,
+  userProfile: null,
+  userRoles: [],
+  isAccountActive: true,
+  isRoleLoading: false,
   isAuthLoading: false,
   isSyncing: false,
   syncMessage: '',
   lastSyncTime: null,
+  dataRevision: 0,
+  isOnline: true,
   setUser: (user) => set({ user }),
   setSession: (session) => set({ session, user: session?.user ?? null }),
+  setUserProfileAndRoles: (userProfile, userRoles, isAccountActive = true) => set({
+    userProfile,
+    userRoles,
+    isAccountActive,
+    isRoleLoading: false,
+  }),
+  setIsRoleLoading: (isRoleLoading) => set({ isRoleLoading }),
   setIsAuthLoading: (isAuthLoading) => set({ isAuthLoading }),
   setSyncing: (isSyncing, message) => set({ isSyncing, syncMessage: message || '' }),
   setLastSyncTime: (lastSyncTime) => set({ lastSyncTime }),
-  logout: () => set({ user: null, session: null, isSyncing: false }),
+  bumpDataRevision: () => set((state) => ({ dataRevision: state.dataRevision + 1 })),
+  setIsOnline: (isOnline) => set({ isOnline }),
+  logout: () => set({
+    user: null,
+    session: null,
+    userProfile: null,
+    userRoles: [],
+    isAccountActive: true,
+    isSyncing: false
+  }),
 
   // Onboarding State
   hasCompletedOnboarding: null,
@@ -118,55 +158,61 @@ export const useAppStore = create<AppState>((set) => ({
       await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
       set({ hasCompletedOnboarding: true });
     } catch (e) {
-      console.error('Error guardando estado de onboarding:', e);
+      console.error('Error saving onboarding state:', e);
       set({ hasCompletedOnboarding: true });
     }
   },
 
   // Reactivity State
-  inventarios: [],
-  prendas: [],
-  selectedPrendas: {},
-  setInventarios: (inventarios) => set({ inventarios }),
-  setPrendas: (prendas) => set({ prendas }),
-  addPrendaToState: (prenda) => set((state) => ({ 
-    prendas: [prenda, ...state.prendas] 
+  inventories: [],
+  garments: [],
+  selectedGarments: {},
+  exportSelectionDraft: null,
+
+  setInventories: (inventories) => set({ inventories }),
+
+  setGarments: (garments) => set({ garments }),
+
+  addGarmentToState: (garment) => set((state) => ({ 
+    garments: [garment, ...state.garments],
   })),
 
-  updatePrendaInState: (id, updates) => set((state) => {
-    const index = state.prendas.findIndex(p => p.id === id);
+  updateGarmentInState: (id, updates) => set((state) => {
+    const index = state.garments.findIndex(g => g.id === id);
     if (index === -1) return state;
-    const newPrendas = [...state.prendas];
-    newPrendas[index] = { ...newPrendas[index], ...updates };
-    return { prendas: newPrendas };
+    const newGarments = [...state.garments];
+    newGarments[index] = { ...newGarments[index], ...updates };
+    return { garments: newGarments };
   }),
 
-  toggleSelectPrenda: (id) => set((state) => {
-    const isSelected = !!state.selectedPrendas[id];
-    return {
-      selectedPrendas: {
-        ...state.selectedPrendas,
-        [id]: !isSelected
-      }
-    };
+  toggleSelectGarment: (id) => set((state) => {
+    const isSelected = !!state.selectedGarments[id];
+    return { selectedGarments: { ...state.selectedGarments, [id]: !isSelected } };
   }),
 
-  clearSelectedPrendas: () => set({ selectedPrendas: {} }),
-  selectAllPrendas: (ids) => {
+  clearSelectedGarments: () => set({ selectedGarments: {} }),
+  setExportSelectionDraft: (exportSelectionDraft) => set({ exportSelectionDraft }),
+
+  selectAllGarments: (ids) => {
     const record: Record<string, boolean> = {};
     ids.forEach(id => record[id] = true);
-    set({ selectedPrendas: record });
+    set({ selectedGarments: record });
   },
 
-  // Reset instantáneo de UI al cerrar sesión
-  clearAllState: () => set({
+  clearAllState: () => set((state) => ({
     user: null,
     session: null,
+    userProfile: null,
+    userRoles: [],
+    isAccountActive: true,
+    isRoleLoading: false,
     lastSyncTime: null,
     isSyncing: false,
     syncMessage: '',
-    inventarios: [],
-    prendas: [],
-    selectedPrendas: {}
-  })
+    inventories: [],
+    garments: [],
+    selectedGarments: {},
+    exportSelectionDraft: null,
+    dataRevision: state.dataRevision + 1,
+  }))
 }));

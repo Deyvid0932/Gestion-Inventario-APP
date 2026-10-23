@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "Topytop Kith",
-    "scheme": "inventario-app",
-    "slug": "Inventario_frontend-App",
+    "scheme": "inventario-app-supabase",
+    "slug": "inventario-frontend-app-supabase",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,14 +10,14 @@
     "splash": {
       "image": "./assets/splash_icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.deyvid.inventarioapp"
+      "bundleIdentifier": "com.deyvid.inventarioapp.supabase"
     },
     "android": {
-      "package": "com.deyvid.inventarioapp",
+      "package": "com.deyvid.inventarioapp.supabase",
       "softwareKeyboardLayoutMode": "resize",
       "usesCleartextTraffic": true,
       "permissions": [
@@ -30,7 +30,7 @@
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/android_icon_foreground-01.png",
-        "backgroundColor": "#FFFFFF"
+        "backgroundColor": "#000000"
       }
     },
     "plugins": [
@@ -52,8 +52,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "22d1ef2d-3cc9-4ab4-a114-eb7a58876832"
+        "projectId": "66823370-9277-4013-bb45-9b9f7b79c220"
       }
-    }
+    },
+    "owner": "deyvid_0932"
   }
 }

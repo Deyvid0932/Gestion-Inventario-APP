@@ -1,308 +1,223 @@
 import { SQLiteDatabase } from 'expo-sqlite';
+import { generateUUID } from '../utils/uuid';
+
+export const DATABASE_VERSION = 4;
+
+const CANONICAL_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL
+  );
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('themeMode', 'light');
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('colorScheme', 'morado');
+
+  -- Inventories
+  CREATE TABLE IF NOT EXISTS inventories (
+    id TEXT PRIMARY KEY NOT NULL,
+    user_id TEXT,
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    order_index INTEGER DEFAULT 0,
+    status INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT,
+    deleted_at TEXT,
+    sync_status TEXT DEFAULT 'PENDING',
+    deleted_by TEXT,
+    deletion_batch_id TEXT
+  );
+
+  -- Boxes
+  CREATE TABLE IF NOT EXISTS boxes (
+    id TEXT PRIMARY KEY NOT NULL,
+    inventory_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    order_index INTEGER DEFAULT 0,
+    status INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT,
+    deleted_at TEXT,
+    sync_status TEXT DEFAULT 'PENDING',
+    deleted_by TEXT,
+    deletion_batch_id TEXT,
+    FOREIGN KEY (inventory_id) REFERENCES inventories (id) ON DELETE CASCADE
+  );
+
+  -- Garments
+  CREATE TABLE IF NOT EXISTS garments (
+    id TEXT PRIMARY KEY NOT NULL,
+    box_id TEXT NOT NULL,
+    op TEXT,
+    style TEXT NOT NULL,
+    color TEXT NOT NULL,
+    size TEXT,
+    shipping_at TEXT,
+    status INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT,
+    deleted_at TEXT,
+    sync_status TEXT DEFAULT 'PENDING',
+    deleted_by TEXT,
+    deletion_batch_id TEXT,
+    FOREIGN KEY (box_id) REFERENCES boxes (id) ON DELETE CASCADE
+  );
+
+  -- Garment Images
+  CREATE TABLE IF NOT EXISTS garment_images (
+    id TEXT PRIMARY KEY NOT NULL,
+    garment_id TEXT NOT NULL,
+    uri TEXT,
+    storage_key TEXT,
+    storage TEXT NOT NULL DEFAULT 'LOCAL',
+    order_index INTEGER DEFAULT 0,
+    is_primary INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT,
+    deleted_at TEXT,
+    deleted_by TEXT,
+    deletion_batch_id TEXT,
+    sync_status TEXT DEFAULT 'PENDING',
+    FOREIGN KEY (garment_id) REFERENCES garments (id) ON DELETE CASCADE
+  );
+
+  -- Garment Alarms
+  CREATE TABLE IF NOT EXISTS garment_alarms (
+    id TEXT PRIMARY KEY NOT NULL,
+    garment_id TEXT NOT NULL,
+    alarm_datetime TEXT NOT NULL,
+    expires_at TEXT,
+    notification_id TEXT,
+    status TEXT DEFAULT 'PENDING',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT,
+    deleted_at TEXT,
+    deleted_by TEXT,
+    deletion_batch_id TEXT,
+    sync_status TEXT DEFAULT 'PENDING',
+    FOREIGN KEY (garment_id) REFERENCES garments (id) ON DELETE CASCADE
+  );
+
+  -- Chat Sessions
+  CREATE TABLE IF NOT EXISTS chat_sessions (
+    id TEXT PRIMARY KEY NOT NULL,
+    user_id TEXT,
+    title TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    updated_at TEXT,
+    deleted_at TEXT,
+    sync_status TEXT DEFAULT 'PENDING'
+  );
+
+  -- Chat History
+  CREATE TABLE IF NOT EXISTS chat_history (
+    id TEXT PRIMARY KEY NOT NULL,
+    sessionId TEXT,
+    sender TEXT NOT NULL,
+    text TEXT NOT NULL,
+    matches_json TEXT,
+    engineUsed TEXT,
+    timestamp INTEGER NOT NULL,
+    updated_at TEXT,
+    deleted_at TEXT,
+    sync_status TEXT DEFAULT 'PENDING',
+    FOREIGN KEY (sessionId) REFERENCES chat_sessions (id) ON DELETE CASCADE
+  );
+
+  -- Deletion Queue
+  CREATE TABLE IF NOT EXISTS pending_deletions (
+    id TEXT PRIMARY KEY NOT NULL,
+    tableName TEXT NOT NULL,
+    recordId TEXT NOT NULL,
+    createdAt TEXT NOT NULL
+  );
+
+  -- Respaldo local de emergencia para cambios que todavía no llegaron a Supabase.
+  CREATE TABLE IF NOT EXISTS sync_safety_snapshots (
+    user_id TEXT PRIMARY KEY NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  -- High performance indexes
+  CREATE INDEX IF NOT EXISTS idx_inventories_user ON inventories(user_id);
+  CREATE INDEX IF NOT EXISTS idx_inventories_del ON inventories(deleted_at);
+  CREATE INDEX IF NOT EXISTS idx_inventories_sync ON inventories(sync_status);
+
+  CREATE INDEX IF NOT EXISTS idx_boxes_inventory ON boxes(inventory_id);
+  CREATE INDEX IF NOT EXISTS idx_boxes_del ON boxes(deleted_at);
+  CREATE INDEX IF NOT EXISTS idx_boxes_sync ON boxes(sync_status);
+
+  CREATE INDEX IF NOT EXISTS idx_garments_box ON garments(box_id);
+  CREATE INDEX IF NOT EXISTS idx_garments_op ON garments(box_id, op);
+  CREATE INDEX IF NOT EXISTS idx_garments_status ON garments(status);
+  CREATE INDEX IF NOT EXISTS idx_garments_created ON garments(created_at);
+  CREATE INDEX IF NOT EXISTS idx_garments_del ON garments(deleted_at);
+  CREATE INDEX IF NOT EXISTS idx_garments_sync ON garments(sync_status);
+  CREATE INDEX IF NOT EXISTS idx_garments_style ON garments(style);
+  CREATE INDEX IF NOT EXISTS idx_garments_color ON garments(color);
+
+  CREATE INDEX IF NOT EXISTS idx_garment_images_garment ON garment_images(garment_id);
+  CREATE INDEX IF NOT EXISTS idx_garment_images_primary ON garment_images(garment_id) WHERE is_primary = 1;
+  CREATE INDEX IF NOT EXISTS idx_garment_images_storage ON garment_images(storage);
+  CREATE INDEX IF NOT EXISTS idx_garment_images_batch ON garment_images(deletion_batch_id);
+  CREATE INDEX IF NOT EXISTS idx_garment_images_sync ON garment_images(sync_status);
+
+  CREATE INDEX IF NOT EXISTS idx_garment_alarms_garment ON garment_alarms(garment_id);
+  CREATE INDEX IF NOT EXISTS idx_garment_alarms_expires ON garment_alarms(expires_at);
+  CREATE INDEX IF NOT EXISTS idx_garment_alarms_batch ON garment_alarms(deletion_batch_id);
+  CREATE INDEX IF NOT EXISTS idx_garment_alarms_sync ON garment_alarms(sync_status);
+`;
+
+async function cleanLegacySpanishTables(db: SQLiteDatabase) {
+  try {
+    await db.execAsync(`
+      DROP TABLE IF EXISTS inventarios;
+      DROP TABLE IF EXISTS cajas;
+      DROP TABLE IF EXISTS prendas;
+    `).catch(() => {});
+  } catch (e) {
+    console.warn('Legacy table cleanup:', e);
+  }
+}
+
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
-  const DATABASE_VERSION = 13;
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS user_version (id INTEGER PRIMARY KEY DEFAULT 1, version INTEGER);
   `);
-  // Auto-corrección garantizada de tablas de Chat, ajustes y campos de sincronización
-  const result = await db.getFirstAsync<{ version: number }>('SELECT version FROM user_version');
-  let currentDbVersion = result ? result.version : 0;
 
-  if (currentDbVersion < DATABASE_VERSION) {
-    if (currentDbVersion === 0) {
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS app_settings (
-          key TEXT PRIMARY KEY NOT NULL,
-          value TEXT NOT NULL
-        );
-        INSERT OR IGNORE INTO app_settings (key, value) VALUES ('themeMode', 'light');
-        INSERT OR IGNORE INTO app_settings (key, value) VALUES ('colorScheme', 'morado');
-        CREATE TABLE IF NOT EXISTS inventarios (
-          id TEXT PRIMARY KEY NOT NULL,
-          user_id TEXT,
-          nombre TEXT NOT NULL,
-          descripcion TEXT,
-          fechaCreacion TEXT NOT NULL,
-          estado INTEGER NOT NULL DEFAULT 1,
-          updated_at TEXT,
-          deleted_at TEXT,
-          sync_status TEXT DEFAULT 'PENDING'
-        );
-        CREATE TABLE IF NOT EXISTS cajas (
-          id TEXT PRIMARY KEY NOT NULL,
-          inventarioId TEXT NOT NULL,
-          nombre TEXT NOT NULL,
-          fechaCreacion TEXT NOT NULL,
-          orden INTEGER DEFAULT 0,
-          updated_at TEXT,
-          deleted_at TEXT,
-          sync_status TEXT DEFAULT 'PENDING',
-          FOREIGN KEY (inventarioId) REFERENCES inventarios (id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS prendas (
-          id TEXT PRIMARY KEY NOT NULL,
-          cajaId TEXT NOT NULL,
-          op TEXT,
-          estilo TEXT NOT NULL,
-          color TEXT NOT NULL,
-          talla TEXT,
-          fotoUri TEXT,
-          fotoUri2 TEXT,
-          r2Key TEXT,
-          r2Key2 TEXT,
-          estado INTEGER NOT NULL DEFAULT 1,
-          fechaCreacion TEXT NOT NULL,
-          alarmaFechaHora TEXT,
-          alarmaNotificationId TEXT,
-          updated_at TEXT,
-          deleted_at TEXT,
-          sync_status TEXT DEFAULT 'PENDING',
-          FOREIGN KEY (cajaId) REFERENCES cajas (id) ON DELETE CASCADE
-        );
-        -- Indexes for performance
-        CREATE INDEX IF NOT EXISTS idx_cajas_inventario ON cajas(inventarioId);
-        CREATE INDEX IF NOT EXISTS idx_prendas_caja ON prendas(cajaId);
-        CREATE INDEX IF NOT EXISTS idx_prendas_estado ON prendas(estado);
-        CREATE INDEX IF NOT EXISTS idx_prendas_fecha ON prendas(fechaCreacion);
-        CREATE INDEX IF NOT EXISTS idx_cajas_orden ON cajas(orden);
-        CREATE INDEX IF NOT EXISTS idx_inventarios_user ON inventarios(user_id);
-        CREATE INDEX IF NOT EXISTS idx_inventarios_sync ON inventarios(sync_status);
-        CREATE INDEX IF NOT EXISTS idx_cajas_sync ON cajas(sync_status);
-        CREATE INDEX IF NOT EXISTS idx_prendas_sync ON prendas(sync_status);
-        CREATE TABLE IF NOT EXISTS chat_sessions (
-          id TEXT PRIMARY KEY NOT NULL,
-          user_id TEXT,
-          title TEXT NOT NULL,
-          createdAt INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL,
-          updated_at TEXT,
-          deleted_at TEXT,
-          sync_status TEXT DEFAULT 'PENDING'
-        );
-        CREATE TABLE IF NOT EXISTS chat_history (
-          id TEXT PRIMARY KEY NOT NULL,
-          sessionId TEXT,
-          sender TEXT NOT NULL,
-          text TEXT NOT NULL,
-          matches_json TEXT,
-          engineUsed TEXT,
-          timestamp INTEGER NOT NULL,
-          updated_at TEXT,
-          deleted_at TEXT,
-          sync_status TEXT DEFAULT 'PENDING',
-          FOREIGN KEY (sessionId) REFERENCES chat_sessions (id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS pending_deletions (
-          id TEXT PRIMARY KEY NOT NULL,
-          tableName TEXT NOT NULL,
-          recordId TEXT NOT NULL,
-          createdAt TEXT NOT NULL
-        );
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, ${DATABASE_VERSION});
-      `);
-    }
-    if (currentDbVersion === 1) {
-      await db.execAsync(`
-        ALTER TABLE prendas ADD COLUMN fechaCreacion TEXT;
-        UPDATE prendas SET fechaCreacion = DATETIME(CAST(SUBSTR(id, 1, 10) AS INT), 'unixepoch', 'localtime') WHERE fechaCreacion IS NULL;
-        UPDATE prendas SET fechaCreacion = CURRENT_TIMESTAMP WHERE fechaCreacion IS NULL;
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 2);                    
-      `);
-      currentDbVersion = 2;
-    }
-    if (currentDbVersion === 2) {
-      await db.execAsync(`
-        ALTER TABLE cajas ADD COLUMN orden INTEGER DEFAULT 0;
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 3);
-      `);
-      currentDbVersion = 3;
-    }
-    if (currentDbVersion === 3) {
-      await db.execAsync(`
-        DROP TABLE IF EXISTS detalles_prendas;
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 4);
-      `);
-      currentDbVersion = 4;
-    }
-    if (currentDbVersion === 4) {
-      await db.execAsync(`
-        DELETE FROM prendas WHERE cajaId NOT IN (SELECT id FROM cajas);
-        DELETE FROM cajas WHERE inventarioId NOT IN (SELECT id FROM inventarios);
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 5);
-      `);
-      currentDbVersion = 5;
-    }
-    if (currentDbVersion === 5) {
-      await db.execAsync(`
-        ALTER TABLE prendas ADD COLUMN fotoUri TEXT;
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 6);
-      `);
-      currentDbVersion = 6;
-    }
-    if (currentDbVersion === 6) {
-      try {
-        await db.runAsync('ALTER TABLE prendas ADD COLUMN fotoUri TEXT;');
-      } catch (e) { }
-      await db.execAsync(`
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 7);
-      `);
-      currentDbVersion = 7;
-    }
-    if (currentDbVersion === 7) {
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS chat_history (
-          id TEXT PRIMARY KEY NOT NULL,
-          sender TEXT NOT NULL,
-          text TEXT NOT NULL,
-          matches_json TEXT,
-          timestamp INTEGER NOT NULL
-        );
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 8);
-      `);
-      currentDbVersion = 8;
-    }
-    if (currentDbVersion === 8) {
-      await db.execAsync(`
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 9);
-      `);
-      currentDbVersion = 9;
-    }
-    if (currentDbVersion === 9) {
-      try {
-        await db.runAsync('ALTER TABLE prendas ADD COLUMN fotoUri2 TEXT;');
-      } catch (e) { }
-      await db.execAsync(`
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 10);
-      `);
-      currentDbVersion = 10;
-    }
-    if (currentDbVersion === 10) {
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS chat_sessions (
-          id TEXT PRIMARY KEY NOT NULL,
-          title TEXT NOT NULL,
-          createdAt INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL
-        );
-      `);
-      try {
-        await db.runAsync('ALTER TABLE chat_history ADD COLUMN sessionId TEXT;');
-      } catch (e) { }
-      const historyCountResult = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM chat_history WHERE sessionId IS NULL');
-      if (historyCountResult && historyCountResult.count > 0) {
-        const defaultSessionId = Date.now().toString();
-        await db.runAsync('INSERT INTO chat_sessions (id, title, createdAt, updatedAt) VALUES (?, ?, ?, ?)', [
-          defaultSessionId,
-          'Sesión anterior',
-          Date.now(),
-          Date.now()
-        ]);
-        await db.runAsync('UPDATE chat_history SET sessionId = ? WHERE sessionId IS NULL', [defaultSessionId]);
-      }
-      await db.execAsync(`
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 11);
-      `);
-      currentDbVersion = 11;
-    }
-    if (currentDbVersion === 11) {
-      try {
-        await db.runAsync('ALTER TABLE prendas ADD COLUMN alarmaFechaHora TEXT;');
-      } catch (e) { }
-      try {
-        await db.runAsync('ALTER TABLE prendas ADD COLUMN alarmaNotificationId TEXT;');
-      } catch (e) { }
-      await db.execAsync(`
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 12);
-      `);
-      currentDbVersion = 12;
-    }
-    if (currentDbVersion === 12) {
-      // Migración v13: Agregar campos de sincronización
-      try {
-        await db.runAsync('ALTER TABLE inventarios ADD COLUMN user_id TEXT;');
-      } catch (e) { }
-      try {
-        await db.runAsync('ALTER TABLE inventarios ADD COLUMN updated_at TEXT;');
-      } catch (e) { }
-      try {
-        await db.runAsync('ALTER TABLE inventarios ADD COLUMN deleted_at TEXT;');
-      } catch (e) { }
-      try {
-        await db.runAsync("ALTER TABLE inventarios ADD COLUMN sync_status TEXT DEFAULT 'PENDING';");
-      } catch (e) { }
-      try {
-        await db.runAsync('ALTER TABLE cajas ADD COLUMN updated_at TEXT;');
-      } catch (e) { }
-      try {
-        await db.runAsync('ALTER TABLE cajas ADD COLUMN deleted_at TEXT;');
-      } catch (e) { }
-      try {
-        await db.runAsync("ALTER TABLE cajas ADD COLUMN sync_status TEXT DEFAULT 'PENDING';");
-      } catch (e) { }
-      try {
-        await db.runAsync('ALTER TABLE prendas ADD COLUMN updated_at TEXT;');
-      } catch (e) { }
-      try {
-        await db.runAsync('ALTER TABLE prendas ADD COLUMN deleted_at TEXT;');
-      } catch (e) { }
-      try {
-        await db.runAsync("ALTER TABLE prendas ADD COLUMN sync_status TEXT DEFAULT 'PENDING';");
-      } catch (e) { }
-      // Asegurar valores por defecto para registros antiguos
-      await db.runAsync('UPDATE inventarios SET updated_at = fechaCreacion WHERE updated_at IS NULL;');
-      await db.runAsync('UPDATE cajas SET updated_at = fechaCreacion WHERE updated_at IS NULL;');
-      await db.runAsync('UPDATE prendas SET updated_at = fechaCreacion WHERE updated_at IS NULL;');
-      await db.execAsync(`
-        CREATE INDEX IF NOT EXISTS idx_inventarios_user ON inventarios(user_id);
-        CREATE INDEX IF NOT EXISTS idx_inventarios_sync ON inventarios(sync_status);
-        CREATE INDEX IF NOT EXISTS idx_cajas_sync ON cajas(sync_status);
-        CREATE INDEX IF NOT EXISTS idx_prendas_sync ON prendas(sync_status);
-        INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 13);
-      `);
-      currentDbVersion = 13;
-    }
-  }
+  try {
+    await db.execAsync(`ALTER TABLE inventories ADD COLUMN order_index INTEGER DEFAULT 0;`);
+  } catch (e) {}
+  try {
+    await db.execAsync(`ALTER TABLE boxes ADD COLUMN order_index INTEGER DEFAULT 0;`);
+  } catch (e) {}
+  try {
+    await db.execAsync(`ALTER TABLE garments ADD COLUMN shipping_at TEXT;`);
+  } catch (e) {}
+  try {
+    await db.execAsync(`UPDATE inventories SET order_index = orden WHERE (order_index IS NULL OR order_index = 0) AND orden IS NOT NULL;`);
+  } catch (e) {}
+  try {
+    await db.execAsync(`UPDATE boxes SET order_index = orden WHERE (order_index IS NULL OR order_index = 0) AND orden IS NOT NULL;`);
+  } catch (e) {}
 
-  // Auto-corrección garantizada de columnas y tablas de respaldo para cualquier versión de base de datos
+  await db.execAsync(CANONICAL_SCHEMA);
+
   try {
     await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS chat_sessions (
-        id TEXT PRIMARY KEY NOT NULL,
-        title TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY NOT NULL,
-        value TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS pending_deletions (
-        id TEXT PRIMARY KEY NOT NULL,
-        tableName TEXT NOT NULL,
-        recordId TEXT NOT NULL,
-        createdAt TEXT NOT NULL
-      );
+      CREATE INDEX IF NOT EXISTS idx_inventories_order ON inventories(order_index);
+      CREATE INDEX IF NOT EXISTS idx_boxes_order ON boxes(order_index);
     `);
-    await db.runAsync('ALTER TABLE chat_history ADD COLUMN sessionId TEXT;').catch(() => { });
-    await db.runAsync('ALTER TABLE chat_history ADD COLUMN engineUsed TEXT;').catch(() => { });
+  } catch (e) {}
 
-    await db.runAsync('ALTER TABLE chat_sessions ADD COLUMN user_id TEXT;').catch(() => { });
-    await db.runAsync('ALTER TABLE chat_sessions ADD COLUMN updated_at TEXT;').catch(() => { });
-    await db.runAsync('ALTER TABLE chat_sessions ADD COLUMN deleted_at TEXT;').catch(() => { });
-    await db.runAsync("ALTER TABLE chat_sessions ADD COLUMN sync_status TEXT DEFAULT 'PENDING';").catch(() => { });
+  await cleanLegacySpanishTables(db);
 
-    await db.runAsync('ALTER TABLE chat_history ADD COLUMN updated_at TEXT;').catch(() => { });
-    await db.runAsync('ALTER TABLE chat_history ADD COLUMN deleted_at TEXT;').catch(() => { });
-    await db.runAsync("ALTER TABLE chat_history ADD COLUMN sync_status TEXT DEFAULT 'PENDING';").catch(() => { });
-    await db.runAsync('ALTER TABLE prendas ADD COLUMN talla TEXT;').catch(() => { });
-    await db.runAsync('ALTER TABLE prendas ADD COLUMN r2Key TEXT;').catch(() => { });
-    await db.runAsync('ALTER TABLE prendas ADD COLUMN r2Key2 TEXT;').catch(() => { });
-  } catch (e) {
-    console.error('Error en auto-corrección de esquema:', e);
-  }
+  await db.runAsync('INSERT OR REPLACE INTO user_version (id, version) VALUES (1, 4);');
 }
-export const generateId = () => {
-  return Date.now().toString() + Math.random().toString(36).substring(2, 9);
+
+export const generateId = (): string => {
+  return generateUUID();
 };

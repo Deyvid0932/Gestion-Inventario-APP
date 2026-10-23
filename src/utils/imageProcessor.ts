@@ -4,12 +4,11 @@ export const resizeForOCR = async (uri: string) => {
   return await ImageManipulator.manipulateAsync(
     uri,
     [
-      { resize: { width: 1200 } }, 
+      { resize: { width: 800 } }, 
     ], 
     { 
-      compress: 0.9, 
+      compress: 0.70, 
       format: ImageManipulator.SaveFormat.JPEG,
-      
     }
   );
 };
