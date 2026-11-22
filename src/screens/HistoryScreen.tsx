@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   FlatList,
@@ -45,14 +45,22 @@ export const HistoryScreen = () => {
     ],
   });
 
-  const renderItem = ({ item, index }: { item: HistoryItem; index: number }) => {
+const MONTHS_SHORT_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+const formatShortDate = (d: Date): string =>
+  `${String(d.getDate()).padStart(2, '0')} ${MONTHS_SHORT_ES[d.getMonth()]}`;
+
+const formatShortTime = (d: Date): string =>
+  `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+  const renderItem = useCallback(({ item, index }: { item: HistoryItem; index: number }) => {
     const dateToUse = status === 'Alarmas'
       ? (item.alarm_datetime || item.created_at || new Date().toISOString())
       : (item.created_at || new Date().toISOString());
     const itemDateLabel = getRelativeDateLabel(dateToUse);
     const shippingDate = item.shipping_at ? new Date(item.shipping_at) : null;
     const shippingLabel = shippingDate && Number.isFinite(shippingDate.getTime())
-      ? `${shippingDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} | ${shippingDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`
+      ? `${formatShortDate(shippingDate)} | ${formatShortTime(shippingDate)}`
       : null;
 
     const prevItem = index > 0 ? results[index - 1] : null;
@@ -67,7 +75,7 @@ export const HistoryScreen = () => {
     return (
       <View>
         {showHeader && (
-          <View style={styles.dateHeader}>
+          <View style={[styles.dateHeader, index === 0 && styles.firstDateHeader]}>
             <Text style={[styles.dateHeaderText, { color: currentTheme.primary }]}>
               {status === 'Alarmas' ? `Alarma: ${itemDateLabel}` : itemDateLabel}
             </Text>
@@ -97,7 +105,7 @@ export const HistoryScreen = () => {
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAB30815', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 4 }}>
                     <Ionicons name="notifications-outline" size={11} color="#EAB308" style={{ marginRight: 3 }} />
                     <Text style={{ fontSize: 10, fontWeight: '700', color: '#EAB308' }}>
-                      {new Date(item.alarm_datetime).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} {new Date(item.alarm_datetime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      {(() => { const ad = new Date(item.alarm_datetime); return Number.isFinite(ad.getTime()) ? `${formatShortDate(ad)} ${formatShortTime(ad)}` : ''; })()}
                     </Text>
                   </View>
                 )}
@@ -117,7 +125,19 @@ export const HistoryScreen = () => {
         </View>
       </View>
     );
-  };
+  }, [status, results, currentTheme, navigateToDetail, getRelativeDateLabel]);
+
+  const listFooterComponent = useMemo(() => <View style={{ height: 60 }} />, []);
+
+  const listEmptyComponent = useMemo(() => (
+    <EmptyState
+      iconName={status === 'Activo' ? "checkmark-circle-outline" : (status === 'Inactivo' ? "close-circle-outline" : "alarm-outline")}
+      title={`No hay prendas ${status.toLowerCase()}s`}
+      description={`No se encontraron resultados para la búsqueda o filtro actual.`}
+      currentTheme={currentTheme}
+      delay={200}
+    />
+  ), [status, currentTheme]);
 
   return (
     <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
@@ -146,7 +166,6 @@ export const HistoryScreen = () => {
       {loading ? <SkeletonLoader theme={currentTheme} /> : (
         <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
           <FlatList
-            key={`history-${themeMode}`}
             extraData={themeMode}
             style={{ flex: 1 }}
             data={results}
@@ -155,8 +174,10 @@ export const HistoryScreen = () => {
             contentContainerStyle={styles.listContent}
             initialNumToRender={10}
             maxToRenderPerBatch={10}
+            windowSize={7}
+            removeClippedSubviews={false}
             showsVerticalScrollIndicator={false}
-            ListFooterComponent={<View style={{ height: 60 }} />}
+            ListFooterComponent={listFooterComponent}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -165,15 +186,7 @@ export const HistoryScreen = () => {
                 colors={[currentTheme.primary]}
               />
             }
-            ListEmptyComponent={
-              <EmptyState
-                iconName={status === 'Activo' ? "checkmark-circle-outline" : (status === 'Inactivo' ? "close-circle-outline" : "alarm-outline")}
-                title={`No hay prendas ${status.toLowerCase()}s`}
-                description={`No se encontraron resultados para la búsqueda o filtro actual.`}
-                currentTheme={currentTheme}
-                delay={200}
-              />
-            }
+            ListEmptyComponent={listEmptyComponent}
           />
         </Animated.View>
       )}
@@ -192,15 +205,17 @@ const styles = StyleSheet.create({
   segmentIndicator: { position: 'absolute', height: 38, borderRadius: 10 },
   segmentTab: { flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   segmentText: { fontWeight: '700', fontSize: 14 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', paddingRight: 18, marginBottom: 5 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', paddingRight: 18, marginBottom: 0 },
   searchBarWrapper: { flex: 1 },
   exportBtn: { width: 46, height: 46, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 2 },
   listContent: {
-    padding: 18,
+    paddingHorizontal: 18,
+    paddingTop: 4,
     paddingBottom: 40,
     flexGrow: 1,
   },
   dateHeader: { marginBottom: 10, marginTop: 15 },
+  firstDateHeader: { marginTop: 0 },
   dateHeaderText: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase' },
   timelineRow: { flexDirection: 'row', gap: 12 },
   timelineCol: { alignItems: 'center', width: 16 },

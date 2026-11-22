@@ -197,8 +197,9 @@ const styles = StyleSheet.create({
   inventoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    minHeight: 64,
   },
   reorderBtnsColumn: {
     justifyContent: 'center',

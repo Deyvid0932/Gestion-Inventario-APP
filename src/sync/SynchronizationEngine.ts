@@ -17,7 +17,7 @@ const LAST_SYNC_KEY = 'last_sync_timestamp';
 const SAFETY_TABLE_COLUMNS: Record<string, string[]> = {
   inventories: ['id', 'user_id', 'name', 'description', 'created_at', 'order_index', 'status', 'updated_at', 'deleted_at', 'sync_status', 'deleted_by', 'deletion_batch_id'],
   boxes: ['id', 'inventory_id', 'name', 'created_at', 'order_index', 'status', 'updated_at', 'deleted_at', 'sync_status', 'deleted_by', 'deletion_batch_id'],
-  garments: ['id', 'box_id', 'op', 'style', 'color', 'size', 'status', 'created_at', 'updated_at', 'deleted_at', 'sync_status', 'deleted_by', 'deletion_batch_id'],
+  garments: ['id', 'box_id', 'op', 'style', 'color', 'size', 'art_code', 'status', 'created_at', 'updated_at', 'deleted_at', 'sync_status', 'deleted_by', 'deletion_batch_id'],
   garment_images: ['id', 'garment_id', 'uri', 'storage_key', 'storage', 'order_index', 'is_primary', 'created_at', 'updated_at', 'deleted_at', 'deleted_by', 'deletion_batch_id', 'sync_status'],
   garment_alarms: ['id', 'garment_id', 'alarm_datetime', 'expires_at', 'notification_id', 'status', 'created_at', 'updated_at', 'deleted_at', 'deleted_by', 'deletion_batch_id', 'sync_status'],
   pending_deletions: ['id', 'tableName', 'recordId', 'createdAt'],

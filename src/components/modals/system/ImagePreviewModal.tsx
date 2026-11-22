@@ -1,11 +1,8 @@
 import React from 'react';
 import { Modal, TouchableWithoutFeedback, View, StyleSheet, TouchableOpacity } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const AnimatedImage = Animated.createAnimatedComponent(Image);
 
 interface ImagePreviewModalProps {
   uri: string | null;
@@ -19,27 +16,32 @@ export const ImagePreviewModal = ({ uri, visible, onClose }: ImagePreviewModalPr
   if (!visible) return null;
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+    <Modal
+      transparent
+      statusBarTranslucent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.overlay}>
           {/* Botón solo X de Cierre en la esquina superior derecha */}
           <TouchableOpacity
-            style={[styles.closeButton, { top: Math.max(insets.top + 10, 20) }]}
+            style={[styles.closeButton, { top: Math.max(insets.top + 8, 16) }]}
             onPress={onClose}
             activeOpacity={0.7}
             accessibilityLabel="Cerrar vista de imagen"
             accessibilityRole="button"
           >
-            <Ionicons name="close" size={32} color="#FFFFFF" />
+            <Ionicons name="close" size={28} color="#FFFFFF" />
           </TouchableOpacity>
 
-          <AnimatedImage
-            entering={FadeIn.duration(300)}
+          <Image
             source={{ uri: uri || '' }}
             style={styles.fullImage}
             contentFit="contain"
             cachePolicy="memory-disk"
-            transition={200}
+            transition={0}
           />
         </View>
       </TouchableWithoutFeedback>
@@ -50,18 +52,23 @@ export const ImagePreviewModal = ({ uri, visible, onClose }: ImagePreviewModalPr
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeButton: {
     position: 'absolute',
-    right: 20,
+    right: 16,
     zIndex: 999,
-    padding: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   fullImage: {
     width: '100%',
-    height: '85%',
+    height: '100%',
   },
 });

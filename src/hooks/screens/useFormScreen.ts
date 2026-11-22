@@ -273,7 +273,8 @@ export const useFormScreen = ({ initialData, entityType, parentId }: UseFormScre
           op: formData.op || '',
           style: formData.style || '',
           color: formData.color || '',
-          size: formData.size || initialData?.size || '',
+          size: formData.size !== undefined ? formData.size : (initialData?.size || ''),
+          art_code: formData.art_code !== undefined ? formData.art_code : (initialData?.art_code || ''),
           photo_uri: imageUri || null,
           photo_uri_2: imageUri2 || null,
           status: initialData?.status ?? 1,
@@ -310,7 +311,11 @@ export const useFormScreen = ({ initialData, entityType, parentId }: UseFormScre
         SyncScheduler.schedulePush(db, currentUser.id);
       }
 
-      navigation.goBack();
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        (navigation as any).navigate('Home');
+      }
     } catch (error) {
       console.error(error);
       Alert.alert('Error', 'No se pudo guardar la información.');

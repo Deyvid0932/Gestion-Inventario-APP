@@ -74,7 +74,6 @@ class NetworkServiceClass {
    * Programa una sincronización con debounce para tolerar fluctuaciones de señal
    */
   private scheduleReconnectionSync(reason: string, delayMs = 1500): void {
-    if (reason === 'network_reconnected') this.forceFullOnNextSync = true;
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
@@ -97,7 +96,7 @@ class NetworkServiceClass {
 
     const db = this.activeDb;
     const userId = this.activeUserId;
-    const forceFullPull = this.forceFullOnNextSync || reason === 'network_reconnected';
+    const forceFullPull = this.forceFullOnNextSync;
     this.forceFullOnNextSync = false;
     this.isReconnectingSync = true;
 

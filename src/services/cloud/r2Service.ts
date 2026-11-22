@@ -1,6 +1,28 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../../database/supabase';
 
+const extractEdgeErrorDetail = async (error: any): Promise<string> => {
+  const baseMsg = error?.message || String(error);
+  try {
+    const ctx = error?.context;
+    if (!ctx) return baseMsg;
+    const status = ctx.status ? `[HTTP ${ctx.status}] ` : '';
+    const clone = typeof ctx.clone === 'function' ? ctx.clone() : ctx;
+    if (typeof clone.text === 'function') {
+      const rawText = await clone.text();
+      if (rawText) {
+        try {
+          const parsed = JSON.parse(rawText);
+          return `${status}${parsed?.error || parsed?.message || rawText}`;
+        } catch (_) {
+          return `${status}${rawText}`;
+        }
+      }
+    }
+  } catch (_) {}
+  return baseMsg;
+};
+
 export const R2Service = {
   
   uploadPhotoToR2: async (
@@ -34,13 +56,7 @@ export const R2Service = {
 
 
       if (error) {
-        let serverErrorMsg = error.message;
-        try {
-          if (error.context && typeof error.context.json === 'function') {
-            const errJson = await error.context.json();
-            serverErrorMsg = errJson.error || JSON.stringify(errJson);
-          }
-        } catch (_) {}
+        const serverErrorMsg = await extractEdgeErrorDetail(error);
         console.error('❌ DETALLE DEL ERROR DE LA EDGE FUNCTION:', serverErrorMsg);
         return null;
       }
@@ -72,6 +88,10 @@ export const R2Service = {
       });
 
       if (error || !data?.signedUrl) {
+        if (error) {
+          const detail = await extractEdgeErrorDetail(error);
+          console.error('❌ DETALLE DEL ERROR DE LA EDGE FUNCTION (get-signed-url):', detail);
+        }
         return null;
       }
 
@@ -96,7 +116,8 @@ export const R2Service = {
       });
 
       if (error || !data?.success) {
-        console.error('Error al eliminar foto en R2:', error || data?.error);
+        const detail = error ? await extractEdgeErrorDetail(error) : data?.error;
+        console.error('❌ DETALLE DEL ERROR DE LA EDGE FUNCTION (delete):', detail);
         return false;
       }
 
@@ -140,23 +161,32 @@ export const R2Service = {
       // 2. Si no existe en disco local o no hay localUri, consultar r2Key
       if (r2Key && r2Key.trim() !== '') {
         const cleanKey = r2Key.trim();
-        const safeFileName = `cache_${cleanKey.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
-        const localCachePath = `${FileSystem.documentDirectory}${safeFileName}`;
-
-        // Verificar si la foto ya fue descargada a disco local previamente (Disponibilidad Offline)
-        const cacheInfo = await FileSystem.getInfoAsync(localCachePath).catch(() => null);
-        if (cacheInfo && cacheInfo.exists) {
-          return localCachePath;
-        }
-
         const now = Date.now();
         const cached = r2UrlCache.get(cleanKey);
         if (cached && cached.expiresAt > now && cached.url) {
           return cached.url;
         }
 
-        // Obtener Signed URL desde Cloudflare R2 (requiere conexión)
-        const signedUrl = await R2Service.getSignedUrlFromR2(cleanKey);
+        const safeFileName = `cache_${cleanKey.replace(/[^a-zA-Z0-9]/g, '_')}.jpg`;
+        const localCachePath = `${FileSystem.documentDirectory}${safeFileName}`;
+
+        // Verificar si la foto ya fue descargada a disco local previamente (Disponibilidad Offline)
+        const cacheInfo = await FileSystem.getInfoAsync(localCachePath).catch(() => null);
+        if (cacheInfo && cacheInfo.exists) {
+          r2UrlCache.set(cleanKey, { url: localCachePath, expiresAt: now + 365 * 24 * 60 * 60 * 1000 });
+          return localCachePath;
+        }
+
+        // Deduplicar peticiones en vuelo para la misma clave R2
+        let pending = inFlightUrlRequests.get(cleanKey);
+        if (!pending) {
+          pending = R2Service.getSignedUrlFromR2(cleanKey).finally(() => {
+            inFlightUrlRequests.delete(cleanKey);
+          });
+          inFlightUrlRequests.set(cleanKey, pending);
+        }
+
+        const signedUrl = await pending;
         if (signedUrl) {
           r2UrlCache.set(cleanKey, { url: signedUrl, expiresAt: now + 50 * 60 * 1000 });
 
@@ -193,3 +223,4 @@ export const R2Service = {
 };
 
 const r2UrlCache = new Map<string, { url: string | null; expiresAt: number }>();
+const inFlightUrlRequests = new Map<string, Promise<string | null>>();

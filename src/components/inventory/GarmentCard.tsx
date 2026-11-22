@@ -38,6 +38,20 @@ interface GarmentCardProps {
 
 const resolvedUriCache = new Map<string, string>();
 
+const MONTHS_SHORT_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+const formatShortDate = (dateInput: string | Date): string => {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (!Number.isFinite(d.getTime())) return '';
+  return `${String(d.getDate()).padStart(2, '0')} ${MONTHS_SHORT_ES[d.getMonth()]}`;
+};
+
+const formatShortTime = (dateInput: string | Date): string => {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (!Number.isFinite(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
 const formatUri = (uri?: string | null) => {
   if (!uri) return null;
   const trimmed = uri.trim();
@@ -48,12 +62,17 @@ const formatUri = (uri?: string | null) => {
   return trimmed;
 };
 
-const getImmediateUri = (uri?: string | null) => {
-  if (!uri) return null;
-  if (resolvedUriCache.has(uri)) {
-    return resolvedUriCache.get(uri)!;
+const getCacheKey = (uri?: string | null, storageKey?: string | null) =>
+  `${uri || ''}::${storageKey || ''}`;
+
+const getImmediateUri = (uri?: string | null, storageKey?: string | null) => {
+  const formatted = formatUri(uri);
+  if (!formatted && !storageKey) return null;
+  const key = getCacheKey(formatted, storageKey);
+  if (resolvedUriCache.has(key)) {
+    return resolvedUriCache.get(key)!;
   }
-  return formatUri(uri);
+  return formatted;
 };
 
 export const GarmentCard = React.memo(({
@@ -75,22 +94,40 @@ export const GarmentCard = React.memo(({
   const key1 = (item as any).r2Key || (item as any).primary_storage_key || (item as any).storage_key;
   const key2 = (item as any).r2Key2 || (item as any).secondary_storage_key;
 
-  const [displayUri1, setDisplayUri1] = React.useState<string | null>(formatUri(photo1));
-  const [displayUri2, setDisplayUri2] = React.useState<string | null>(formatUri(photo2));
+  const [displayUri1, setDisplayUri1] = React.useState<string | null>(() => getImmediateUri(photo1, key1));
+  const [displayUri2, setDisplayUri2] = React.useState<string | null>(() => getImmediateUri(photo2, key2));
 
   useEffect(() => {
     let isMounted = true;
+    const u1 = formatUri(photo1);
+    const u2 = formatUri(photo2);
+    const k1 = getCacheKey(u1, key1);
+    const k2 = getCacheKey(u2, key2);
+
+    const cached1 = (!u1 && !key1) ? null : resolvedUriCache.get(k1);
+    const cached2 = (!u2 && !key2) ? null : resolvedUriCache.get(k2);
+
+    if (cached1 !== undefined && cached2 !== undefined) {
+      if (cached1 !== displayUri1) setDisplayUri1(cached1);
+      if (cached2 !== displayUri2) setDisplayUri2(cached2);
+      return;
+    }
 
     const resolveImages = async () => {
-      const u1 = formatUri(photo1);
-      const u2 = formatUri(photo2);
+      const [r1, r2] = await Promise.all([
+        cached1 !== undefined ? Promise.resolve(cached1) : R2Service.getResolvedImageUri(u1, key1),
+        cached2 !== undefined ? Promise.resolve(cached2) : R2Service.getResolvedImageUri(u2, key2),
+      ]);
 
-      const r1 = await R2Service.getResolvedImageUri(u1, key1);
-      const r2 = await R2Service.getResolvedImageUri(u2, key2);
+      const final1 = formatUri(r1 || u1);
+      const final2 = formatUri(r2 || u2);
+
+      if (final1) resolvedUriCache.set(k1, final1);
+      if (final2) resolvedUriCache.set(k2, final2);
 
       if (isMounted) {
-        setDisplayUri1(formatUri(r1 || u1));
-        setDisplayUri2(formatUri(r2 || u2));
+        setDisplayUri1(prev => (prev === final1 ? prev : final1));
+        setDisplayUri2(prev => (prev === final2 ? prev : final2));
       }
     };
 
@@ -109,9 +146,12 @@ export const GarmentCard = React.memo(({
   useEffect(() => {
     if (isHighlighted) {
       highlightOpacity.value = withSequence(
-        withTiming(1, { duration: 450 }),
+        withTiming(1, { duration: 400 }),
+        withTiming(1, { duration: 600 }),
         withTiming(0, { duration: 800 })
       );
+    } else {
+      highlightOpacity.value = 0;
     }
   }, [isHighlighted, highlightOpacity]);
 
@@ -119,7 +159,7 @@ export const GarmentCard = React.memo(({
     const bgColor = interpolateColor(
       highlightOpacity.value,
       [0, 1],
-      [isSelected ? theme.primary + '12' : theme.card, theme.primary + '15']
+      [theme.card, theme.primary + '32']
     );
 
     const animatedBorderColor = interpolateColor(
@@ -129,18 +169,18 @@ export const GarmentCard = React.memo(({
     );
 
     return {
-      backgroundColor: withTiming(bgColor, { duration: 250 }),
+      backgroundColor: bgColor,
       elevation: Platform.OS === 'android' ? 1 : 2,
-      borderColor: animatedBorderColor,
-      borderWidth: 1,
+      borderColor: isSelected ? theme.primary : animatedBorderColor,
+      borderWidth: isSelected ? 1.5 : 1 + (highlightOpacity.value * 1.5),
       shadowColor: Platform.OS === 'android' ? 'rgba(0, 0, 0, 0.12)' : '#000',
       shadowOpacity: 0.05,
       shadowRadius: 6,
       shadowOffset: { width: 0, height: 2 },
       borderRadius: 18,
-      transform: [{ scale: 1 + (highlightOpacity.value * 0.02) }]
+      transform: [{ scale: 1 + (highlightOpacity.value * 0.025) }]
     };
-  });
+  }, [isSelected, theme.primary, theme.card, theme.border]);
 
   const containerWidth = 160;
 
@@ -207,8 +247,13 @@ export const GarmentCard = React.memo(({
   const itemCreatedAt = item.created_at || '';
   const itemShippingAt = item.shipping_at ? new Date(item.shipping_at) : null;
   const shippingLabel = itemShippingAt && Number.isFinite(itemShippingAt.getTime())
-    ? `${itemShippingAt.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} | ${itemShippingAt.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`
+    ? `${formatShortDate(itemShippingAt)} | ${formatShortTime(itemShippingAt)}`
     : null;
+  const shippingTextNode = shippingLabel ? (
+    <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700', marginTop: 3 }} numberOfLines={1} allowFontScaling>
+      ✓✓ Enviado · {shippingLabel}
+    </Text>
+  ) : null;
   const boxTitle = item.box_name || '';
   const invTitle = item.inventory_name || '';
 
@@ -242,7 +287,7 @@ export const GarmentCard = React.memo(({
           <View style={[styles.colorBar, { backgroundColor: colorHex }]} />
           <View style={styles.itemContent}>
             <View style={styles.itemHeader}>
-              <View style={[styles.compactBadge, { borderWidth: 1, borderColor: theme.border, backgroundColor: theme.card, alignSelf: 'center' }]}>
+              <View style={styles.compactBadge}>
                 <Text style={[styles.itemStyle, { color: theme.text, fontSize: historyMode ? 14 : 16 }]} numberOfLines={1} allowFontScaling={true}>
                   {itemStyleName}
                 </Text>
@@ -270,18 +315,6 @@ export const GarmentCard = React.memo(({
                     </Text>
                   </TouchableOpacity>
                 )}
-                {canEdit && !historyMode && (
-                  <View
-                    style={[
-                      styles.swipeHintBadge,
-                      {
-                        backgroundColor: 'rgba(255, 255, 255, 0.08)'
-                      }
-                    ]}
-                  >
-                    <Ionicons name="chevron-back" size={12} color={theme.textSecondary} />
-                  </View>
-                )}
               </View>
 
               {historyMode && (
@@ -307,42 +340,44 @@ export const GarmentCard = React.memo(({
               </View>
             )}
 
-            {/* Fila 3 (Pie Inferior): Alarma (Izquierda) + Fotos (Derecha) */}
+            {/* Fila 3 (Pie Inferior): Alarma/Fecha + Enviado abajo (Izquierda) + Fotos (Derecha) */}
             <View style={styles.itemFooter}>
               {historyMode ? (
                 <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={[styles.locationText, { color: theme.textSecondary }]} allowFontScaling={true}>
+                  <Text style={[styles.locationText, { color: theme.textSecondary }]} numberOfLines={1} allowFontScaling={true}>
                     {invTitle} • {boxTitle} • {item.color}
                   </Text>
-                  {shippingLabel && (
-                    <Text style={{ color: theme.primary, fontSize: 11, fontWeight: '700', marginTop: 3 }} numberOfLines={1} allowFontScaling>
-                      ✓✓ Enviado · {shippingLabel}
-                    </Text>
-                  )}
+                  {shippingTextNode}
                 </View>
               ) : (
                 <>
                   <View style={{ flex: 1, marginRight: 8 }}>
-                    {itemAlarmDate ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF9C3', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' }}>
-                        <Ionicons name="time-outline" size={13} color="#CA8A04" style={{ marginRight: 4 }} />
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#854D0E' }} allowFontScaling={true}>
-                          {new Date(itemAlarmDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} {new Date(itemAlarmDate).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' }}>
-                        <Ionicons name="calendar-outline" size={13} color={theme.textSecondary} style={{ marginRight: 4 }} />
-                        <Text style={{ fontSize: 12, fontWeight: '500', color: theme.textSecondary }} allowFontScaling={true}>
-                          {new Date(itemCreatedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
-                        </Text>
-                      </View>
-                    )}
-                    {shippingLabel && (
-                      <Text style={{ color: theme.primary, fontSize: 11, fontWeight: '700', marginTop: 3 }} numberOfLines={1} allowFontScaling>
-                        ✓✓ Enviado · {shippingLabel}
-                      </Text>
-                    )}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                      {itemAlarmDate ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#FEF9C3', paddingHorizontal: 6, paddingVertical: 2.5, borderRadius: 6 }}>
+                          <Ionicons name="time-outline" size={12} color="#CA8A04" style={{ marginRight: 3 }} />
+                          <Text style={{ fontSize: 11.5, fontWeight: '700', color: '#854D0E' }} allowFontScaling={true}>
+                            {formatShortDate(itemAlarmDate)} {formatShortTime(itemAlarmDate)}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' }}>
+                          <Ionicons name="calendar-outline" size={13} color={theme.textSecondary} style={{ marginRight: 4 }} />
+                          <Text style={{ fontSize: 12, fontWeight: '500', color: theme.textSecondary }} allowFontScaling={true}>
+                            {formatShortDate(itemCreatedAt)}
+                          </Text>
+                        </View>
+                      )}
+                      {!!item.size && (
+                        <View style={styles.infoGroup}>
+                          <Ionicons name="brush-outline" size={13} color={theme.textSecondary} />
+                          <Text style={{ fontSize: 12, fontWeight: '500', color: theme.textSecondary }} numberOfLines={1} allowFontScaling={true}>
+                            {item.size}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    {shippingTextNode}
                   </View>
 
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -350,15 +385,16 @@ export const GarmentCard = React.memo(({
                       <TouchableOpacity
                         onPress={() => onImagePress(displayUri1)}
                         activeOpacity={0.85}
-                        style={[styles.thumbnailContainer, { borderColor: theme.border, marginRight: displayUri2 ? 6 : 0 }]}
+                        style={[styles.thumbnailContainer, { borderColor: theme.border, marginRight: displayUri2 ? 4 : 0 }]}
                         accessibilityLabel="Ver primera fotografía"
                       >
                         <Image
                           source={{ uri: displayUri1 }}
+                          recyclingKey={displayUri1}
                           style={styles.thumbnail}
                           contentFit="cover"
                           cachePolicy="memory-disk"
-                          transition={200}
+                          transition={0}
                         />
                       </TouchableOpacity>
                     )}
@@ -371,10 +407,11 @@ export const GarmentCard = React.memo(({
                       >
                         <Image
                           source={{ uri: displayUri2 }}
+                          recyclingKey={displayUri2}
                           style={styles.thumbnail}
                           contentFit="cover"
                           cachePolicy="memory-disk"
-                          transition={200}
+                          transition={0}
                         />
                       </TouchableOpacity>
                     )}
@@ -395,14 +432,14 @@ export const GarmentCard = React.memo(({
 
   if (!canEdit) {
     return (
-      <View style={{ marginBottom: 12 }}>
+      <View style={{ marginBottom: 8 }}>
         {cardContent}
       </View>
     );
   }
 
   return (
-    <View style={{ marginBottom: 12 }}>
+    <View style={{ marginBottom: 8 }}>
       <Swipeable
         ref={swipeableRef}
         renderRightActions={renderRightActions}
@@ -418,13 +455,25 @@ export const GarmentCard = React.memo(({
   return prev.isSelected === next.isSelected &&
     prev.item.id === next.item.id &&
     prev.isHighlighted === next.isHighlighted &&
+    prev.canEdit === next.canEdit &&
+    prev.onPress === next.onPress &&
+    prev.onLongPress === next.onLongPress &&
+    prev.onDelete === next.onDelete &&
+    prev.onMove === next.onMove &&
+    prev.onToggleStatus === next.onToggleStatus &&
+    prev.onImagePress === next.onImagePress &&
     (prev.item.status ?? (prev.item as any).estado) === (next.item.status ?? (next.item as any).estado) &&
     (prev.item.style ?? (prev.item as any).estilo) === (next.item.style ?? (next.item as any).estilo) &&
     prev.item.color === next.item.color &&
     prev.item.op === next.item.op &&
     (prev.item.photo_uri ?? (prev.item as any).fotoUri) === (next.item.photo_uri ?? (next.item as any).fotoUri) &&
     (prev.item.photo_uri_2 ?? (prev.item as any).fotoUri2) === (next.item.photo_uri_2 ?? (next.item as any).fotoUri2) &&
+    ((prev.item as any).r2Key ?? (prev.item as any).primary_storage_key ?? (prev.item as any).storage_key) === ((next.item as any).r2Key ?? (next.item as any).primary_storage_key ?? (next.item as any).storage_key) &&
+    ((prev.item as any).r2Key2 ?? (prev.item as any).secondary_storage_key) === ((next.item as any).r2Key2 ?? (next.item as any).secondary_storage_key) &&
     prev.item.shipping_at === next.item.shipping_at &&
+    prev.item.created_at === next.item.created_at &&
+    prev.item.box_name === next.item.box_name &&
+    prev.item.inventory_name === next.item.inventory_name &&
     (prev.item.alarm_datetime ?? (prev.item as any).alarmaFechaHora) === (next.item.alarm_datetime ?? (next.item as any).alarmaFechaHora) &&
     prev.theme === next.theme &&
     prev.historyMode === next.historyMode;
@@ -434,7 +483,7 @@ export const PrendaCard = GarmentCard;
 
 const styles = StyleSheet.create({
   shadowWrapper: {
-    minHeight: 114,
+    minHeight: 106,
     justifyContent: 'center',
   },
   innerCard: {
@@ -448,10 +497,16 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   historyCard: {},
-  itemContent: { flex: 1, paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'space-between' },
-  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 32 },
+  itemContent: {
+    flex: 1,
+    paddingLeft: 14,
+    paddingRight: 12,
+    paddingVertical: 12,
+    justifyContent: 'space-between',
+  },
+  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 30 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  compactBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8, justifyContent: 'center' },
+  compactBadge: { paddingVertical: 2, justifyContent: 'center' },
   itemStyle: { fontWeight: '800', letterSpacing: 0.5, includeFontPadding: false },
   statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, gap: 5 },
   statusIndicator: { width: 6, height: 6, borderRadius: 3 },
@@ -462,7 +517,20 @@ const styles = StyleSheet.create({
   infoText: { fontSize: 13, fontWeight: '600', includeFontPadding: false },
   itemFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 32 },
   locationText: { fontSize: 11, fontWeight: '500', fontStyle: 'italic' },
-  selectionCheck: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  selectionCheck: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
   swipeActionsContainer: {
     width: 80,
     flexDirection: 'row',

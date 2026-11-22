@@ -27,9 +27,10 @@ export const useChatbotScreen = () => {
   const user = useAppStore(state => state.user);
   const { hasRole } = useRoles();
 
-  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeModel, setActiveModel] = useState<string>('Detectando modelo...');
 
@@ -92,53 +93,62 @@ export const useChatbotScreen = () => {
     let cancelled = false;
 
     const init = async () => {
-      // 0. Limpieza única de sesiones soft-deleted y adopción de huérfanas
-      await ChatbotService.cleanupSoftDeleted(db);
-      if (user?.id) {
-        await ChatbotService.adoptOrphanSessions(db, user.id);
-      }
-
-      // 1. Cargar sesiones locales inmediatamente
-      const allSessions = await ChatbotService.getSessions(db, user?.id);
-      if (cancelled) return;
-      setSessions(allSessions);
-
-      let activeId: string | null = null;
-
-      if (allSessions.length > 0) {
-        activeId = allSessions[0].id;
-      } else {
-        // No hay sesiones, crear una nueva
-        activeId = await ChatbotService.createSession(db, 'Nueva conversación', user?.id);
+      try {
+        // 1. Cargar sesiones y mensajes locales de inmediato (sin bloquear con limpiezas ni sync)
+        let allSessions = await ChatbotService.getSessions(db, user?.id);
         if (cancelled) return;
-        const refreshed = await ChatbotService.getSessions(db, user?.id);
-        if (cancelled) return;
-        setSessions(refreshed);
+
+        let activeId: string | null = null;
+        if (allSessions.length > 0) {
+          activeId = allSessions[0].id;
+        } else {
+          activeId = await ChatbotService.createSession(db, 'Nueva conversación', user?.id);
+          if (cancelled) return;
+          allSessions = await ChatbotService.getSessions(db, user?.id);
+          if (cancelled) return;
+        }
+
+        let initialMessages: ChatMessage[] = [{ ...WELCOME_MESSAGE, timestamp: Date.now() }];
+        if (activeId) {
+          const history = await ChatbotService.getHistoryBySession(db, activeId);
+          if (cancelled) return;
+          if (history.length > 0) {
+            initialMessages = history;
+          }
+          skipNextLoadRef.current = true;
+          setCurrentSessionId(activeId);
+        }
+
+        setSessions(allSessions);
+        setMessages(initialMessages);
+      } catch (initErr) {
+        console.error('[useChatbotScreen] Error en carga inicial:', initErr);
+        setMessages([{ ...WELCOME_MESSAGE, timestamp: Date.now() }]);
+      } finally {
+        if (!cancelled) setIsInitialLoading(false);
       }
 
-      if (activeId) {
-        skipNextLoadRef.current = true;
-        setCurrentSessionId(activeId);
-        await loadMessagesForSession(activeId);
-      }
+      // 2. Limpieza y sincronización silenciosa en background después de mostrar el chat local
+      try {
+        await ChatbotService.cleanupSoftDeleted(db);
+        if (user?.id) {
+          await ChatbotService.adoptOrphanSessions(db, user.id);
+        }
+      } catch (_) {}
 
-      // 2. Si hay usuario autenticado, sincronizar en background silenciosamente (sin bloquear con LoadingModal)
-      if (user?.id) {
+      if (user?.id && !cancelled) {
         try {
           await SynchronizationEngine.fullSync(db, user.id, true);
           if (cancelled) return;
 
-          // Refrescar sesiones después del sync
           const syncedSessions = await ChatbotService.getSessions(db, user.id);
           if (cancelled) return;
           setSessions(syncedSessions);
 
-          // Si la sesión activa sigue existiendo, recargar sus mensajes
           const currentId = currentSessionIdRef.current;
           if (currentId && syncedSessions.some(s => s.id === currentId)) {
             await loadMessagesForSession(currentId);
           } else if (syncedSessions.length > 0) {
-            // La sesión activa ya no existe, usar la primera
             const newActiveId = syncedSessions[0].id;
             skipNextLoadRef.current = true;
             setCurrentSessionId(newActiveId);
@@ -374,6 +384,7 @@ export const useChatbotScreen = () => {
       messages,
       sessions,
       currentSessionId,
+      isInitialLoading,
       isSidebarOpen,
       activeModel,
       input,

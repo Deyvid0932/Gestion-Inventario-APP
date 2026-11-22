@@ -1,4 +1,4 @@
-﻿// Screen Hooks
+// Screen Hooks
 export * from './screens/useBoxesScreen';
 export * from './screens/useBoxContentsScreen';
 export * from './screens/useChatbotScreen';
@@ -13,6 +13,7 @@ export * from './screens/useTrashScreen';
 // Modal Hooks
 export * from './modals/useExportModal';
 export * from './modals/useUserManagement';
+export * from './modals/useTestRequestPdfModal';
 
 // Common / Shared Domain Hooks
 export * from './common/useRoles';

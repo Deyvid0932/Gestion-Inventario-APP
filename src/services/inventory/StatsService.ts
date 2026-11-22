@@ -50,35 +50,42 @@ export const StatsService = {
 
       const userFilter = '1=1';
 
-      const combinedQuery = `
-        SELECT 
-          (SELECT COUNT(*) FROM inventories i WHERE ${userFilter} AND i.deleted_at IS NULL) as totalInventories,
-          (SELECT COUNT(*) FROM boxes b JOIN inventories i ON b.inventory_id = i.id WHERE ${userFilter} AND b.deleted_at IS NULL AND i.deleted_at IS NULL) as totalBoxes,
-          (SELECT COUNT(*) FROM garments g JOIN boxes b ON g.box_id = b.id JOIN inventories i ON b.inventory_id = i.id WHERE ${userFilter} AND g.deleted_at IS NULL AND b.deleted_at IS NULL AND i.deleted_at IS NULL) as totalGarments,
-          (SELECT COUNT(*) FROM garments g JOIN boxes b ON g.box_id = b.id JOIN inventories i ON b.inventory_id = i.id WHERE g.status = 1 AND ${userFilter} AND g.deleted_at IS NULL AND b.deleted_at IS NULL AND i.deleted_at IS NULL) as activeGarments,
-          (SELECT COUNT(*) FROM garments g JOIN boxes b ON g.box_id = b.id JOIN inventories i ON b.inventory_id = i.id WHERE g.status = 0 AND ${userFilter} AND g.deleted_at IS NULL AND b.deleted_at IS NULL AND i.deleted_at IS NULL) as inactiveGarments,
-          (SELECT COUNT(*) FROM garments g JOIN boxes b ON g.box_id = b.id JOIN inventories i ON b.inventory_id = i.id WHERE EXISTS (SELECT 1 FROM garment_images gi WHERE gi.garment_id = g.id AND gi.deleted_at IS NULL AND ((gi.uri IS NOT NULL AND gi.uri != '') OR (gi.storage_key IS NOT NULL AND gi.storage_key != ''))) AND ${userFilter} AND g.deleted_at IS NULL AND b.deleted_at IS NULL AND i.deleted_at IS NULL) as garmentsWithPhoto,
-          (SELECT COUNT(*) FROM garments g JOIN boxes b ON g.box_id = b.id JOIN inventories i ON b.inventory_id = i.id WHERE EXISTS (SELECT 1 FROM garment_alarms ga WHERE ga.garment_id = g.id AND ga.deleted_at IS NULL AND ga.alarm_datetime IS NOT NULL AND ga.alarm_datetime != '' AND (ga.expires_at IS NULL OR ga.expires_at > datetime('now'))) AND ${userFilter} AND g.deleted_at IS NULL AND b.deleted_at IS NULL AND i.deleted_at IS NULL) as garmentsWithAlarm
-      `;
+      const [invBoxCounts, garmentAgg] = await Promise.all([
+        db.getFirstAsync<{ totalInventories: number; totalBoxes: number }>(`
+          SELECT
+            (SELECT COUNT(*) FROM inventories i WHERE ${userFilter} AND i.deleted_at IS NULL) as totalInventories,
+            (SELECT COUNT(*) FROM boxes b JOIN inventories i ON b.inventory_id = i.id WHERE ${userFilter} AND b.deleted_at IS NULL AND i.deleted_at IS NULL) as totalBoxes
+        `),
+        db.getFirstAsync<{
+          totalGarments: number;
+          activeGarments: number;
+          inactiveGarments: number;
+          garmentsWithPhoto: number;
+          garmentsWithAlarm: number;
+        }>(`
+          SELECT
+            COUNT(*) as totalGarments,
+            COALESCE(SUM(CASE WHEN g.status = 1 THEN 1 ELSE 0 END), 0) as activeGarments,
+            COALESCE(SUM(CASE WHEN g.status = 0 THEN 1 ELSE 0 END), 0) as inactiveGarments,
+            COALESCE(SUM(CASE WHEN EXISTS (SELECT 1 FROM garment_images gi WHERE gi.garment_id = g.id AND gi.deleted_at IS NULL AND ((gi.uri IS NOT NULL AND gi.uri != '') OR (gi.storage_key IS NOT NULL AND gi.storage_key != ''))) THEN 1 ELSE 0 END), 0) as garmentsWithPhoto,
+            COALESCE(SUM(CASE WHEN EXISTS (SELECT 1 FROM garment_alarms ga WHERE ga.garment_id = g.id AND ga.deleted_at IS NULL AND ga.alarm_datetime IS NOT NULL AND ga.alarm_datetime != '') THEN 1 ELSE 0 END), 0) as garmentsWithAlarm
+          FROM garments g
+          JOIN boxes b ON g.box_id = b.id
+          JOIN inventories i ON b.inventory_id = i.id
+          WHERE ${userFilter} AND g.deleted_at IS NULL AND b.deleted_at IS NULL AND i.deleted_at IS NULL
+        `),
+      ]);
 
-      const counts = await db.getFirstAsync<{
-        totalInventories: number;
-        totalBoxes: number;
-        totalGarments: number;
-        activeGarments: number;
-        inactiveGarments: number;
-        garmentsWithPhoto: number;
-        garmentsWithAlarm: number;
-      }>(combinedQuery);
-
-      if (counts) {
-        stats.totalInventories = counts.totalInventories;
-        stats.totalBoxes = counts.totalBoxes;
-        stats.totalGarments = counts.totalGarments;
-        stats.activeGarments = counts.activeGarments;
-        stats.inactiveGarments = counts.inactiveGarments;
-        stats.garmentsWithPhoto = counts.garmentsWithPhoto;
-        stats.garmentsWithAlarm = counts.garmentsWithAlarm;
+      if (invBoxCounts) {
+        stats.totalInventories = invBoxCounts.totalInventories;
+        stats.totalBoxes = invBoxCounts.totalBoxes;
+      }
+      if (garmentAgg) {
+        stats.totalGarments = garmentAgg.totalGarments;
+        stats.activeGarments = garmentAgg.activeGarments;
+        stats.inactiveGarments = garmentAgg.inactiveGarments;
+        stats.garmentsWithPhoto = garmentAgg.garmentsWithPhoto;
+        stats.garmentsWithAlarm = garmentAgg.garmentsWithAlarm;
       }
 
       const topResult = await db.getAllAsync<{ name: string; total: number }>(`

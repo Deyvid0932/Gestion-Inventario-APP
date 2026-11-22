@@ -11,67 +11,70 @@ export const GarmentService = {
   addGarment: async (db: SQLiteDatabase, garment: Garment) => {
     try {
       const now = new Date().toISOString();
-      await db.runAsync(
-        `INSERT INTO garments (id, box_id, op, style, color, size, shipping_at, status, created_at, updated_at, sync_status) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
-        [
-          garment.id,
-          garment.box_id,
-          garment.op || '',
-          garment.style,
-          garment.color,
-          garment.size || null,
-          garment.shipping_at || null,
-          garment.status ?? 1,
-          garment.created_at || now,
-          now,
-        ]
-      );
-
-      // Sincronizar hacia garment_images
-      if (garment.images && garment.images.length > 0) {
-        for (const img of garment.images) {
-          await db.runAsync(
-            `INSERT OR REPLACE INTO garment_images (id, garment_id, uri, storage_key, storage, order_index, is_primary, created_at, updated_at, sync_status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
-            [img.id || generateUUID(), garment.id, img.uri || null, img.storage_key || null, img.storage || 'LOCAL', img.order_index ?? 0, img.is_primary ? 1 : 0, img.created_at || now, now]
-          );
-        }
-      } else {
-        const photo1 = garment.photo_uri;
-        if (photo1) {
-          const img1Id = `img_${garment.id}_1`;
-          const storage1 = photo1.startsWith('http') ? 'CLOUD' : 'LOCAL';
-          await db.runAsync(
-            `INSERT OR REPLACE INTO garment_images (id, garment_id, uri, storage_key, storage, order_index, is_primary, created_at, updated_at, sync_status)
-             VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?, 'PENDING')`,
-            [img1Id, garment.id, photo1, null, storage1, now, now]
-          );
-        }
-        const photo2 = garment.photo_uri_2;
-        if (photo2) {
-          const img2Id = `img_${garment.id}_2`;
-          const storage2 = photo2.startsWith('http') ? 'CLOUD' : 'LOCAL';
-          await db.runAsync(
-            `INSERT OR REPLACE INTO garment_images (id, garment_id, uri, storage_key, storage, order_index, is_primary, created_at, updated_at, sync_status)
-             VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, 'PENDING')`,
-            [img2Id, garment.id, photo2, null, storage2, now, now]
-          );
-        }
-      }
-
-      // Sincronizar hacia garment_alarms
-      const alarmDate = garment.alarm_datetime;
-      const notifId = garment.alarm_notification_id;
-      if (alarmDate) {
-        const almId = `alm_${garment.id}`;
-        const expiresAt = new Date(new Date(alarmDate).getTime() + 24 * 60 * 60 * 1000).toISOString();
+      await withSerializedTransaction(db, async () => {
         await db.runAsync(
-          `INSERT OR REPLACE INTO garment_alarms (id, garment_id, alarm_datetime, expires_at, notification_id, status, created_at, updated_at, sync_status)
-           VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, 'PENDING')`,
-          [almId, garment.id, alarmDate, expiresAt, notifId || null, now, now]
+          `INSERT INTO garments (id, box_id, op, style, color, size, art_code, shipping_at, status, created_at, updated_at, sync_status) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+          [
+            garment.id,
+            garment.box_id,
+            garment.op || '',
+            garment.style,
+            garment.color,
+            garment.size || null,
+            garment.art_code || null,
+            garment.shipping_at || null,
+            garment.status ?? 1,
+            garment.created_at || now,
+            now,
+          ]
         );
-      }
+
+        // Sincronizar hacia garment_images
+        if (garment.images && garment.images.length > 0) {
+          for (const img of garment.images) {
+            await db.runAsync(
+              `INSERT OR REPLACE INTO garment_images (id, garment_id, uri, storage_key, storage, order_index, is_primary, created_at, updated_at, sync_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+              [img.id || generateUUID(), garment.id, img.uri || null, img.storage_key || null, img.storage || 'LOCAL', img.order_index ?? 0, img.is_primary ? 1 : 0, img.created_at || now, now]
+            );
+          }
+        } else {
+          const photo1 = garment.photo_uri;
+          if (photo1) {
+            const img1Id = `img_${garment.id}_1`;
+            const storage1 = photo1.startsWith('http') ? 'CLOUD' : 'LOCAL';
+            await db.runAsync(
+              `INSERT OR REPLACE INTO garment_images (id, garment_id, uri, storage_key, storage, order_index, is_primary, created_at, updated_at, sync_status)
+               VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?, 'PENDING')`,
+              [img1Id, garment.id, photo1, null, storage1, now, now]
+            );
+          }
+          const photo2 = garment.photo_uri_2;
+          if (photo2) {
+            const img2Id = `img_${garment.id}_2`;
+            const storage2 = photo2.startsWith('http') ? 'CLOUD' : 'LOCAL';
+            await db.runAsync(
+              `INSERT OR REPLACE INTO garment_images (id, garment_id, uri, storage_key, storage, order_index, is_primary, created_at, updated_at, sync_status)
+               VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, 'PENDING')`,
+              [img2Id, garment.id, photo2, null, storage2, now, now]
+            );
+          }
+        }
+
+        // Sincronizar hacia garment_alarms
+        const alarmDate = garment.alarm_datetime;
+        const notifId = garment.alarm_notification_id;
+        if (alarmDate) {
+          const almId = `alm_${garment.id}`;
+          const expiresAt = new Date(new Date(alarmDate).getTime() + 24 * 60 * 60 * 1000).toISOString();
+          await db.runAsync(
+            `INSERT OR REPLACE INTO garment_alarms (id, garment_id, alarm_datetime, expires_at, notification_id, status, created_at, updated_at, sync_status)
+             VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, 'PENDING')`,
+            [almId, garment.id, alarmDate, expiresAt, notifId || null, now, now]
+          );
+        }
+      });
 
       return { success: true };
     } catch (e) {
@@ -84,12 +87,13 @@ export const GarmentService = {
     try {
       const now = new Date().toISOString();
       await db.runAsync(
-        `UPDATE garments SET op = ?, style = ?, color = ?, size = ?, shipping_at = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
+        `UPDATE garments SET op = ?, style = ?, color = ?, size = ?, art_code = ?, shipping_at = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
         [
           garment.op || '',
           garment.style,
           garment.color,
           garment.size || null,
+          garment.art_code || null,
           garment.shipping_at || null,
           now,
           garment.id,
@@ -220,18 +224,20 @@ export const GarmentService = {
       const now = new Date().toISOString();
       const batchId = generateUUID();
 
-      await db.runAsync(
-        `UPDATE garments SET status = 0, deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
-        [now, userId || null, batchId, now, id]
-      );
-      await db.runAsync(
-        `UPDATE garment_images SET deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, updated_at = ?, sync_status = 'PENDING' WHERE garment_id = ?`,
-        [now, userId || null, batchId, now, id]
-      );
-      await db.runAsync(
-        `UPDATE garment_alarms SET deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, updated_at = ?, sync_status = 'PENDING' WHERE garment_id = ?`,
-        [now, userId || null, batchId, now, id]
-      );
+      await withSerializedTransaction(db, async () => {
+        await db.runAsync(
+          `UPDATE garments SET status = 0, deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
+          [now, userId || null, batchId, now, id]
+        );
+        await db.runAsync(
+          `UPDATE garment_images SET deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, updated_at = ?, sync_status = 'PENDING' WHERE garment_id = ?`,
+          [now, userId || null, batchId, now, id]
+        );
+        await db.runAsync(
+          `UPDATE garment_alarms SET deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, updated_at = ?, sync_status = 'PENDING' WHERE garment_id = ?`,
+          [now, userId || null, batchId, now, id]
+        );
+      });
 
       if (userId) {
         SyncScheduler.schedulePush(db, userId);
@@ -259,18 +265,20 @@ export const GarmentService = {
 
       const now = new Date().toISOString();
 
-      await db.runAsync(
-        `UPDATE garments SET status = 1, deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
-        [now, id]
-      );
-      await db.runAsync(
-        `UPDATE garment_images SET deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE garment_id = ?`,
-        [now, id]
-      );
-      await db.runAsync(
-        `UPDATE garment_alarms SET deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE garment_id = ?`,
-        [now, id]
-      );
+      await withSerializedTransaction(db, async () => {
+        await db.runAsync(
+          `UPDATE garments SET status = 1, deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
+          [now, id]
+        );
+        await db.runAsync(
+          `UPDATE garment_images SET deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE garment_id = ?`,
+          [now, id]
+        );
+        await db.runAsync(
+          `UPDATE garment_alarms SET deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE garment_id = ?`,
+          [now, id]
+        );
+      });
 
       if (userId) {
         SyncScheduler.schedulePush(db, userId);
@@ -288,55 +296,52 @@ export const GarmentService = {
       let rows: any[] = [];
       if (search.trim() === '') {
         rows = await db.getAllAsync<any>(
-          `SELECT 
-            g.*,
-            (SELECT uri FROM garment_images WHERE garment_id = g.id AND order_index = 0 AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as primary_uri,
-            (SELECT storage_key FROM garment_images WHERE garment_id = g.id AND order_index = 0 AND deleted_at IS NULL AND storage_key IS NOT NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as primary_storage_key,
-            (SELECT uri FROM garment_images WHERE garment_id = g.id AND order_index = 1 AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as secondary_uri,
-            (SELECT storage_key FROM garment_images WHERE garment_id = g.id AND order_index = 1 AND deleted_at IS NULL AND storage_key IS NOT NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as secondary_storage_key,
-            (SELECT alarm_datetime FROM garment_alarms WHERE garment_id = g.id AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as ga_alarm_datetime,
-            (SELECT notification_id FROM garment_alarms WHERE garment_id = g.id AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as ga_notification_id
-           FROM garments g
-           WHERE g.box_id = ? AND g.deleted_at IS NULL 
-           ORDER BY g.created_at DESC`,
+          `SELECT * FROM garments
+           WHERE box_id = ? AND deleted_at IS NULL 
+           ORDER BY created_at DESC`,
           [boxId]
         );
       } else {
-        const cleanSearch = search.trim();
+        const cleanSearch = search.trim().replace(/\s+/g, ' ');
         const startParam = `${cleanSearch}%`;
         const exactParam = cleanSearch;
-        const searchParam = `%${cleanSearch}%`;
-        const compactParam = `%${cleanSearch.replace(/[\s._-]+/g, '').toUpperCase()}%`;
+        const compactFull = `%${cleanSearch.replace(/[\s._-]+/g, '').toUpperCase()}%`;
+        const tokens = cleanSearch.split(' ').filter(Boolean);
+        const tokenClauses: string[] = [];
+        const tokenParams: string[] = [];
+        for (const t of tokens) {
+          const likeT = `%${t}%`;
+          const compactT = `%${t.replace(/[\s._-]+/g, '').toUpperCase()}%`;
+          tokenClauses.push(
+            `(op LIKE ? OR style LIKE ? OR color LIKE ? OR size LIKE ? OR ` +
+              `REPLACE(REPLACE(REPLACE(REPLACE(UPPER(COALESCE(op, '')), ' ', ''), '-', ''), '.', ''), '_', '') LIKE ? OR ` +
+              `REPLACE(REPLACE(REPLACE(REPLACE(UPPER(COALESCE(style, '')), ' ', ''), '-', ''), '.', ''), '_', '') LIKE ? OR ` +
+              `REPLACE(UPPER(COALESCE(color, '')), ' ', '') LIKE ?)`
+          );
+          tokenParams.push(likeT, likeT, likeT, likeT, compactT, compactT, compactT);
+        }
+        const multiTokenSql = tokenClauses.join(' AND ');
 
         rows = await db.getAllAsync<any>(
-          `SELECT 
-            g.*,
-            (SELECT uri FROM garment_images WHERE garment_id = g.id AND order_index = 0 AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as primary_uri,
-            (SELECT storage_key FROM garment_images WHERE garment_id = g.id AND order_index = 0 AND deleted_at IS NULL AND storage_key IS NOT NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as primary_storage_key,
-            (SELECT uri FROM garment_images WHERE garment_id = g.id AND order_index = 1 AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as secondary_uri,
-            (SELECT storage_key FROM garment_images WHERE garment_id = g.id AND order_index = 1 AND deleted_at IS NULL AND storage_key IS NOT NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as secondary_storage_key,
-            (SELECT alarm_datetime FROM garment_alarms WHERE garment_id = g.id AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as ga_alarm_datetime,
-            (SELECT notification_id FROM garment_alarms WHERE garment_id = g.id AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 1) as ga_notification_id
-           FROM garments g
-           WHERE g.box_id = ? AND g.deleted_at IS NULL AND (
-             g.op LIKE ? OR g.style LIKE ? OR g.color LIKE ? OR g.size LIKE ? OR
-             REPLACE(REPLACE(REPLACE(REPLACE(UPPER(COALESCE(g.op, '')), ' ', ''), '-', ''), '.', ''), '_', '') LIKE ? OR
-             REPLACE(REPLACE(REPLACE(REPLACE(UPPER(COALESCE(g.style, '')), ' ', ''), '-', ''), '.', ''), '_', '') LIKE ?
+          `SELECT * FROM garments
+           WHERE box_id = ? AND deleted_at IS NULL AND (
+             (${multiTokenSql}) OR
+             REPLACE(REPLACE(REPLACE(REPLACE(UPPER(COALESCE(op, '')), ' ', ''), '-', ''), '.', ''), '_', '') LIKE ? OR
+             REPLACE(REPLACE(REPLACE(REPLACE(UPPER(COALESCE(style, '')), ' ', ''), '-', ''), '.', ''), '_', '') LIKE ? OR
+             REPLACE(UPPER(COALESCE(color, '')), ' ', '') LIKE ?
            )
            ORDER BY 
             (CASE 
-              WHEN g.op = ? OR g.style = ? OR g.color = ? OR g.size = ? THEN 0
-              WHEN g.op LIKE ? OR g.style LIKE ? OR g.color LIKE ? OR g.size LIKE ? THEN 1
+              WHEN op = ? OR style = ? OR color = ? OR size = ? THEN 0
+              WHEN op LIKE ? OR style LIKE ? OR color LIKE ? OR size LIKE ? THEN 1
               ELSE 2
-            END), g.created_at DESC`,
+            END), created_at DESC`,
           [
             boxId,
-            searchParam,
-            searchParam,
-            searchParam,
-            searchParam,
-            compactParam,
-            compactParam,
+            ...tokenParams,
+            compactFull,
+            compactFull,
+            compactFull,
             exactParam,
             exactParam,
             exactParam,
@@ -349,22 +354,77 @@ export const GarmentService = {
         );
       }
 
-      return rows.map(r => ({
-        ...r,
-        photo_uri: r.primary_uri || r.primary_storage_key || r.photo_uri || null,
-        photo_uri_2: r.secondary_uri || r.secondary_storage_key || r.photo_uri_2 || null,
-        primary_uri: r.primary_uri || null,
-        primary_storage_key: r.primary_storage_key || null,
-        secondary_uri: r.secondary_uri || null,
-        secondary_storage_key: r.secondary_storage_key || null,
-        r2Key: r.primary_storage_key || null,
-        r2Key2: r.secondary_storage_key || null,
-        fotoUri: r.primary_uri || r.primary_storage_key || null,
-        fotoUri2: r.secondary_uri || r.secondary_storage_key || null,
-        alarm_datetime: r.ga_alarm_datetime || r.alarm_datetime || null,
-        alarm_notification_id: r.ga_notification_id || r.alarm_notification_id || null,
-        alarmaFechaHora: r.ga_alarm_datetime || r.alarm_datetime || null,
-      }));
+      if (rows.length === 0) return [];
+
+      // Batch-fetch images & alarms in 2 indexed queries instead of 6 correlated subqueries per row
+      const [imageRows, alarmRows] = await Promise.all([
+        db.getAllAsync<{ garment_id: string; order_index: number; uri: string | null; storage_key: string | null }>(
+          `SELECT gi.garment_id, gi.order_index, gi.uri, gi.storage_key
+           FROM garment_images gi
+           INNER JOIN garments g ON g.id = gi.garment_id
+           WHERE g.box_id = ? AND g.deleted_at IS NULL AND gi.deleted_at IS NULL AND gi.order_index IN (0, 1)
+           ORDER BY gi.updated_at DESC, gi.id DESC`,
+          [boxId]
+        ),
+        db.getAllAsync<{ garment_id: string; alarm_datetime: string | null; notification_id: string | null }>(
+          `SELECT ga.garment_id, ga.alarm_datetime, ga.notification_id
+           FROM garment_alarms ga
+           INNER JOIN garments g ON g.id = ga.garment_id
+           WHERE g.box_id = ? AND g.deleted_at IS NULL AND ga.deleted_at IS NULL
+           ORDER BY ga.updated_at DESC, ga.id DESC`,
+          [boxId]
+        ),
+      ]);
+
+      const primaryImgMap = new Map<string, { uri: string | null; storage_key: string | null }>();
+      const secondaryImgMap = new Map<string, { uri: string | null; storage_key: string | null }>();
+      for (const img of imageRows) {
+        const targetMap = img.order_index === 0 ? primaryImgMap : secondaryImgMap;
+        const existing = targetMap.get(img.garment_id);
+        if (!existing) {
+          targetMap.set(img.garment_id, { uri: img.uri, storage_key: img.storage_key });
+        } else if (!existing.storage_key && img.storage_key) {
+          existing.storage_key = img.storage_key;
+        }
+      }
+
+      const alarmMap = new Map<string, { alarm_datetime: string | null; notification_id: string | null }>();
+      for (const alm of alarmRows) {
+        if (!alarmMap.has(alm.garment_id)) {
+          alarmMap.set(alm.garment_id, { alarm_datetime: alm.alarm_datetime, notification_id: alm.notification_id });
+        }
+      }
+
+      return rows.map(r => {
+        const pImg = primaryImgMap.get(r.id);
+        const sImg = secondaryImgMap.get(r.id);
+        const alm = alarmMap.get(r.id);
+        const primary_uri = pImg?.uri || null;
+        const primary_storage_key = pImg?.storage_key || null;
+        const secondary_uri = sImg?.uri || null;
+        const secondary_storage_key = sImg?.storage_key || null;
+        const ga_alarm_datetime = alm?.alarm_datetime || null;
+        const ga_notification_id = alm?.notification_id || null;
+
+        return {
+          ...r,
+          primary_uri,
+          primary_storage_key,
+          secondary_uri,
+          secondary_storage_key,
+          ga_alarm_datetime,
+          ga_notification_id,
+          photo_uri: primary_uri || primary_storage_key || r.photo_uri || null,
+          photo_uri_2: secondary_uri || secondary_storage_key || r.photo_uri_2 || null,
+          r2Key: primary_storage_key,
+          r2Key2: secondary_storage_key,
+          fotoUri: primary_uri || primary_storage_key || null,
+          fotoUri2: secondary_uri || secondary_storage_key || null,
+          alarm_datetime: ga_alarm_datetime || r.alarm_datetime || null,
+          alarm_notification_id: ga_notification_id || r.alarm_notification_id || null,
+          alarmaFechaHora: ga_alarm_datetime || r.alarm_datetime || null,
+        };
+      });
     } catch (error) {
       console.error('Error fetching garments:', error);
       return [];

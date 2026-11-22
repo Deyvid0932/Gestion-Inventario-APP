@@ -3,8 +3,8 @@ import { SettingsService } from '../device/SettingsService';
 import { cleanAsterisks } from '../../utils/fuzzyMatching';
 
 export const CLASSIFICATION_SYSTEM_PROMPT = `
-Eres Topytop IA, copiloto operativo de Garment Manager.
-Tu función es guiar al usuario sobre el uso de la app/taller o extraer parámetros para consultar la base de datos local SQLite.
+Eres Topytop IA, asistente inteligente y copiloto operativo de Garment Manager y control de inventario textil de Topytop.
+Tu función es responder con inteligencia, naturalidad y empatía a las consultas del usuario, guiarlo sobre el uso de la app o taller textil, o extraer parámetros para consultar la base de datos local SQLite.
 
 Debes responder ÚNICAMENTE un objeto JSON válido con esta estructura, sin bloques markdown (\`\`\`json), sin prefacios:
 
@@ -24,40 +24,40 @@ Debes responder ÚNICAMENTE un objeto JSON válido con esta estructura, sin bloq
 
 ---
 REGLAS PARA "tipo": "PROCEDIMIENTO"
-Usa este tipo si preguntan cómo funciona la app, qué apartados existen, o reglas del taller.
-Genera la respuesta en "respuestaDirecta" (máximo 2 oraciones directas y claras).
+Usa este tipo para:
+1. Preguntas sobre el uso de Garment Manager y sus apartados:
+   - Home: Resumen general del inventario, accesos directos y métricas clave del día.
+   - Lotes: Gestión de lotes de producción y cajas de almacén.
+   - Buscar: Buscador instantáneo con filtros por pestañas (Activos, Inactivos, Alarmas) por OP, estilo o color.
+   - Asistente: Chat operativo con IA para dudas, procedimientos textiles y análisis.
+   - Ajustes: Configuración de la app, temas, permisos y sincronización.
+2. Procedimientos operativos del taller:
+   - Registrar prendas: Entra a un Lote -> abre una Caja -> usa el botón 'Nuevo' o el escáner OCR de cámara.
+   - Mover prendas de caja: Mantén presionada la tarjeta de la prenda (pulsación larga).
+   - Prendas con fallas: Márcalas en estado 'Inactivo' y trasládalas a la caja de Mermas/Rechazos.
+   - Exportar Excel o generar PDF: Selecciona prendas con toque largo o checkbox y usa los botones de la barra superior.
+   - Roles: Admin y Editor tienen control de edición y borrado; Viewer solo lectura.
+3. Consultas sobre procesos textiles, calidad o laboratorio:
+   - Ensayos físicos (ASTM D3776 densidad, peso BW/AW, pilling, abrasión).
+   - Solideces (AATCC TM61 lavado, AATCC TM8 frote, transpiración, luz, pH).
+   - Cambio dimensional y lavado (AATCC TM124 apariencia después del lavado, ciclos).
+   - Estampado, telas, confección y acabados.
+4. Saludos, agradecimientos, conversación natural y preguntas al azar/cotidianas:
+   - Responde SIEMPRE de forma inteligente, cálida, concisa (1 a 3 oraciones) y con tono profesional como Topytop IA.
+   - NUNCA respondas con frases robóticas de rechazo ("Solo respondo dudas de inventario..."). Responde amablemente y ofrece tu ayuda.
 
-Mapa de apartados de Garment Manager:
-- Home: Resumen general del inventario, accesos directos y métricas clave del día.
-- Lotes: Gestión de lotes de producción y cajas donde se agrupan las prendas.
-- Buscar: Buscador instantáneo con filtros por pestañas (Activos, Inactivos, Alarmas) por OP, estilo o color.
-- Asistente: Chat operativo para resolver dudas de la app, procedimientos textiles y métricas analíticas.
-- Ajustes: Configuración de la app, gestión de permisos y sincronización.
-
-Procedimientos clave:
-- Crear o registrar prendas: Entra a un Lote -> abre una Caja -> usa el botón '+' o el escáner de cámara.
-- Mover prendas de caja: Mantén presionada la tarjeta de la prenda (pulsación larga).
-- Prendas con fallas: Márcalas en estado 'Inactivo' y envíalas a la caja de Mermas/Rechazos.
-- Roles: Admin y Editor tienen control de edición y borrado; Viewer solo lectura.
-
-Si preguntan algo ajeno a Garment Manager o taller textil:
-Responde "Solo respondo dudas sobre el uso de Garment Manager y control de inventario textil."
 "consulta" debe ser null.
 
 ---
 REGLAS PARA "tipo": "DATOS_INVENTARIO"
-Usa este tipo para conteos, estado de OPs o búsqueda de prendas.
+Usa este tipo EXCLUSIVAMENTE cuando el usuario solicita consultar datos reales del inventario actual en SQLite:
 "respuestaDirecta" debe ser null. Llena el objeto "consulta" con:
-- RESUMEN_GENERAL: totales globales ("¿cuántas prendas hay?", "resumen de cajas").
-- ESTADO_OP: avance de una orden ("¿cómo va la OP 4500?").
-- CONTEO_ESPECIFICO: prendas con condiciones ("¿cuántas negras hay?", "¿hay prendas sin OP?").
-- BUSQUEDA_PUNTUAL: ubicación de prendas específicas ("dónde está khm 035 122").
-Extrae TODOS los filtros mencionados (OP, estilo, color, caja y lote), incluso si aparecen juntos.
-La caja y el lote son opcionales: busca por OP, estilo, color o descripción en todo el inventario aunque el usuario no conozca la ubicación. Nunca exijas que diga la caja para encontrar una prenda.
-"¿Cuántas prendas rojas hay en la caja 3?" es CONTEO_ESPECIFICO, no RESUMEN_GENERAL.
-"Busca las prendas rojas de la caja 3" es BUSQUEDA_PUNTUAL.
-Si piden solo una caja, usa BUSQUEDA_PUNTUAL con caja; si también mencionan lote, extráelo.
-Para preguntas sobre datos del inventario nunca inventes una respuestaDirecta: SQLite dará los resultados reales.
+- RESUMEN_GENERAL: totales globales ("¿cuántas prendas hay?", "resumen de cajas", "total del inventario").
+- ESTADO_OP: avance o ubicación de una orden ("¿cómo va la OP 316316?").
+- CONTEO_ESPECIFICO: prendas con condiciones ("¿cuántas prendas negras hay?", "¿hay prendas sin OP?").
+- BUSQUEDA_PUNTUAL: ubicación de prendas específicas ("dónde está la prenda TH6682", "busca la OP 316316").
+Extrae los filtros mencionados: OP, estilo, color, caja y lote.
+Nunca inventes una respuestaDirecta para datos de inventario: SQLite proveerá los datos verídicos.
 `;
 
 export interface InventoryQuery {
@@ -77,7 +77,6 @@ export interface GroqClassificationResult {
   modelName: string;
 }
 
-// Caché en memoria para clasificaciones frecuentes con TTL de 5 minutos
 interface CachedClassification {
   result: GroqClassificationResult;
   expiresAt: number;
@@ -85,12 +84,16 @@ interface CachedClassification {
 const classificationCache = new Map<string, CachedClassification>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-let cachedGroqModels: string[] = [];
-let lastGroqModelsFetch = 0;
 let lastSuccessfulModel = '';
 let remoteRetryAfter = 0;
+let dynamicGroqModelsCache: string[] | null = null;
 
-const CLASSIFICATION_MODELS = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'];
+const CLASSIFICATION_MODELS = [
+  'deepseek-r1-distill-llama-70b',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'gemma2-9b-it',
+];
 
 const fetchTextWithin = async (url: string, init: RequestInit, timeoutMs: number) => {
   const controller = new AbortController();
@@ -115,49 +118,128 @@ const fetchTextWithin = async (url: string, init: RequestInit, timeoutMs: number
 
 export const getLastSuccessfulModel = (): string => lastSuccessfulModel;
 
-export const getActiveGroqModels = async (cleanKey: string): Promise<string[]> => {
-  const now = Date.now();
-  if (cachedGroqModels.length > 0 && now - lastGroqModelsFetch < 1000 * 60 * 30) {
-    return cachedGroqModels;
+/**
+ * Descubre modelos de texto activos directamente desde la API de Groq si los predeterminados cambian.
+ */
+const discoverActiveGroqModels = async (cleanKey: string): Promise<string[]> => {
+  if (dynamicGroqModelsCache && dynamicGroqModelsCache.length > 0) {
+    return dynamicGroqModelsCache;
+  }
+  try {
+    const { response, body } = await fetchTextWithin(
+      'https://api.groq.com/openai/v1/models',
+      {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${cleanKey}`,
+        },
+      },
+      3000
+    );
+    if (!response.ok) return [];
+    const parsed = JSON.parse(body);
+    const list: string[] = (parsed?.data || [])
+      .filter((m: any) => m?.id && m?.active !== false)
+      .map((m: any) => String(m.id))
+      .filter(
+        (id: string) =>
+          !id.includes('whisper') &&
+          !id.includes('tts') &&
+          !id.includes('guard') &&
+          !id.includes('vision') &&
+          !id.includes('playai')
+      );
+    if (list.length > 0) {
+      dynamicGroqModelsCache = list;
+    }
+    return list;
+  } catch {
+    return [];
+  }
+};
+
+const tryClassifyWithModel = async (
+  cleanKey: string,
+  modelName: string,
+  messagesPayload: any[],
+  timeoutMs: number
+): Promise<GroqClassificationResult | null> => {
+  const isReasoningModel = modelName.includes('deepseek-r1') || modelName.includes('qwq');
+  const bodyPayload: any = {
+    model: modelName,
+    messages: messagesPayload,
+    temperature: 0.3,
+    max_tokens: 512,
+    ...(isReasoningModel ? {} : { response_format: { type: 'json_object' } }),
+  };
+
+  const { response, body: responseText } = await fetchTextWithin(
+    'https://api.groq.com/openai/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${cleanKey}`,
+      },
+      body: JSON.stringify(bodyPayload),
+    },
+    timeoutMs
+  );
+
+  if (!response.ok) {
+    console.warn(`[Groq] Clasificación con ${modelName}: HTTP ${response.status}`);
+    return null;
   }
 
+  let data: any;
   try {
-    const res = await fetch('https://api.groq.com/openai/v1/models', {
-      headers: {
-        Authorization: `Bearer ${cleanKey}`,
-        Accept: 'application/json'
-      }
-    });
+    data = JSON.parse(responseText);
+  } catch {
+    return null;
+  }
 
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.data)) {
-        const available = data.data
-          .map((m: any) => m.id)
-          .filter((id: string) => !id.includes('whisper') && !id.includes('safeguard') && !id.includes('guard'));
+  let rawText = data.choices?.[0]?.message?.content?.trim() || '';
+  rawText = rawText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  rawText = rawText.replace(/```(?:json)?\s*([\s\S]*?)\s*```/gi, '$1').trim();
 
-        if (available.length > 0) {
-          const priority = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'];
-          const sorted = [
-            ...priority.filter((p: string) => available.includes(p)),
-            ...available.filter((a: string) => !priority.includes(a))
-          ];
-          cachedGroqModels = sorted;
-          lastGroqModelsFetch = now;
-          return cachedGroqModels;
-        }
-      }
-    }
-  } catch (_) {}
+  const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
 
-  return [
-    'openai/gpt-oss-20b',
-    'openai/gpt-oss-120b'
-  ];
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
+  }
+
+  const tipo: 'PROCEDIMIENTO' | 'DATOS_INVENTARIO' =
+    parsed.tipo === 'PROCEDIMIENTO' ? 'PROCEDIMIENTO' : 'DATOS_INVENTARIO';
+
+  let consulta: InventoryQuery | null = null;
+  if (tipo === 'DATOS_INVENTARIO' && parsed.consulta) {
+    consulta = {
+      accion: parsed.consulta.accion || 'RESUMEN_GENERAL',
+      op: parsed.consulta.op || null,
+      estilo: parsed.consulta.estilo || null,
+      color: parsed.consulta.color || null,
+      caja: parsed.consulta.caja || null,
+      lote: parsed.consulta.lote || null,
+      soloSinOp: Boolean(parsed.consulta.soloSinOp),
+    };
+  }
+
+  return {
+    tipo,
+    respuestaDirecta: parsed.respuestaDirecta || null,
+    consulta,
+    modelName,
+  };
 };
 
 /**
- * Fase 1: Clasificación de intención con Groq (con soporte de caché en memoria de 5 min)
+ * Fase 1: Clasificación de intención con Groq usando los modelos disponibles
  */
 export const askGroqToClassify = async (
   db: SQLiteDatabase,
@@ -174,8 +256,6 @@ export const askGroqToClassify = async (
   }
 
   const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
-  if (!cleanKey) return null;
-  if (Date.now() < remoteRetryAfter) return null;
 
   const previousTurns = history
     .filter((h, index) => !(index === 0 && h.sender === 'user' && h.text === message))
@@ -183,115 +263,73 @@ export const askGroqToClassify = async (
     .reverse()
     .map(h => ({
       role: (h.sender === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: h.text
+      content: h.text,
     }));
 
-  // La misma frase puede referirse a otra prenda según la conversación anterior.
   const normalizedKey = JSON.stringify([message.trim().toLowerCase(), previousTurns]);
   const cached = classificationCache.get(normalizedKey);
   const now = Date.now();
   if (cached && cached.expiresAt > now) return cached.result;
 
-  const messagesPayload = [
-    { role: 'system' as const, content: CLASSIFICATION_SYSTEM_PROMPT.trim() },
-    ...previousTurns,
-    { role: 'user' as const, content: message }
-  ];
+  if (cleanKey && now >= remoteRetryAfter) {
+    const messagesPayload = [
+      { role: 'system' as const, content: CLASSIFICATION_SYSTEM_PROMPT.trim() },
+      ...previousTurns,
+      { role: 'user' as const, content: message },
+    ];
 
-  // Clasificar no necesita consultar /models: el descubrimiento añadía una ida
-  // a la red antes de cada primera respuesta y podía probar modelos sin límite.
-  for (const [index, modelName] of CLASSIFICATION_MODELS.entries()) {
-    try {
-      const { response, body: responseText } = await fetchTextWithin(
-        'https://api.groq.com/openai/v1/chat/completions',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${cleanKey}`
-          },
-          body: JSON.stringify({
-            model: modelName,
-            messages: messagesPayload,
-            temperature: 0.2,
-            max_completion_tokens: 512,
-            reasoning_effort: 'low',
-            response_format: { type: 'json_object' }
-          })
-        },
-        index === 0 ? 4500 : 3500
-      );
+    const triedModels = new Set<string>();
 
-      if (!response.ok) {
-        console.warn(`[Groq] Clasificación con ${modelName}: HTTP ${response.status}`);
-        continue;
-      }
-
-      let data: any;
+    for (const [index, modelName] of CLASSIFICATION_MODELS.entries()) {
+      triedModels.add(modelName);
       try {
-        data = JSON.parse(responseText);
-      } catch {
-        continue;
+        const finalResult = await tryClassifyWithModel(
+          cleanKey,
+          modelName,
+          messagesPayload,
+          index === 0 ? 4500 : 3500
+        );
+        if (finalResult) {
+          lastSuccessfulModel = modelName;
+          remoteRetryAfter = 0;
+          classificationCache.set(normalizedKey, {
+            result: finalResult,
+            expiresAt: now + CACHE_TTL_MS,
+          });
+          return finalResult;
+        }
+      } catch (err) {
+        const timedOut = err instanceof Error && err.message === 'Tiempo de espera agotado';
+        const reason = timedOut ? 'agotó el tiempo de espera' : 'falló la conexión';
+        console.warn(`[Groq] ${modelName} ${reason}.`);
+        if (timedOut) {
+          remoteRetryAfter = Date.now() + 15_000;
+          return null;
+        }
       }
+    }
 
-      let rawText = data.choices?.[0]?.message?.content?.trim() || '';
-      rawText = rawText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-      rawText = rawText.replace(/```(?:json)?\s*([\s\S]*?)\s*```/gi, '$1').trim();
-
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) continue;
-
-      let parsed: any;
+    // Si los modelos prioritarios no estuvieron disponibles, consultar modelos activos en Groq
+    const discovered = await discoverActiveGroqModels(cleanKey);
+    for (const modelName of discovered) {
+      if (triedModels.has(modelName)) continue;
       try {
-        parsed = JSON.parse(jsonMatch[0]);
+        const finalResult = await tryClassifyWithModel(cleanKey, modelName, messagesPayload, 3500);
+        if (finalResult) {
+          lastSuccessfulModel = modelName;
+          remoteRetryAfter = 0;
+          classificationCache.set(normalizedKey, {
+            result: finalResult,
+            expiresAt: now + CACHE_TTL_MS,
+          });
+          return finalResult;
+        }
       } catch {
-        continue;
+        break;
       }
-
-      const tipo: 'PROCEDIMIENTO' | 'DATOS_INVENTARIO' =
-        parsed.tipo === 'PROCEDIMIENTO' ? 'PROCEDIMIENTO' : 'DATOS_INVENTARIO';
-
-      let consulta: InventoryQuery | null = null;
-      if (tipo === 'DATOS_INVENTARIO' && parsed.consulta) {
-        consulta = {
-          accion: parsed.consulta.accion || 'RESUMEN_GENERAL',
-          op: parsed.consulta.op || null,
-          estilo: parsed.consulta.estilo || null,
-          color: parsed.consulta.color || null,
-          caja: parsed.consulta.caja || null,
-          lote: parsed.consulta.lote || null,
-          soloSinOp: Boolean(parsed.consulta.soloSinOp)
-        };
-      }
-
-      lastSuccessfulModel = modelName;
-      remoteRetryAfter = 0;
-      const finalResult: GroqClassificationResult = {
-        tipo,
-        respuestaDirecta: parsed.respuestaDirecta || null,
-        consulta,
-        modelName
-      };
-
-      // Guardar en caché por 5 minutos
-      classificationCache.set(normalizedKey, {
-        result: finalResult,
-        expiresAt: now + CACHE_TTL_MS
-      });
-
-      return finalResult;
-    } catch (err) {
-      const timedOut = err instanceof Error && err.message === 'Tiempo de espera agotado';
-      const reason = timedOut ? 'agotó el tiempo de espera' : 'falló la conexión';
-      console.warn(`[Groq] ${modelName} ${reason}; ${timedOut ? 'usando respaldo local' : 'probando otro modelo'}.`);
-      // Si la red ya agotó el tiempo, un modelo más grande solo añadiría espera.
-      if (timedOut) break;
     }
   }
 
-  // Si la red o ambos modelos fallan, los próximos mensajes usan el respaldo
-  // local sin repetir inmediatamente la espera completa.
   remoteRetryAfter = Date.now() + 15_000;
   return null;
 };
@@ -321,7 +359,7 @@ Prohibido inventar datos, números o códigos. No uses asteriscos (*) ni michis 
         model: modelName,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Pregunta: "${userMessage}"\nDatos reales:\n${factsText}\nRespuesta:` }
+          { role: 'user', content: `Pregunta: "${userMessage}"\nDatos reales:\n${factsText}\nRespuesta:` },
         ],
         temperature: 0.2,
         max_tokens: 150,
@@ -330,8 +368,11 @@ Prohibido inventar datos, números o códigos. No uses asteriscos (*) ni michis 
 
     if (response.ok) {
       const data = await response.json();
-      const content = data.choices?.[0]?.message?.content?.trim();
-      if (content) return cleanAsterisks(content);
+      let content = data.choices?.[0]?.message?.content?.trim();
+      if (content) {
+        content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        return cleanAsterisks(content);
+      }
     }
   } catch (_) {}
   return null;

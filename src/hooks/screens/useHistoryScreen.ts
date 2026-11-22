@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
-import { Animated } from 'react-native';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Animated, InteractionManager } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -62,19 +62,48 @@ export const useHistoryScreen = () => {
   const tabAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const historyFetchId = useRef(0);
+  const searchRef = useRef(search);
+  searchRef.current = search;
+  const isInitialMount = useRef(true);
+  const lastFetchedSyncKey = useRef<string | null>(null);
 
-  const fetchHistory = useCallback(async (showLoading = true) => {
-    const fetchId = ++historyFetchId.current;
+  const fetchHistory = useCallback(async (showLoading = true, isRetry = false) => {
+    const fetchId = isRetry ? historyFetchId.current : ++historyFetchId.current;
     if (showLoading) {
       setLoading(true);
       fadeAnim.setValue(0);
     }
     try {
-      const cleanSearch = search.trim();
-      const searchParam = `%${cleanSearch}%`;
+      const cleanSearch = searchRef.current.trim().replace(/\s+/g, ' ');
       const startParam = `${cleanSearch}%`;
       const exactParam = cleanSearch;
-      const userClause = '';
+      const compactParam = `%${cleanSearch.replace(/[\s._-]+/g, '').toUpperCase()}%`;
+      const hasSearch = cleanSearch.length > 0;
+      const tokens = hasSearch ? cleanSearch.split(' ').filter(Boolean) : [];
+      const tokenClauses: string[] = [];
+      const tokenParams: string[] = [];
+      for (const t of tokens) {
+        const likeT = `%${t}%`;
+        const compactT = `%${t.replace(/[\s._-]+/g, '').toUpperCase()}%`;
+        tokenClauses.push(
+          `(g.op LIKE ? OR g.style LIKE ? OR g.color LIKE ? OR b.name LIKE ? OR i.name LIKE ? OR ` +
+            `REPLACE(REPLACE(REPLACE(REPLACE(UPPER(COALESCE(g.op, '')), ' ', ''), '-', ''), '.', ''), '_', '') LIKE ? OR ` +
+            `REPLACE(REPLACE(REPLACE(REPLACE(UPPER(COALESCE(g.style, '')), ' ', ''), '-', ''), '.', ''), '_', '') LIKE ? OR ` +
+            `REPLACE(UPPER(COALESCE(g.color, '')), ' ', '') LIKE ? OR ` +
+            `REPLACE(UPPER(COALESCE(b.name, '')), ' ', '') LIKE ? OR ` +
+            `REPLACE(UPPER(COALESCE(i.name, '')), ' ', '') LIKE ?)`
+        );
+        tokenParams.push(likeT, likeT, likeT, likeT, likeT, compactT, compactT, compactT, compactT, compactT);
+      }
+      const searchClause = hasSearch
+        ? `AND ((${tokenClauses.join(' AND ')}) OR ` +
+            `REPLACE(REPLACE(REPLACE(REPLACE(UPPER(COALESCE(g.op, '')), ' ', ''), '-', ''), '.', ''), '_', '') LIKE ? OR ` +
+            `REPLACE(REPLACE(REPLACE(REPLACE(UPPER(COALESCE(g.style, '')), ' ', ''), '-', ''), '.', ''), '_', '') LIKE ? OR ` +
+            `REPLACE(UPPER(COALESCE(b.name, '')), ' ', '') LIKE ?)`
+        : '';
+      const searchParams = hasSearch
+        ? [...tokenParams, compactParam, compactParam, compactParam]
+        : [];
 
       let query = '';
       let params: any[] = [];
@@ -92,10 +121,10 @@ export const useHistoryScreen = () => {
               SELECT 1 FROM garment_alarms
               WHERE garment_id = g.id AND deleted_at IS NULL AND alarm_datetime IS NOT NULL
             )
-            AND (g.op LIKE ? OR g.style LIKE ? OR g.color LIKE ?) ${userClause}
+            ${searchClause}
           ORDER BY alarm_datetime ASC, g.id DESC
         `;
-        params = [searchParam, searchParam, searchParam];
+        params = [...searchParams];
       } else {
         const estadoDb = status === 'Activo' ? 1 : 0;
         query = `
@@ -106,7 +135,7 @@ export const useHistoryScreen = () => {
           JOIN boxes b ON g.box_id = b.id
           JOIN inventories i ON b.inventory_id = i.id
           WHERE g.deleted_at IS NULL AND b.deleted_at IS NULL AND i.deleted_at IS NULL
-            AND g.status = ? AND (g.op LIKE ? OR g.style LIKE ? OR g.color LIKE ?) ${userClause}
+            AND g.status = ? ${searchClause}
           ORDER BY g.created_at DESC,
             (CASE 
               WHEN g.op = ? OR g.style = ? OR g.color = ? THEN 0
@@ -115,7 +144,8 @@ export const useHistoryScreen = () => {
             END), g.id DESC
         `;
         params = [
-          estadoDb, searchParam, searchParam, searchParam,
+          estadoDb,
+          ...searchParams,
           exactParam, exactParam, exactParam,
           startParam, startParam, startParam
         ];
@@ -126,29 +156,54 @@ export const useHistoryScreen = () => {
         setResults(rows);
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 400,
+          duration: 180,
           useNativeDriver: true,
         }).start();
       }
     } catch (error) {
       console.error('Error fetching history:', error);
+      if (!isRetry && fetchId === historyFetchId.current) {
+        setTimeout(() => {
+          void fetchHistory(false, true);
+        }, 150);
+      }
     } finally {
       if (fetchId === historyFetchId.current) {
         setRefreshing(false);
         if (showLoading) {
-          setTimeout(() => setLoading(false), 200);
+          setTimeout(() => setLoading(false), 150);
         } else {
           setLoading(false);
         }
       }
     }
-  }, [db, search, status, fadeAnim]);
+  }, [db, status, fadeAnim]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchHistory(false);
-    }, [fetchHistory, dataRevision])
+      const currentKey = `${dataRevision}-${status}-${searchRef.current}`;
+      if (lastFetchedSyncKey.current === currentKey) {
+        return;
+      }
+      const task = InteractionManager.runAfterInteractions(() => {
+        lastFetchedSyncKey.current = `${dataRevision}-${status}-${searchRef.current}`;
+        void fetchHistory(false);
+      });
+      return () => task.cancel();
+    }, [fetchHistory, dataRevision, status])
   );
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      lastFetchedSyncKey.current = `${dataRevision}-${status}-${searchRef.current}`;
+      fetchHistory(false);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [search, fetchHistory, dataRevision, status]);
 
   const toggleStatus = useCallback((newStatus: HistoryStatus) => {
     setStatus(newStatus);

@@ -26,10 +26,17 @@ interface PendingDeletionItem {
   id: string;
   tableName: string;
   recordId: string;
+  title?: string;
+  subtitle?: string;
   createdAt: string;
 }
 
-export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
+export const TrashModal: React.FC<TrashModalProps> = (props) => {
+  if (!props.visible) return null;
+  return <TrashModalContent {...props} />;
+};
+
+const TrashModalContent: React.FC<TrashModalProps> = ({ visible, onClose }) => {
   const db = useSQLiteContext();
   const currentTheme = useAppStore(state => state.currentTheme);
   const user = useAppStore(state => state.user);
@@ -39,6 +46,17 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
   const [items, setItems] = useState<PendingDeletionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+
+  const getEntityName = (tableName: string) => {
+    switch (tableName) {
+      case 'inventories': return 'Lote / Inventario';
+      case 'boxes': return 'Caja de Almacén';
+      case 'garments': return 'Prenda de Vestir';
+      case 'chat_sessions': return 'Sesión de Chat';
+      case 'chat_history': return 'Mensaje de Chat';
+      default: return tableName;
+    }
+  };
 
   const loadTrashItems = useCallback(async () => {
     setLoading(true);
@@ -53,30 +71,35 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
           id: `soft_inv_${inv.id}`,
           tableName: 'inventories',
           recordId: inv.id,
+          title: inv.name || 'Lote / Inventario',
           createdAt: inv.deleted_at || inv.created_at || new Date().toISOString(),
         });
       }
 
-      const deletedCajas = await db.getAllAsync<{ id: string; name: string; deleted_at?: string; created_at: string }>(
-        `SELECT id, name, deleted_at, created_at FROM boxes WHERE deleted_at IS NOT NULL AND inventory_id NOT IN (SELECT id FROM inventories WHERE deleted_at IS NOT NULL)`
+      const deletedCajas = await db.getAllAsync<{ id: string; name: string; inventory_name?: string; deleted_at?: string; created_at: string }>(
+        `SELECT b.id, b.name, i.name as inventory_name, b.deleted_at, b.created_at FROM boxes b LEFT JOIN inventories i ON b.inventory_id = i.id WHERE b.deleted_at IS NOT NULL AND b.inventory_id NOT IN (SELECT id FROM inventories WHERE deleted_at IS NOT NULL)`
       );
       for (const caja of deletedCajas || []) {
         combined.push({
           id: `soft_caja_${caja.id}`,
           tableName: 'boxes',
           recordId: caja.id,
+          title: caja.name || 'Caja de Almacén',
+          subtitle: caja.inventory_name ? `Lote: ${caja.inventory_name}` : undefined,
           createdAt: caja.deleted_at || caja.created_at || new Date().toISOString(),
         });
       }
 
-      const deletedPrendas = await db.getAllAsync<{ id: string; style: string; deleted_at?: string; created_at: string }>(
-        `SELECT id, style, deleted_at, created_at FROM garments WHERE deleted_at IS NOT NULL AND box_id NOT IN (SELECT id FROM boxes WHERE deleted_at IS NOT NULL)`
+      const deletedPrendas = await db.getAllAsync<{ id: string; style: string; op?: string; color?: string; deleted_at?: string; created_at: string }>(
+        `SELECT id, style, op, color, deleted_at, created_at FROM garments WHERE deleted_at IS NOT NULL AND box_id NOT IN (SELECT id FROM boxes WHERE deleted_at IS NOT NULL) ORDER BY deleted_at DESC`
       );
       for (const prenda of deletedPrendas || []) {
         combined.push({
           id: `soft_prenda_${prenda.id}`,
           tableName: 'garments',
           recordId: prenda.id,
+          title: prenda.style || 'Prenda de Vestir',
+          subtitle: `OP: ${prenda.op || 'S/N'}  •  Color: ${prenda.color || 'Sin color'}`,
           createdAt: prenda.deleted_at || prenda.created_at || new Date().toISOString(),
         });
       }
@@ -87,7 +110,10 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
       const existingRecordIds = new Set(combined.map(c => c.recordId));
       for (const p of pendingRows || []) {
         if (!existingRecordIds.has(p.recordId)) {
-          combined.push(p);
+          combined.push({
+            ...p,
+            title: p.title || getEntityName(p.tableName),
+          });
         }
       }
 
@@ -246,19 +272,8 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
     }
   };
 
-  const getEntityName = (tableName: string) => {
-    switch (tableName) {
-      case 'inventories': return 'Lote / Inventario';
-      case 'boxes': return 'Caja de Almacén';
-      case 'garments': return 'Prenda de Vestir';
-      case 'chat_sessions': return 'Sesión de Chat';
-      case 'chat_history': return 'Mensaje de Chat';
-      default: return tableName;
-    }
-  };
-
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType="fade" onRequestClose={onClose}>
       <RoleGuard roles={['Admin']}>
         <View style={styles.overlay}>
           <TouchableOpacity
@@ -272,8 +287,8 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
               {
                 backgroundColor: currentTheme.card,
                 borderColor: currentTheme.border,
-                paddingTop: Math.max(insets.top, 20),
-                paddingBottom: Math.max(insets.bottom + 20, 24),
+                paddingTop: 16,
+                paddingBottom: Math.max(insets.bottom + 20, 48),
               },
             ]}
           >
@@ -371,8 +386,10 @@ export const TrashModal: React.FC<TrashModalProps> = ({ visible, onClose }) => {
                         <Ionicons name={getEntityIcon(item.tableName) as any} size={20} color={currentTheme.primary} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.cardTitle, { color: currentTheme.text }]}>{getEntityName(item.tableName)}</Text>
-                        <Text style={[styles.cardSub, { color: currentTheme.textSecondary }]}>ID: {item.recordId}</Text>
+                        <Text style={[styles.cardTitle, { color: currentTheme.text }]}>{item.title || getEntityName(item.tableName)}</Text>
+                        {Boolean(item.subtitle) && (
+                          <Text style={[styles.cardSub, { color: currentTheme.textSecondary }]}>{item.subtitle}</Text>
+                        )}
                         <Text style={[styles.cardDate, { color: currentTheme.textSecondary }]}>
                           Eliminado: {new Date(item.createdAt).toLocaleString('es-ES')}
                         </Text>
@@ -420,11 +437,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
+    paddingTop: 100,
   },
   container: {
-    height: '82%',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    flex: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingHorizontal: 20,
     borderWidth: 1,
   },

@@ -138,9 +138,9 @@ export const AuthManager = {
           await SynchronizationEngine.fullSync(db, currentUserId, false, true);
         }
       } else {
-        // Re-apertura o sesión activa: sincronización con ruedita discreta en Navbar
+        // Re-apertura o sesión activa: sincronización incremental (solo cambios desde el último sync)
         await SynchronizationEngine.restorePendingInventory(db, currentUserId);
-        await SynchronizationEngine.fullSync(db, currentUserId, false, true);
+        await SynchronizationEngine.fullSync(db, currentUserId, false, false);
       }
 
       // REFRESCO TOTAL: Recargar SQLite en Zustand reactivo para pintar la UI de inmediato

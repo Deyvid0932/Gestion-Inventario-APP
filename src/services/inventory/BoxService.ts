@@ -80,14 +80,16 @@ export const BoxService = {
       const now = new Date().toISOString();
       const batchId = generateUUID();
 
-      await db.runAsync(
-        `UPDATE boxes SET deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
-        [now, userId || null, batchId, now, id]
-      );
-      await db.runAsync(
-        `UPDATE garments SET status = 0, deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, updated_at = ?, sync_status = 'PENDING' WHERE box_id = ? AND deleted_at IS NULL`,
-        [now, userId || null, batchId, now, id]
-      );
+      await withSerializedTransaction(db, async () => {
+        await db.runAsync(
+          `UPDATE boxes SET deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
+          [now, userId || null, batchId, now, id]
+        );
+        await db.runAsync(
+          `UPDATE garments SET status = 0, deleted_at = ?, deleted_by = ?, deletion_batch_id = ?, updated_at = ?, sync_status = 'PENDING' WHERE box_id = ? AND deleted_at IS NULL`,
+          [now, userId || null, batchId, now, id]
+        );
+      });
 
       if (userId) {
         SyncScheduler.schedulePush(db, userId);
@@ -120,22 +122,24 @@ export const BoxService = {
       );
       const batchId = targetBox?.deletion_batch_id;
 
-      await db.runAsync(
-        `UPDATE boxes SET deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
-        [now, id]
-      );
-
-      if (batchId) {
+      await withSerializedTransaction(db, async () => {
         await db.runAsync(
-          `UPDATE garments SET status = 1, deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE box_id = ? AND deletion_batch_id = ?`,
-          [now, id, batchId]
-        );
-      } else {
-        await db.runAsync(
-          `UPDATE garments SET status = 1, deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE box_id = ? AND deleted_at IS NOT NULL`,
+          `UPDATE boxes SET deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE id = ?`,
           [now, id]
         );
-      }
+
+        if (batchId) {
+          await db.runAsync(
+            `UPDATE garments SET status = 1, deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE box_id = ? AND deletion_batch_id = ?`,
+            [now, id, batchId]
+          );
+        } else {
+          await db.runAsync(
+            `UPDATE garments SET status = 1, deleted_at = NULL, deleted_by = NULL, deletion_batch_id = NULL, updated_at = ?, sync_status = 'PENDING' WHERE box_id = ? AND deleted_at IS NOT NULL`,
+            [now, id]
+          );
+        }
+      });
 
       if (userId) {
         SyncScheduler.schedulePush(db, userId);
@@ -187,39 +191,9 @@ export const BoxService = {
         }
       });
 
-      // 2. Programar push en segundo plano para garantizar sincronización eventual
+      // 2. Programar push en segundo plano (SyncScheduler agrupa los cambios en lote)
       if (userId) {
         SyncScheduler.schedulePush(db, userId);
-      }
-
-      // 3. Intentar actualización directa e inmediata en Supabase
-      if (userId) {
-        try {
-          const responses = await Promise.all(
-            updates.map(item =>
-              supabase
-                .from('boxes')
-                .update({ order_index: item.order_index, updated_at: item.updated_at })
-                .eq('id', item.id)
-            )
-          );
-
-          const hasError = responses.some(res => res.error);
-          if (!hasError) {
-            await withSerializedTransaction(db, async () => {
-              for (const item of updates) {
-                await db.runAsync(
-                  `UPDATE boxes SET sync_status = 'SYNCED' WHERE id = ? AND updated_at = ?`,
-                  [item.id, item.updated_at]
-                );
-              }
-            });
-          } else {
-            console.warn('Direct box order update in Supabase notice (queued for sync):', responses.map(r => r.error).filter(Boolean));
-          }
-        } catch (cloudErr) {
-          console.warn('Network offline or error during direct Supabase box order update, SyncScheduler will retry:', cloudErr);
-        }
       }
 
       return { success: true };

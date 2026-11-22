@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
-import { Alert } from 'react-native';
+import { Alert, InteractionManager } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -8,6 +8,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { BoxService } from '../../services';
 import { AuthManager } from '../../services';
 import { useRoles } from '../common/useRoles';
+import { matchesNormalizedSearch } from '../../utils/searchUtils';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -38,14 +39,13 @@ export const useBoxesScreen = (inventoryId: string, inventoryName: string) => {
   const [search, setSearch] = useState('');
   const lastNavTime = useRef(0);
   const fetchGeneration = useRef(0);
+  const lastLoadedRevisionRef = useRef(-1);
 
   const filteredBoxes = useMemo(() => {
     if (!search.trim()) return boxes;
-    const q = search.toLowerCase().trim();
-    return boxes.filter(b => {
-      const name = b.name || (b as any).nombre || '';
-      return name.toLowerCase().includes(q);
-    });
+    return boxes.filter(b =>
+      matchesNormalizedSearch([b.name, (b as any).nombre], search)
+    );
   }, [boxes, search]);
 
   const fetchBoxes = useCallback(async () => {
@@ -80,7 +80,13 @@ export const useBoxesScreen = (inventoryId: string, inventoryName: string) => {
 
   useFocusEffect(
     useCallback(() => {
-      if (db) void fetchBoxes();
+      if (!db) return;
+      if (lastLoadedRevisionRef.current === dataRevision) return;
+      lastLoadedRevisionRef.current = dataRevision;
+      const task = InteractionManager.runAfterInteractions(() => {
+        void fetchBoxes();
+      });
+      return () => task.cancel();
     }, [db, dataRevision, fetchBoxes])
   );
 

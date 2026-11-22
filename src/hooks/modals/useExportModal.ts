@@ -1,9 +1,11 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Alert } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { HistoryItem } from '../../types';
 import { exportToExcel } from '../../utils/export';
 import { useAppStore } from '../../store/useAppStore';
+import { R2Service } from '../../services';
 
 export interface BoxItem {
   name: string;
@@ -21,8 +23,10 @@ export interface SelectedColumns {
   op: boolean;
   style: boolean;
   color: boolean;
+  quantity?: boolean;
   location: boolean;
   status: boolean;
+  image?: boolean;
 }
 
 interface UseExportModalProps {
@@ -40,45 +44,62 @@ export const useExportModal = ({ visible, onClose, onExportSuccess, data: propDa
 
   const [exportData, setExportData] = useState<HistoryItem[]>(propData || []);
   const [loadingData, setLoadingData] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [selectedBoxKeys, setSelectedBoxKeys] = useState<string[]>([]);
   const [expandedInventories, setExpandedInventories] = useState<string[]>([]);
   const [separateBySheet, setSeparateBySheet] = useState(true);
   const [customInvOrder, setCustomInvOrder] = useState<string[]>([]);
   const [fileName, setFileName] = useState('');
-  const selectionIdsKey = selection?.garmentIds.join('|') || '';
+  const [quantity, setQuantity] = useState('2P');
+  const isInitializedRef = useRef(false);
+
   const [selectedColumns, setSelectedColumns] = useState<SelectedColumns>({
     op: true,
     style: true,
     color: true,
+    quantity: false,
     location: false,
     status: false,
+    image: false,
   });
 
   useEffect(() => {
-    if (!visible || !selection) return;
-    if (exportSelectionDraft) {
-      const savedColumns = exportSelectionDraft.selectedColumns;
-      const savedSelectionColumns = exportSelectionDraft.formatVersion !== 2
-        ? { op: true, style: true, color: true, location: false, status: false }
-        : savedColumns;
-      setSelectedColumns(savedSelectionColumns);
-      setSeparateBySheet(false);
-      setFileName(exportSelectionDraft.fileName);
-      if (savedSelectionColumns !== savedColumns) {
-        setExportSelectionDraft({ ...exportSelectionDraft, selectedColumns: savedSelectionColumns, separateBySheet: false, formatVersion: 2 });
-      }
+    if (!visible) {
+      isInitializedRef.current = false;
       return;
     }
+    if (!selection) return;
 
-    const defaultColumns = { op: true, style: true, color: true, location: false, status: false };
-    const today = new Date();
-    const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const defaultFileName = `Prendas_${localDate}`;
-    setSelectedColumns(defaultColumns);
-    setSeparateBySheet(false);
-    setFileName(defaultFileName);
-    setExportSelectionDraft({ fileName: defaultFileName, selectedColumns: defaultColumns, separateBySheet: false, formatVersion: 2 });
-  }, [visible, selectionIdsKey, exportSelectionDraft, setExportSelectionDraft]);
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
+      if (exportSelectionDraft) {
+        const savedColumns = exportSelectionDraft.selectedColumns;
+        const savedSelectionColumns = exportSelectionDraft.formatVersion !== 4
+          ? { op: true, style: true, color: true, quantity: false, location: false, status: false, image: false }
+          : { image: false, ...savedColumns };
+        setSelectedColumns(savedSelectionColumns);
+        setSeparateBySheet(false);
+        const savedFileName = exportSelectionDraft.fileName?.trim() ? exportSelectionDraft.fileName : 'Prendas para testing';
+        const savedQuantity = exportSelectionDraft.quantity?.trim() ? exportSelectionDraft.quantity : '2P';
+        setFileName(savedFileName);
+        setQuantity(savedQuantity);
+        if (savedSelectionColumns !== savedColumns || exportSelectionDraft.formatVersion !== 4) {
+          setExportSelectionDraft({ ...exportSelectionDraft, fileName: savedFileName, quantity: savedQuantity, selectedColumns: savedSelectionColumns, separateBySheet: false, formatVersion: 4 });
+        }
+      } else {
+        const defaultColumns = { op: true, style: true, color: true, quantity: false, location: false, status: false, image: false };
+        const defaultFileName = 'Prendas para testing';
+        const defaultQuantity = '2P';
+        setSelectedColumns(defaultColumns);
+        setSeparateBySheet(false);
+        setFileName(defaultFileName);
+        setQuantity(defaultQuantity);
+        setExportSelectionDraft({ fileName: defaultFileName, quantity: defaultQuantity, selectedColumns: defaultColumns, separateBySheet: false, formatVersion: 4 });
+      }
+    }
+  }, [visible, selection, exportSelectionDraft, setExportSelectionDraft]);
+
+  const selectionIdsKey = selection?.garmentIds.join('|') || '';
 
   useEffect(() => {
     if (visible) {
@@ -146,7 +167,6 @@ export const useExportModal = ({ visible, onClose, onExportSuccess, data: propDa
     }
   }, [visible, propData, db, selectionIdsKey]);
 
-  // Estructura jerárquica: Inventario -> Cajas -> Prendas
   const inventoriesGrouped = useMemo<InventoryGroup[]>(() => {
     const map = new Map<string, Map<string, number>>();
 
@@ -162,18 +182,17 @@ export const useExportModal = ({ visible, onClose, onExportSuccess, data: propDa
     });
 
     const result: InventoryGroup[] = [];
-
     map.forEach((boxMap, invName) => {
-      const boxes: BoxItem[] = [];
       let totalGarments = 0;
+      const boxes: BoxItem[] = [];
 
       boxMap.forEach((count, boxName) => {
+        totalGarments += count;
         boxes.push({
           name: boxName,
           garmentCount: count,
           key: `${invName}___${boxName}`,
         });
-        totalGarments += count;
       });
 
       result.push({
@@ -186,7 +205,6 @@ export const useExportModal = ({ visible, onClose, onExportSuccess, data: propDa
     return result;
   }, [exportData]);
 
-  // Claves compuestas de todas las cajas disponibles
   const allBoxKeys = useMemo(() => {
     const keys: string[] = [];
     inventoriesGrouped.forEach(inv => {
@@ -195,7 +213,6 @@ export const useExportModal = ({ visible, onClose, onExportSuccess, data: propDa
     return keys;
   }, [inventoriesGrouped]);
 
-  // Sincronizar el orden de inventarios cuando cambian los datos
   useEffect(() => {
     if (inventoriesGrouped.length > 0) {
       setCustomInvOrder(prev => {
@@ -221,7 +238,6 @@ export const useExportModal = ({ visible, onClose, onExportSuccess, data: propDa
     return result;
   }, [inventoriesGrouped, customInvOrder]);
 
-  // Seleccionar todas las cajas por defecto al abrir
   useEffect(() => {
     if (visible && allBoxKeys.length > 0) {
       setSelectedBoxKeys(allBoxKeys);
@@ -242,15 +258,20 @@ export const useExportModal = ({ visible, onClose, onExportSuccess, data: propDa
   const toggleColumn = useCallback((key: keyof SelectedColumns) => {
     setSelectedColumns(prev => {
       const next = { ...prev, [key]: !prev[key] };
-      if (selection) setExportSelectionDraft({ fileName, selectedColumns: next, separateBySheet: false, formatVersion: 2 });
+      if (selection) setExportSelectionDraft({ fileName, quantity, selectedColumns: next, separateBySheet: false, formatVersion: 4 });
       return next;
     });
-  }, [fileName, selection, setExportSelectionDraft]);
+  }, [fileName, quantity, selection, setExportSelectionDraft]);
 
   const updateFileName = useCallback((value: string) => {
     setFileName(value);
-    if (selection) setExportSelectionDraft({ fileName: value, selectedColumns, separateBySheet: false, formatVersion: 2 });
-  }, [selectedColumns, selection, setExportSelectionDraft]);
+    if (selection) setExportSelectionDraft({ fileName: value, quantity, selectedColumns, separateBySheet: false, formatVersion: 4 });
+  }, [quantity, selectedColumns, selection, setExportSelectionDraft]);
+
+  const updateQuantity = useCallback((value: string) => {
+    setQuantity(value);
+    if (selection) setExportSelectionDraft({ fileName, quantity: value, selectedColumns, separateBySheet: false, formatVersion: 4 });
+  }, [fileName, selectedColumns, selection, setExportSelectionDraft]);
 
   const updateSeparateBySheet = useCallback((value: boolean) => {
     setSeparateBySheet(value);
@@ -291,32 +312,20 @@ export const useExportModal = ({ visible, onClose, onExportSuccess, data: propDa
   }, [selectedBoxKeys.length, allBoxKeys]);
 
   const handleExport = useCallback(async () => {
-    if (!selection && selectedBoxKeys.length === 0) {
-      Alert.alert('Atención', 'Selecciona al menos una caja para generar la exportación.');
-      return;
-    }
-
-    if (!Object.values(selectedColumns).some(Boolean)) {
-      Alert.alert('Atención', 'Selecciona al menos una columna para exportar.');
-      return;
-    }
-
-    const dataFiltrada = selection ? exportData : exportData.filter(item => {
-      const invName = item.inventory_name || 'Inventario Sin Nombre';
-      const boxName = item.box_name || 'Caja Sin Nombre';
-      return selectedBoxKeys.includes(`${invName}___${boxName}`);
-    });
+    const dataFiltrada = selection
+      ? exportData
+      : exportData.filter(item => {
+          const boxName = item.box_name || 'Caja Sin Nombre';
+          const identity = String(item.box_id || `${item.inventory_name || ''}___${boxName}`);
+          return selectedBoxKeys.includes(identity) || selectedBoxKeys.includes(`${item.inventory_name || ''}___${boxName}`);
+        });
 
     if (dataFiltrada.length === 0) {
       Alert.alert('Sin Datos', 'No hay prendas para exportar en la selección actual.');
       return;
     }
 
-    const nombreArchivo = selection ? fileName.trim() : `Reporte_Inventario_${selectedBoxKeys.length}_Cajas`;
-    if (selection && !nombreArchivo) {
-      Alert.alert('Atención', 'Escribe un nombre para el archivo Excel.');
-      return;
-    }
+    const nombreArchivo = selection ? (fileName.trim() || 'Prendas para testing') : `Reporte_Inventario_${selectedBoxKeys.length}_Cajas`;
 
     const boxesByName = new Map<string, Set<string>>();
     dataFiltrada.forEach(item => {
@@ -326,57 +335,177 @@ export const useExportModal = ({ visible, onClose, onExportSuccess, data: propDa
       boxesByName.get(boxName)!.add(identity);
     });
 
-    const dataFinal = dataFiltrada.map(item => {
-      const row: any = {};
-      const boxName = item.box_name || 'Caja Sin Nombre';
-      row['_box_name'] = selection
-        ? 'PRUEBA TESTING'
-        : (boxesByName.get(boxName)?.size || 0) > 1
-          ? `${item.inventory_name || 'Inventario'} - ${boxName}`
-          : boxName;
-      if (selection) {
-        row['_box_title'] = 'PRUEBA TESTING';
-        row['_sheet_name'] = 'PRUEBA TESTING';
-        row['_hide_column_headers'] = true;
-        row['_merge_box_title'] = true;
+    const normalizedQuantity = quantity.trim() ? quantity.trim() : '2P';
+
+    setExporting(true);
+    try {
+      const imagesMetaById = new Map<string, Array<{ base64: string; width: number; height: number }>>();
+      if (selectedColumns.image && db) {
+        const imgLookup = new Map<string, Array<{ uri: string | null; storage_key: string | null }>>();
+        const seenOrderByGarment = new Map<string, Set<number>>();
+        const ids = dataFiltrada.map(i => i.id);
+        for (let i = 0; i < ids.length; i += 400) {
+          const chunk = ids.slice(i, i + 400);
+          const placeholders = chunk.map(() => '?').join(',');
+          const imgRows = await db.getAllAsync<{
+            garment_id: string;
+            uri: string | null;
+            storage_key: string | null;
+            order_index: number;
+          }>(
+            `SELECT garment_id, uri, storage_key, order_index
+             FROM garment_images
+             WHERE garment_id IN (${placeholders}) AND deleted_at IS NULL
+             ORDER BY order_index ASC, updated_at DESC, id DESC`,
+            chunk
+          );
+          for (const r of imgRows) {
+            let seenOrders = seenOrderByGarment.get(r.garment_id);
+            if (!seenOrders) {
+              seenOrders = new Set<number>();
+              seenOrderByGarment.set(r.garment_id, seenOrders);
+            }
+            if (seenOrders.has(r.order_index)) continue;
+            seenOrders.add(r.order_index);
+
+            const list = imgLookup.get(r.garment_id) || [];
+            list.push({ uri: r.uri, storage_key: r.storage_key });
+            imgLookup.set(r.garment_id, list);
+          }
+        }
+
+        // Procesar miniaturas en lotes pequeños para evitar picos de memoria
+        for (let i = 0; i < dataFiltrada.length; i += 5) {
+          const batch = dataFiltrada.slice(i, i + 5);
+          await Promise.all(
+            batch.map(async item => {
+              const sources = imgLookup.get(item.id) || [];
+              const fallbackUri = (item as any).photo_uri || (item as any).fotoUri || null;
+              const fallbackKey = (item as any).primary_storage_key || (item as any).r2Key || null;
+              const candidates =
+                sources.length > 0
+                  ? sources
+                  : fallbackUri || fallbackKey
+                    ? [{ uri: fallbackUri, storage_key: fallbackKey }]
+                    : [];
+              if (candidates.length === 0) return;
+
+              const processed: Array<{ base64: string; width: number; height: number }> = [];
+              for (const src of candidates) {
+                if (!src.uri && !src.storage_key) continue;
+                try {
+                  const resolved = await R2Service.getResolvedImageUri(src.uri, src.storage_key);
+                  if (!resolved) continue;
+                  const manipulated = await ImageManipulator.manipulateAsync(
+                    resolved,
+                    [{ resize: { width: 480 } }],
+                    { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+                  );
+                  if (manipulated.base64) {
+                    processed.push({
+                      base64: manipulated.base64,
+                      width: manipulated.width,
+                      height: manipulated.height,
+                    });
+                  }
+                } catch (_) {
+                  // Continuar si una imagen puntual no está disponible
+                }
+              }
+              if (processed.length > 0) {
+                imagesMetaById.set(item.id, processed);
+              }
+            })
+          );
+        }
+      }
+
+      const maxImagesPerItem = selectedColumns.image
+        ? Math.max(1, ...Array.from(imagesMetaById.values()).map(arr => arr.length))
+        : 0;
+
+      const dataFinal = dataFiltrada.map(item => {
+        const row: any = {};
+        const boxName = item.box_name || 'Caja Sin Nombre';
+        row['_box_name'] = selection
+          ? 'PRUEBA TESTING'
+          : (boxesByName.get(boxName)?.size || 0) > 1
+            ? `${item.inventory_name || 'Inventario'} - ${boxName}`
+            : boxName;
         row['_center_box_title'] = true;
-      }
+        if (selection) {
+          row['_box_title'] = 'PRUEBA TESTING';
+          row['_sheet_name'] = 'PRUEBA TESTING';
+          row['_merge_box_title'] = true;
+        }
 
-      if (selectedColumns.style) row['Estilo'] = item.style;
-      if (selectedColumns.op) row['OP'] = item.op || 'S/N';
-      if (selectedColumns.color) row['Color'] = item.color;
-      if (selectedColumns.location) {
-        if (!selection) row['Inventario'] = item.inventory_name;
-        row['Caja'] = item.box_name;
-      }
-      if (selectedColumns.status) {
-        row['Estado'] = item.status === 1 ? 'Activo' : 'Inactivo';
-      }
-      return row;
-    });
+        if (selectedColumns.style) row['Estilo'] = item.style;
+        if (selectedColumns.op) row['OP'] = item.op || 'S/N';
+        if (selectedColumns.color) row['Color'] = item.color;
+        if (selection && selectedColumns.quantity) {
+          row['Cantidad'] = normalizedQuantity;
+        }
+        if (selectedColumns.location) {
+          if (!selection) row['Inventario'] = item.inventory_name;
+          row['Caja'] = item.box_name;
+        }
+        if (selectedColumns.status) {
+          row['Estado'] = item.status === 1 ? 'Activo' : 'Inactivo';
+        }
+        if (selectedColumns.image) {
+          if (maxImagesPerItem <= 1) {
+            row['Imagen'] = '';
+          } else {
+            for (let k = 1; k <= maxImagesPerItem; k++) {
+              row[`Imagen ${k}`] = '';
+            }
+          }
+          const imgs = imagesMetaById.get(item.id);
+          if (imgs && imgs.length > 0) {
+            row['_images'] = imgs;
+          }
+        }
+        return row;
+      });
 
-    const exported = await exportToExcel(dataFinal, nombreArchivo, selection ? false : separateBySheet);
-    if (exported) {
-      // expo-sharing no informa si el usuario compartió el archivo o cerró la hoja.
-      // Conservamos prendas y configuración para que cerrar o solo abrir Excel no borre la selección.
-      if (!selection) onExportSuccess?.();
-      onClose();
+      const exported = await exportToExcel(dataFinal, nombreArchivo, selection ? false : separateBySheet);
+      if (exported) {
+        if (!selection) onExportSuccess?.();
+        onClose();
+      }
+    } finally {
+      setExporting(false);
     }
-  }, [selection, selectedBoxKeys, exportData, selectedColumns, fileName, separateBySheet, onClose, onExportSuccess, setExportSelectionDraft]);
+  }, [
+    db,
+    selection,
+    exportData,
+    fileName,
+    quantity,
+    selectedColumns,
+    onExportSuccess,
+    onClose,
+    selectedBoxKeys,
+    separateBySheet,
+  ]);
 
   return {
-    exportData,
     loadingData,
-    inventoriesGrouped,
+    exporting,
+    exportData,
     orderedInventoriesGrouped,
     allBoxKeys,
     selectedBoxKeys,
     expandedInventories,
     separateBySheet,
+    setSeparateBySheet: updateSeparateBySheet,
     selectedColumns,
     fileName,
     setFileName: updateFileName,
-    setSeparateBySheet: updateSeparateBySheet,
+    quantity,
+    setQuantity: updateQuantity,
+    updateFileName,
+    updateQuantity,
     moveInventoryPosition,
     toggleColumn,
     toggleInventoryExpand,

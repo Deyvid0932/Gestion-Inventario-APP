@@ -21,7 +21,7 @@ import { navigationRef } from './navigationRef';
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
 
-const MainStack = () => {
+const MainStack = React.memo(() => {
   const currentTheme = useAppStore(state => state.currentTheme);
 
   return (
@@ -32,6 +32,7 @@ const MainStack = () => {
         gestureEnabled: true,
         cardShadowEnabled: false,
         cardOverlayEnabled: false,
+        detachPreviousScreen: false,
         cardStyle: { backgroundColor: currentTheme.background },
         cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
       }}
@@ -44,7 +45,7 @@ const MainStack = () => {
       <Stack.Screen name="Form" component={FormScreen} />
     </Stack.Navigator>
   );
-};
+});
 
 
 

@@ -9,7 +9,3 @@ coverage/
 *.tsbuildinfo
 android/
 ios/
-.agent/
-.expo/
-supabase/
-

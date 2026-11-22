@@ -52,7 +52,8 @@ interface AppState {
   selectedGarments: Record<string, boolean>;
   exportSelectionDraft: {
     fileName: string;
-    selectedColumns: { op: boolean; style: boolean; color: boolean; location: boolean; status: boolean };
+    selectedColumns: { op: boolean; style: boolean; color: boolean; quantity?: boolean; location: boolean; status: boolean; image?: boolean };
+    quantity?: string;
     separateBySheet: boolean;
     formatVersion?: number;
   } | null;

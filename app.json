@@ -5,10 +5,10 @@
     "slug": "inventario-frontend-app-supabase",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon_navidad.png",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash_icon.png",
+      "image": "./assets/splash_icon_navidad.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
@@ -18,6 +18,7 @@
     },
     "android": {
       "package": "com.deyvid.inventarioapp.supabase",
+      "icon": "./assets/icon_navidad.png",
       "softwareKeyboardLayoutMode": "resize",
       "usesCleartextTraffic": true,
       "permissions": [
@@ -29,7 +30,7 @@
         "android.permission.POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/android_icon_foreground-01.png",
+        "foregroundImage": "./assets/android_icon_foreground_navidad.png",
         "backgroundColor": "#000000"
       }
     },
@@ -41,7 +42,9 @@
         "expo-build-properties",
         {
           "android": {
-            "extraProguardRules": "-keep class com.google.mlkit.** { *; }\n-dontwarn com.google.mlkit.**\n-keep class com.google.android.gms.internal.mlkit.** { *; }\n-dontwarn com.google.android.gms.internal.mlkit.**\n-keep class com.reactnativemlkit.** { *; }\n-dontwarn com.reactnativemlkit.**"
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "-keep class com.google.mlkit.** { *; }\n-dontwarn com.google.mlkit.**\n-keep class com.google.android.gms.internal.mlkit.** { *; }\n-dontwarn com.google.android.gms.internal.mlkit.**\n-keep class com.reactnativemlkit.** { *; }\n-dontwarn com.reactnativemlkit.**\n-dontwarn expo.modules.core.interfaces.services.KeepAwakeManager\n-dontwarn expo.modules.av.**"
           }
         }
       ],

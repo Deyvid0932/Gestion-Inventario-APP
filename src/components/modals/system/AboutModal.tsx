@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,28 +19,27 @@ interface AboutModalProps {
 }
 
 const TECHNOLOGIES = [
-  { name: 'React Native', icon: 'code-slash-outline', color: '#61DAFB', desc: 'Framework móvil nativo de alto rendimiento para Android e iOS.' },
-  { name: 'Expo', icon: 'rocket-outline', color: '#000000', darkColor: '#FFFFFF', desc: 'Plataforma para acceso nativo al hardware, cámara y notificaciones.' },
-  { name: 'TypeScript', icon: 'logo-javascript', color: '#3178C6', desc: 'Tipado estático seguro para prevenir errores en tiempo de desarrollo.' },
-  { name: 'SQLite (WAL)', icon: 'server-outline', color: '#003B57', darkColor: '#007ACC', desc: 'Base de datos relacional ultra rápida almacenada 100% en tu dispositivo.' },
-  { name: 'Supabase', icon: 'flash-outline', color: '#3ECF8E', desc: 'Backend Cloud para autenticación segura con Google y sincronización remota.' },
-  { name: 'Cloudflare R2', icon: 'cloud-upload-outline', color: '#F38020', desc: 'Almacenamiento de objetos de alta velocidad para el guardado y respaldo de fotos de prendas.' },
-  { name: 'Llama 3.3 IA', icon: 'hardware-chip-outline', color: '#8B5CF6', desc: 'Modelo de inteligencia artificial avanzado para el asistente virtual y consultas.' },
-  { name: 'React Navigation', icon: 'navigate-outline', color: '#7B1FA2', desc: 'Gestor de rutas y navegación entre pestañas sin lag.' },
-  { name: 'Zustand', icon: 'cube-outline', color: '#F59E0B', desc: 'Estado global atómico y ligero sin renders globales innecesarios.' },
+  { name: 'React Native 0.83', icon: 'code-slash-outline', color: '#61DAFB', desc: 'Motor móvil nativo con Nueva Arquitectura para máximo rendimiento.' },
+  { name: 'Expo SDK 55', icon: 'rocket-outline', color: '#000000', darkColor: '#FFFFFF', desc: 'Acceso nativo a cámara, galería, archivos, compartir y notificaciones.' },
+  { name: 'TypeScript 5.9', icon: 'logo-javascript', color: '#3178C6', desc: 'Tipado estático estricto para mayor estabilidad en cada actualización.' },
+  { name: 'SQLite (WAL)', icon: 'server-outline', color: '#003B57', darkColor: '#007ACC', desc: 'Base de datos local ultra rápida con funcionamiento 100% offline.' },
+  { name: 'Supabase Cloud', icon: 'flash-outline', color: '#3ECF8E', desc: 'Autenticación segura con Google OAuth y sincronización en la nube.' },
+  { name: 'Cloudflare R2', icon: 'cloud-upload-outline', color: '#F38020', desc: 'Almacenamiento privado con URLs firmadas para fotos de prendas y solicitudes.' },
+  { name: 'Groq + Llama 3.3 IA', icon: 'hardware-chip-outline', color: '#8B5CF6', desc: 'Asistente Topytop IA para consultas inteligentes de inventario.' },
+  { name: 'ML Kit OCR', icon: 'scan-outline', color: '#EC4899', desc: 'Reconocimiento óptico de texto local para escanear solicitudes y cartillas.' },
+  { name: 'Excel & PDF Engine', icon: 'document-text-outline', color: '#10B981', desc: 'Generación de reportes en Excel con estilo y documentos PDF nativos.' },
+  { name: 'Zustand & Reanimated', icon: 'cube-outline', color: '#F59E0B', desc: 'Estado global atómico y animaciones fluidas a 60 FPS.' },
 ];
 
 const ADVANTAGES = [
-  { title: 'Funciona sin internet', desc: 'Todos tus lotes, cajas y prendas están disponibles offline en SQLite.', icon: 'cloud-offline-outline' },
-  { title: 'Fotos en Cloudflare R2', desc: 'Guardado y respaldo seguro de imágenes de prendas en almacenamiento Cloudflare R2.', icon: 'images-outline' },
-  { title: 'Sincronización en la nube', desc: 'Respaldo seguro en Supabase para restaurar o usar en varios teléfonos.', icon: 'cloud-done-outline' },
-  { title: 'IA integrada (Llama 3.3)', desc: 'Consultas inteligentes para buscar prendas por color, lote o descripción.', icon: 'sparkles-outline' },
-  { title: 'Búsquedas ultra rápidas', desc: 'Filtros instantáneos con índices optimizados en base de datos local.', icon: 'search-outline' },
-  { title: 'Gestión por Lotes y Cajas', desc: 'Organización estructurada y profesional de inventarios textiles.', icon: 'albums-outline' },
+  { title: 'Funciona sin internet', desc: 'Todos tus lotes, cajas, prendas y auditoría están disponibles offline en SQLite.', icon: 'cloud-offline-outline' },
+  { title: 'Fotos en Cloudflare R2', desc: 'Respaldo privado de imágenes de prendas y solicitudes con carga optimizada.', icon: 'images-outline' },
+  { title: 'Sincronización inteligente', desc: 'Respaldo automático en Supabase para restaurar o usar en varios dispositivos.', icon: 'cloud-done-outline' },
+  { title: 'Topytop IA + Escaneo OCR', desc: 'Consultas en lenguaje natural y lectura rápida de etiquetas con cámara.', icon: 'sparkles-outline' },
+  { title: 'Reportes Excel y PDF', desc: 'Exporta por lotes, cajas o prendas seleccionadas con columnas configurables.', icon: 'document-attach-outline' },
+  { title: 'Auditoría de actividad', desc: 'Historial reciente de creaciones, ediciones y eliminaciones con filtros.', icon: 'time-outline' },
   { title: 'Recordatorios inteligentes', desc: 'Alarmas nativas para dar seguimiento a prendas en producción.', icon: 'alarm-outline' },
-  { title: 'Interfaz moderna y limpia', desc: 'Estilo neumórfico/claymorphic adaptado a múltiples paletas de color.', icon: 'color-palette-outline' },
-  { title: 'Alto rendimiento', desc: 'Arquitectura de renderizado ligero sin tirones ni retrasos.', icon: 'speedometer-outline' },
-  { title: 'Seguridad de datos', desc: 'Inicio de sesión con Google OAuth sin compartir contraseñas.', icon: 'shield-checkmark-outline' },
+  { title: 'Seguridad de datos', desc: 'Inicio de sesión con Google OAuth y aislamiento por usuario con RLS.', icon: 'shield-checkmark-outline' },
 ];
 
 export const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose }) => {
@@ -49,7 +49,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose }) => {
   const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
@@ -64,8 +64,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose }) => {
               backgroundColor: currentTheme.card,
               borderColor: currentTheme.border,
               shadowColor: currentTheme.borderShadow || '#000',
-              maxHeight: '85%',
-              paddingBottom: Math.max(insets.bottom + 16, 24),
+              paddingBottom: 0,
             },
           ]}
         >
@@ -91,13 +90,15 @@ export const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose }) => {
           <ScrollView
             showsVerticalScrollIndicator={false}
             nestedScrollEnabled={true}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + 20, 32) }]}
           >
             {/* Hero App Info */}
             <View style={[styles.appHeroCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-              <View style={[styles.appLogoBadge, { backgroundColor: currentTheme.primary }]}>
-                <Ionicons name="cube" size={32} color="#FFF" />
-              </View>
+              <Image
+                source={require('../../../../assets/icon_navidad.png')}
+                style={styles.appLogoImage}
+                resizeMode="cover"
+              />
               <Text style={[styles.appName, { color: currentTheme.text }]}>Topytop Kith</Text>
               <Text style={[styles.appTagline, { color: currentTheme.textSecondary }]}>
                 Sistema Inteligente de Gestión de Inventario Textil
@@ -106,7 +107,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose }) => {
               <View style={styles.appMetaGrid}>
                 <View style={[styles.metaPill, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
                   <Text style={[styles.metaLabel, { color: currentTheme.textSecondary }]}>Versión App</Text>
-                  <Text style={[styles.metaValue, { color: currentTheme.text }]}>v1.0.0</Text>
+                  <Text style={[styles.metaValue, { color: currentTheme.text }]}>v2.0.0</Text>
                 </View>
 
                 <View style={[styles.metaPill, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
@@ -168,8 +169,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+    paddingTop: 100,
   },
   sheetContainer: {
+    flex: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
@@ -216,14 +219,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  appLogoBadge: {
-    width: 56,
-    height: 56,
+  appLogoImage: {
+    width: 68,
+    height: 68,
     borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 10,
-    elevation: 4,
   },
   appName: {
     fontSize: 20,
