@@ -9,6 +9,8 @@ import {
   Animated,
   ScrollView,
   Alert,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,11 +25,14 @@ import {
   MoveGarmentModal,
   SuccessModal,
   ExportModal,
+  TestRequestPdfModal,
 } from '../components';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, FlatList } from 'react-native-gesture-handler';
 import { GarmentService } from '../services';
 import { useBoxContentsScreen } from '../hooks';
+import { useAppStore } from '../store/useAppStore';
+import { createDefaultTestRequest, exportTestRequestToPdf } from '../utils/testRequest';
 
 type BoxContentsRouteProp = RouteProp<RootStackParamList, 'BoxContents'>;
 
@@ -38,6 +43,7 @@ export const BoxContentsScreen = () => {
   const boxName = route.params?.boxName || 'Caja';
   const db = useSQLiteContext();
   const [exportSelectionVisible, setExportSelectionVisible] = useState(false);
+  const [pdfModalVisible, setPdfModalVisible] = useState(false);
 
   const { state, computed, refs, handlers } = useBoxContentsScreen(boxId, boxName);
   const {
@@ -71,7 +77,6 @@ export const BoxContentsScreen = () => {
     onRefresh,
     handleNew,
     handleCameraScan,
-    handleBulkDelete,
     handleItemPress,
     deleteGarment,
     toggleGarmentStatus,
@@ -84,10 +89,21 @@ export const BoxContentsScreen = () => {
     toggleSelectGarment,
     clearSelectedGarments,
   } = handlers;
+
   const selectedGarmentIds = useMemo(
     () => Object.keys(selectedGarments).filter(id => selectedGarments[id]),
     [selectedGarments]
   );
+
+  const globalGarments = useAppStore(state => state.garments);
+  const selectedGarmentList = useMemo(() => {
+    const map = new Map<string, Garment>();
+    filteredGarments.forEach(g => map.set(g.id, g));
+    globalGarments.forEach(g => {
+      if (!map.has(g.id)) map.set(g.id, g);
+    });
+    return selectedGarmentIds.map(id => map.get(id)).filter(Boolean) as Garment[];
+  }, [filteredGarments, globalGarments, selectedGarmentIds]);
 
   const handleItemPressStable = useCallback((item: Garment) => {
     handleItemPress(item);
@@ -136,6 +152,41 @@ export const BoxContentsScreen = () => {
     }
   }, [setModalVisible, setCurrentImage]);
 
+  const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
+    flatListRef.current?.scrollToOffset({
+      offset: Math.max(0, info.averageItemLength * info.index - 120),
+      animated: true,
+    });
+    setTimeout(() => {
+      try {
+        flatListRef.current?.scrollToIndex({
+          index: info.index,
+          animated: true,
+          viewPosition: 0.5,
+        });
+      } catch (_) {}
+    }, 220);
+  }, [flatListRef]);
+
+  const listEmptyComponent = useMemo(() => (
+    <EmptyState
+      iconName="shirt-outline"
+      title="¡Sin Prendas!"
+      description="Toca 'Nuevo' o usa el OCR para comenzar."
+      currentTheme={currentTheme}
+      delay={100}
+    />
+  ), [currentTheme]);
+
+  const listFooterComponent = useMemo(() => <View style={{ height: 8 }} />, []);
+
+  const targetGarmentId = (route.params as any)?.targetGarmentId;
+  const initialRenderCount = useMemo(() => {
+    if (!targetGarmentId) return 10;
+    const idx = filteredGarments.findIndex(g => g.id === targetGarmentId);
+    return idx !== -1 ? Math.max(12, idx + 5) : 10;
+  }, [targetGarmentId, filteredGarments]);
+
   const renderItem = useCallback(({ item }: { item: Garment }) => (
     <GarmentCard
       item={item}
@@ -182,18 +233,18 @@ export const BoxContentsScreen = () => {
                     Excel ({selectedCount})
                   </Text>
                 </TouchableOpacity>
-                {canEdit && (
-                  <TouchableOpacity
-                    onPress={handleBulkDelete}
-                    style={[styles.bulkActionButton, { backgroundColor: '#ef4444' }]}
-                    activeOpacity={0.82}
-                  >
-                    <Ionicons name="trash" size={18} color="#FFF" />
-                    <Text style={[styles.bulkActionText, { color: '#FFF' }]} numberOfLines={1}>
-                      Eliminar ({selectedCount})
-                    </Text>
-                  </TouchableOpacity>
-                )}
+
+                <TouchableOpacity
+                  onPress={() => setPdfModalVisible(true)}
+                  style={[styles.bulkActionButton, { backgroundColor: '#E11D48' }]}
+                  activeOpacity={0.82}
+                >
+                  <Ionicons name="document-text" size={18} color="#FFF" />
+                  <Text style={[styles.bulkActionText, { color: '#FFF' }]} numberOfLines={1}>
+                    PDF ({selectedCount})
+                  </Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   onPress={clearSelectedGarments}
                   style={[styles.clearSelectionButton, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}
@@ -213,6 +264,9 @@ export const BoxContentsScreen = () => {
                   placeholderTextColor={currentTheme.textSecondary}
                   value={search}
                   onChangeText={setSearch}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
                 />
                 {search.length > 0 && (
                   <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -246,7 +300,7 @@ export const BoxContentsScreen = () => {
           )}
 
           {/* FILTER CHIPS */}
-          <View style={{ height: 36, marginBottom: 8 }}>
+          <View style={{ height: 38, marginTop: 6, marginBottom: 10 }}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, alignItems: 'center' }}>
               <TouchableOpacity
                 activeOpacity={0.8}
@@ -322,8 +376,7 @@ export const BoxContentsScreen = () => {
           ) : (
             <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
               <FlatList
-                key={`garments-${themeMode}`}
-                extraData={themeMode}
+                extraData={`${themeMode}-${highlightedId ?? ''}`}
                 ref={flatListRef}
                 data={filteredGarments}
                 renderItem={renderItem}
@@ -333,17 +386,12 @@ export const BoxContentsScreen = () => {
                   { paddingBottom: Math.max(insets.bottom, 24) + 16 }
                 ]}
                 showsVerticalScrollIndicator={false}
-                initialNumToRender={10}
-                maxToRenderPerBatch={10}
-                onScrollToIndexFailed={(info) => {
-                  setTimeout(() => {
-                    flatListRef.current?.scrollToIndex({
-                      index: info.index,
-                      animated: true,
-                      viewPosition: 0.5,
-                    });
-                  }, 100);
-                }}
+                initialNumToRender={initialRenderCount}
+                maxToRenderPerBatch={12}
+                windowSize={9}
+                updateCellsBatchingPeriod={50}
+                removeClippedSubviews={false}
+                onScrollToIndexFailed={handleScrollToIndexFailed}
                 refreshControl={
                   <RefreshControl
                     refreshing={refreshing}
@@ -352,16 +400,8 @@ export const BoxContentsScreen = () => {
                     colors={[currentTheme.primary]}
                   />
                 }
-                ListEmptyComponent={
-                  <EmptyState
-                    iconName="shirt-outline"
-                    title="¡Sin Prendas!"
-                    description="Toca 'Nuevo' o usa el OCR para comenzar."
-                    currentTheme={currentTheme}
-                    delay={100}
-                  />
-                }
-                ListFooterComponent={<View style={{ height: 8 }} />}
+                ListEmptyComponent={listEmptyComponent}
+                ListFooterComponent={listFooterComponent}
               />
             </Animated.View>
           )}
@@ -409,6 +449,12 @@ export const BoxContentsScreen = () => {
           selection={exportSelectionVisible ? { garmentIds: selectedGarmentIds } : null}
           title="Excel de prendas seleccionadas"
         />
+
+        <TestRequestPdfModal
+          visible={pdfModalVisible}
+          onClose={() => setPdfModalVisible(false)}
+          selectedGarments={selectedGarmentList}
+        />
       </View>
     </GestureHandlerRootView>
   );
@@ -421,7 +467,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 8,
+    paddingBottom: 10,
     gap: 8,
   },
   actionBtn: {

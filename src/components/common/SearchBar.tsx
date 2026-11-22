@@ -22,6 +22,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({ value, onChangeText, place
         placeholderTextColor={currentTheme.textSecondary}
         value={value}
         onChangeText={onChangeText}
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="search"
       />
     </View>
   );

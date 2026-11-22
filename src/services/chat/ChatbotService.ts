@@ -196,11 +196,46 @@ export const getBoxSummary = async (
 
 const getGlobalGarmentMatches = async (db: SQLiteDatabase, message: string): Promise<SearchResult[]> => {
   const started = Date.now();
-  const candidates = await db.getAllAsync<SearchResult>(
-    `${SEARCH_QUERY}
-     WHERE g.deleted_at IS NULL AND b.deleted_at IS NULL AND i.deleted_at IS NULL
-     ORDER BY g.created_at DESC, g.id DESC`
-  );
+  const rawTokens = Array.from(
+    new Set(
+      message
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .split(/\s+/)
+        .map(w => w.replace(/[^a-z0-9]/g, ''))
+        .filter(w => w.length >= 2)
+    )
+  ).slice(0, 6);
+
+  let candidates: SearchResult[] = [];
+  if (rawTokens.length > 0) {
+    const likeClauses = rawTokens.map(
+      () => `(g.op LIKE ? OR g.style LIKE ? OR g.color LIKE ? OR b.name LIKE ? OR i.name LIKE ?)`
+    );
+    const params = rawTokens.flatMap(t => {
+      const p = `%${t}%`;
+      return [p, p, p, p, p];
+    });
+    candidates = await db.getAllAsync<SearchResult>(
+      `${SEARCH_QUERY}
+       WHERE g.deleted_at IS NULL AND b.deleted_at IS NULL AND i.deleted_at IS NULL
+         AND (${likeClauses.join(' OR ')})
+       ORDER BY g.created_at DESC, g.id DESC
+       LIMIT 250`,
+      params
+    );
+  }
+
+  if (candidates.length === 0) {
+    candidates = await db.getAllAsync<SearchResult>(
+      `${SEARCH_QUERY}
+       WHERE g.deleted_at IS NULL AND b.deleted_at IS NULL AND i.deleted_at IS NULL
+       ORDER BY g.created_at DESC, g.id DESC
+       LIMIT 350`
+    );
+  }
+
   const matches = rankGarmentCandidates(candidates, message);
   if (typeof __DEV__ !== 'undefined' && __DEV__ && Date.now() - started > 500) {
     console.log(`[Chatbot] Búsqueda local: ${Date.now() - started} ms, ${candidates.length} prendas revisadas.`);
@@ -581,7 +616,7 @@ export const ChatbotService = {
     const cleanKey = apiKey.trim().replace(/^["']|["']$/g, '');
     if (!cleanKey) return 'Motor Local';
 
-    return 'openai/gpt-oss-20b';
+    return 'deepseek-r1-distill-llama-70b';
   },
 
   searchAndRespond: async (

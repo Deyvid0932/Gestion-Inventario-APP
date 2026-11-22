@@ -78,8 +78,8 @@ export const SettingsScreen = () => {
     if (isAuthLoading || syncStatus === 'syncing') {
       return (
         <View style={[styles.statusBadge, { backgroundColor: currentTheme.primary + '20', borderColor: currentTheme.primary }]}>
-          <ActivityIndicator size="small" color={currentTheme.primary} style={{ marginRight: 6 }} />
-          <Text style={[styles.statusBadgeText, { color: currentTheme.primary }]}>🔄 Sincronizando...</Text>
+          <ActivityIndicator size="small" color={currentTheme.primary} style={{ marginRight: 6, transform: [{ scale: 0.75 }] }} />
+          <Text style={[styles.statusBadgeText, { color: currentTheme.primary }]} numberOfLines={1}>Sincronizando...</Text>
         </View>
       );
     }
@@ -205,8 +205,8 @@ export const SettingsScreen = () => {
         <View style={[styles.syncHeroCard, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
           <View style={styles.syncHeroHeader}>
             <View style={{ flex: 1, paddingRight: 8 }}>
-              <Text style={[styles.syncHeroTitle, { color: currentTheme.text }]}>Estado de Sincronización</Text>
-              <Text style={[styles.syncMessageText, { color: currentTheme.textSecondary }]}>{syncMessage}</Text>
+              <Text style={[styles.syncHeroTitle, { color: currentTheme.text }]} numberOfLines={1}>Estado de Sincronización</Text>
+              <Text style={[styles.syncMessageText, { color: currentTheme.textSecondary }]} numberOfLines={1}>{syncMessage}</Text>
             </View>
             {renderSyncBadge()}
           </View>
@@ -574,6 +574,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 40,
     marginBottom: 12,
   },
   syncHeroTitle: {
@@ -587,8 +588,9 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    height: 28,
     paddingHorizontal: 8,
-    paddingVertical: 4,
     borderRadius: 10,
     borderWidth: 1,
   },

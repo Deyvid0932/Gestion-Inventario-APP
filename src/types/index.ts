@@ -83,6 +83,7 @@ export interface Garment {
   style: string;
   color: string;
   size?: string;
+  art_code?: string | null;
   shipping_at?: string | null;
   status: 1 | 0;
   created_at: string;

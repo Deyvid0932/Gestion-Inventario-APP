@@ -13,6 +13,7 @@ export interface PendingDeletionItem {
   tableName: string;
   recordId: string;
   title: string;
+  subtitle?: string;
   createdAt: string;
   deletedAt?: string | null;
 }
@@ -29,6 +30,17 @@ export const useTrashScreen = () => {
   const [items, setItems] = useState<PendingDeletionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+
+  const getEntityName = (tableName: string) => {
+    switch (tableName) {
+      case 'inventories': return 'Lote / Inventario';
+      case 'boxes': return 'Caja de Almacén';
+      case 'garments': return 'Prenda de Vestir';
+      case 'chat_sessions': return 'Sesión de Chat';
+      case 'chat_history': return 'Mensaje de Chat';
+      default: return tableName;
+    }
+  };
 
   const loadTrashItems = useCallback(async () => {
     setLoading(true);
@@ -51,8 +63,8 @@ export const useTrashScreen = () => {
       }
 
       // 2. Cajas eliminadas lógicamente (solo cajas borradas individualmente cuyo lote NO esté borrado)
-      const deletedBoxes = await db.getAllAsync<{ id: string; name: string; deleted_at?: string; created_at: string }>(
-        `SELECT id, name, deleted_at, created_at FROM boxes WHERE deleted_at IS NOT NULL AND inventory_id NOT IN (SELECT id FROM inventories WHERE deleted_at IS NOT NULL)`
+      const deletedBoxes = await db.getAllAsync<{ id: string; name: string; inventory_name?: string; deleted_at?: string; created_at: string }>(
+        `SELECT b.id, b.name, i.name as inventory_name, b.deleted_at, b.created_at FROM boxes b LEFT JOIN inventories i ON b.inventory_id = i.id WHERE b.deleted_at IS NOT NULL AND b.inventory_id NOT IN (SELECT id FROM inventories WHERE deleted_at IS NOT NULL)`
       );
       for (const box of deletedBoxes || []) {
         combined.push({
@@ -60,21 +72,23 @@ export const useTrashScreen = () => {
           tableName: 'boxes',
           recordId: box.id,
           title: box.name || 'Caja de Almacén',
+          subtitle: box.inventory_name ? `Lote: ${box.inventory_name}` : undefined,
           createdAt: box.deleted_at || box.created_at || new Date().toISOString(),
           deletedAt: box.deleted_at,
         });
       }
 
       // 3. Prendas eliminadas lógicamente (solo prendas borradas individualmente cuya caja NO esté borrada)
-      const deletedGarments = await db.getAllAsync<{ id: string; style: string; color: string; deleted_at?: string; created_at: string }>(
-        `SELECT id, style, color, deleted_at, created_at FROM garments WHERE deleted_at IS NOT NULL AND box_id NOT IN (SELECT id FROM boxes WHERE deleted_at IS NOT NULL)`
+      const deletedGarments = await db.getAllAsync<{ id: string; style: string; op?: string; color: string; deleted_at?: string; created_at: string }>(
+        `SELECT id, style, op, color, deleted_at, created_at FROM garments WHERE deleted_at IS NOT NULL AND box_id NOT IN (SELECT id FROM boxes WHERE deleted_at IS NOT NULL) ORDER BY deleted_at DESC`
       );
       for (const garment of deletedGarments || []) {
         combined.push({
           id: `garment_${garment.id}`,
           tableName: 'garments',
           recordId: garment.id,
-          title: `${garment.style || 'Prenda'} - ${garment.color || ''}`,
+          title: garment.style || 'Prenda de Vestir',
+          subtitle: `OP: ${garment.op || 'S/N'}  •  Color: ${garment.color || 'Sin color'}`,
           createdAt: garment.deleted_at || garment.created_at || new Date().toISOString(),
           deletedAt: garment.deleted_at,
         });
@@ -91,7 +105,7 @@ export const useTrashScreen = () => {
             id: p.id,
             tableName: p.tableName,
             recordId: p.recordId,
-            title: `${p.tableName}: ${p.recordId}`,
+            title: getEntityName(p.tableName),
             createdAt: p.createdAt,
             deletedAt: p.createdAt,
           });
@@ -269,19 +283,12 @@ export const useTrashScreen = () => {
     }
   };
 
-  const getEntityName = (tableName: string) => {
-    switch (tableName) {
-      case 'inventories': return 'Lote / Inventario';
-      case 'boxes': return 'Caja de Almacén';
-      case 'garments': return 'Prenda de Vestir';
-      case 'chat_sessions': return 'Sesión de Chat';
-      case 'chat_history': return 'Mensaje de Chat';
-      default: return tableName;
-    }
-  };
-
   const goBack = useCallback(() => {
-    navigation.goBack();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      (navigation as any).navigate('Home');
+    }
   }, [navigation]);
 
   return {

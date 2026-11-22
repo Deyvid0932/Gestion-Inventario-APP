@@ -122,7 +122,14 @@ export const TrashScreen: React.FC = () => {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.cardTitle, { color: currentTheme.text }]}>{item.title || getEntityName(item.tableName)}</Text>
-                    <Text style={[styles.cardSub, { color: currentTheme.textSecondary }]}>{getEntityName(item.tableName)} (ID: {item.recordId})</Text>
+                    {Boolean(item.subtitle) && (
+                      <Text style={[styles.cardSub, { color: currentTheme.textSecondary }]}>
+                        {item.subtitle}
+                      </Text>
+                    )}
+                    <Text style={[styles.cardDate, { color: currentTheme.textSecondary, marginBottom: 2 }]}>
+                      Eliminado: {new Date(item.deletedAt || item.createdAt).toLocaleString('es-ES')}
+                    </Text>
                     <Text style={[styles.cardDate, { color: '#F59E0B', fontWeight: '600' }]}>
                       ⏳ {computeRemainingTime(item.deletedAt)}
                     </Text>

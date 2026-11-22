@@ -23,7 +23,11 @@ export const Navbar = ({ title, showBackButton, isLoading, rightElement, leftEle
     const now = Date.now();
     if (now - lastBackPress.current < 300) return;
     lastBackPress.current = now;
-    navigation.goBack();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      (navigation as any).navigate('Home');
+    }
   };
 
   const showLoading = Boolean(isLoading || isSyncing);

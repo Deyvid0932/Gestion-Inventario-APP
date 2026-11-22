@@ -8,7 +8,7 @@ const palette = {
   darkTextSec: '#94A3B8',
 };
 
-export type ColorSchemeType = 'morado' | 'dorado' | 'celeste' | 'verde' | 'rosado' | 'rojo';
+export type ColorSchemeType = 'morado' | 'dorado' | 'celeste' | 'verde' | 'rosado' | 'rojo' | 'gris' | 'marron';
 
 export const SCHEME_COLORS: Record<ColorSchemeType, string> = {
   morado: '#8B5CF6',
@@ -17,6 +17,8 @@ export const SCHEME_COLORS: Record<ColorSchemeType, string> = {
   verde: '#059669',
   rosado: '#DB2777',
   rojo: '#DC2626',
+  gris: '#475569',
+  marron: '#8B5A2B',
 };
 
 export const schemes = {
@@ -161,6 +163,54 @@ export const schemes = {
       borderShadow: '#00000080',
       primary: '#F87171',
       primaryText: palette.white,
+      success: palette.success,
+    }
+  },
+  gris: {
+    light: {
+      background: '#F8FAFC',
+      card: '#FFFFFF',
+      text: '#0F172A',
+      textSecondary: '#64748B',
+      border: '#E2E8F0',
+      borderShadow: '#E2E8F060',
+      primary: '#475569',
+      primaryText: palette.white,
+      success: palette.success,
+    },
+    dark: {
+      background: palette.darkBg,
+      card: palette.darkCard,
+      text: palette.white,
+      textSecondary: palette.darkTextSec,
+      border: palette.darkBorder,
+      borderShadow: '#00000080',
+      primary: '#94A3B8',
+      primaryText: '#0F172A',
+      success: palette.success,
+    }
+  },
+  marron: {
+    light: {
+      background: '#FAF8F5',
+      card: '#FFFFFF',
+      text: '#0F172A',
+      textSecondary: '#78716C',
+      border: '#E7E0D8',
+      borderShadow: '#E7E0D860',
+      primary: '#8B5A2B',
+      primaryText: palette.white,
+      success: palette.success,
+    },
+    dark: {
+      background: palette.darkBg,
+      card: palette.darkCard,
+      text: palette.white,
+      textSecondary: palette.darkTextSec,
+      border: palette.darkBorder,
+      borderShadow: '#00000080',
+      primary: '#C68B59',
+      primaryText: '#0F172A',
       success: palette.success,
     }
   }

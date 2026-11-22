@@ -51,6 +51,7 @@ const CANONICAL_SCHEMA = `
     style TEXT NOT NULL,
     color TEXT NOT NULL,
     size TEXT,
+    art_code TEXT,
     shipping_at TEXT,
     status INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -149,6 +150,8 @@ const CANONICAL_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_boxes_sync ON boxes(sync_status);
 
   CREATE INDEX IF NOT EXISTS idx_garments_box ON garments(box_id);
+  CREATE INDEX IF NOT EXISTS idx_garments_box_del_created ON garments(box_id, deleted_at, created_at);
+  CREATE INDEX IF NOT EXISTS idx_garments_del_created ON garments(deleted_at, created_at);
   CREATE INDEX IF NOT EXISTS idx_garments_op ON garments(box_id, op);
   CREATE INDEX IF NOT EXISTS idx_garments_status ON garments(status);
   CREATE INDEX IF NOT EXISTS idx_garments_created ON garments(created_at);
@@ -158,15 +161,21 @@ const CANONICAL_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_garments_color ON garments(color);
 
   CREATE INDEX IF NOT EXISTS idx_garment_images_garment ON garment_images(garment_id);
+  CREATE INDEX IF NOT EXISTS idx_garment_images_lookup ON garment_images(garment_id, order_index, deleted_at, updated_at);
   CREATE INDEX IF NOT EXISTS idx_garment_images_primary ON garment_images(garment_id) WHERE is_primary = 1;
   CREATE INDEX IF NOT EXISTS idx_garment_images_storage ON garment_images(storage);
   CREATE INDEX IF NOT EXISTS idx_garment_images_batch ON garment_images(deletion_batch_id);
   CREATE INDEX IF NOT EXISTS idx_garment_images_sync ON garment_images(sync_status);
 
   CREATE INDEX IF NOT EXISTS idx_garment_alarms_garment ON garment_alarms(garment_id);
+  CREATE INDEX IF NOT EXISTS idx_garment_alarms_lookup ON garment_alarms(garment_id, deleted_at, updated_at);
   CREATE INDEX IF NOT EXISTS idx_garment_alarms_expires ON garment_alarms(expires_at);
   CREATE INDEX IF NOT EXISTS idx_garment_alarms_batch ON garment_alarms(deletion_batch_id);
   CREATE INDEX IF NOT EXISTS idx_garment_alarms_sync ON garment_alarms(sync_status);
+
+  CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_del ON chat_sessions(user_id, deleted_at, updatedAt);
+  CREATE INDEX IF NOT EXISTS idx_chat_history_session_ts ON chat_history(sessionId, timestamp);
+  CREATE INDEX IF NOT EXISTS idx_chat_history_sync ON chat_history(sync_status);
 `;
 
 async function cleanLegacySpanishTables(db: SQLiteDatabase) {
@@ -196,6 +205,9 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
   } catch (e) {}
   try {
     await db.execAsync(`ALTER TABLE garments ADD COLUMN shipping_at TEXT;`);
+  } catch (e) {}
+  try {
+    await db.execAsync(`ALTER TABLE garments ADD COLUMN art_code TEXT;`);
   } catch (e) {}
   try {
     await db.execAsync(`UPDATE inventories SET order_index = orden WHERE (order_index IS NULL OR order_index = 0) AND orden IS NOT NULL;`);

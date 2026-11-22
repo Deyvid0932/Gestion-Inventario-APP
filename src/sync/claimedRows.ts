@@ -38,11 +38,14 @@ export async function finishClaimedRows(
   rows: SyncRow[],
   status: 'SYNCED' | 'FAILED'
 ): Promise<void> {
-  for (const row of rows) {
-    await db.runAsync(
-      `UPDATE ${table} SET sync_status = ?
-       WHERE id = ? AND updated_at IS ? AND sync_status = 'SYNCING'`,
-      [status, row.id, row.updated_at ?? null]
-    );
-  }
+  if (rows.length === 0) return;
+  await withSerializedTransaction(db, async () => {
+    for (const row of rows) {
+      await db.runAsync(
+        `UPDATE ${table} SET sync_status = ?
+         WHERE id = ? AND updated_at IS ? AND sync_status = 'SYNCING'`,
+        [status, row.id, row.updated_at ?? null]
+      );
+    }
+  });
 }

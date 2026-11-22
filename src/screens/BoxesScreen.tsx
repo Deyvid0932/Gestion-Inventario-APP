@@ -14,7 +14,6 @@ import { RootStackParamList, BoxWithStats } from '../types';
 import { Navbar, SkeletonLoader, EmptyState, BoxCard } from '../components';
 import { Ionicons } from '@expo/vector-icons';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useBoxesScreen } from '../hooks';
 
 type BoxesRouteProp = RouteProp<RootStackParamList, 'Boxes'>;
@@ -57,9 +56,8 @@ export const BoxesScreen = () => {
   const bottomSafePadding = insets.bottom;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: currentTheme.background }}>
-      <View style={{ flex: 1, backgroundColor: currentTheme.background, paddingBottom: bottomSafePadding }}>
-        <Navbar title={inventoryName} showBackButton isLoading={isUpdatingOrder} />
+    <View style={{ flex: 1, backgroundColor: currentTheme.background, paddingBottom: bottomSafePadding }}>
+      <Navbar title={inventoryName} showBackButton isLoading={isUpdatingOrder} />
 
         {/* TOP BAR: SEARCH + NEW BOX BUTTON */}
         <View style={styles.topActionsBar}>
@@ -71,6 +69,9 @@ export const BoxesScreen = () => {
               placeholderTextColor={currentTheme.textSecondary}
               value={search}
               onChangeText={setSearch}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
             />
             {search.length > 0 && (
               <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -97,7 +98,7 @@ export const BoxesScreen = () => {
           <View style={{ flex: 1 }}>
             <DraggableFlatList
               key={`cajas-${themeMode}`}
-              extraData={themeMode}
+              extraData={`${themeMode}-${search}`}
               data={filteredBoxes}
               keyExtractor={item => item.id}
               renderItem={renderItem}
@@ -140,7 +141,6 @@ export const BoxesScreen = () => {
           </View>
         )}
       </View>
-    </GestureHandlerRootView>
   );
 };
 

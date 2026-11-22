@@ -5,8 +5,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  TouchableWithoutFeedback,
-  ScrollView,
   Alert,
   ActivityIndicator,
   Linking,
@@ -128,7 +126,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
@@ -143,8 +141,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
               backgroundColor: currentTheme.card,
               borderColor: currentTheme.border,
               shadowColor: currentTheme.borderShadow || '#000',
-              maxHeight: '85%',
-              paddingBottom: Math.max(insets.bottom + 16, 24),
+              paddingBottom: Math.max(insets.bottom + 20, 48),
             },
           ]}
         >
@@ -167,11 +164,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
             </TouchableOpacity>
           </View>
 
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            nestedScrollEnabled={true}
-            contentContainerStyle={styles.scrollContent}
-          >
+          <View style={styles.staticBody}>
             {user ? (
               <>
                 {/* Tarjeta de Perfil Autenticado */}
@@ -186,16 +179,16 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
                     />
                   ) : (
                     <View style={[styles.heroAvatarPlaceholder, { backgroundColor: currentTheme.primary + '20' }]}>
-                      <Ionicons name="person" size={36} color={currentTheme.primary} />
+                      <Ionicons name="person" size={44} color={currentTheme.primary} />
                     </View>
                   )}
 
-                  <Text style={[styles.heroName, { color: currentTheme.text }]}>{fullName}</Text>
-                  <Text style={[styles.heroEmail, { color: currentTheme.textSecondary }]}>{maskEmail(email)}</Text>
+                  <Text style={[styles.heroName, { color: currentTheme.text }]} numberOfLines={1}>{fullName}</Text>
+                  <Text style={[styles.heroEmail, { color: currentTheme.textSecondary }]} numberOfLines={1}>{maskEmail(email)}</Text>
 
                   <View style={styles.badgeRow}>
                     <View style={[styles.authBadge, { backgroundColor: '#4285F415', borderColor: '#4285F440' }]}>
-                      <Ionicons name="logo-google" size={14} color="#4285F4" style={{ marginRight: 4 }} />
+                      <Ionicons name="logo-google" size={13} color="#4285F4" style={{ marginRight: 4 }} />
                       <Text style={[styles.authBadgeText, { color: '#4285F4' }]}>Google OAuth</Text>
                     </View>
 
@@ -210,7 +203,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
                 <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>DETALLES DE LA CUENTA</Text>
                 <View style={[styles.detailsGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
                   <View style={styles.detailRow}>
-                    <Ionicons name="key-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
+                    <Ionicons name="key-outline" size={19} color={currentTheme.primary} style={styles.detailIcon} />
                     <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Rol asignado</Text>
                     <Text style={[styles.detailValue, { color: currentTheme.primary, fontWeight: '800' }]}>
                       {userRoles[0] === 'Admin' ? 'Admin' : userRoles[0] === 'Editor' ? 'Editor' : 'Viewer'}
@@ -220,7 +213,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
                   <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
 
                   <View style={styles.detailRow}>
-                    <Ionicons name="calendar-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
+                    <Ionicons name="calendar-outline" size={19} color={currentTheme.primary} style={styles.detailIcon} />
                     <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Miembro desde</Text>
                     <Text style={[styles.detailValue, { color: currentTheme.text }]}>{createdAt}</Text>
                   </View>
@@ -228,17 +221,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
                   <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
 
                   <View style={styles.detailRow}>
-                    <Ionicons name="sync-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
-                    <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Última Sincronización</Text>
+                    <Ionicons name="sync-outline" size={19} color={currentTheme.primary} style={styles.detailIcon} />
+                    <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Sincronización</Text>
                     <Text style={[styles.detailValue, { color: currentTheme.text }]}>{getSyncTimeFormatted()}</Text>
                   </View>
 
                   <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
 
                   <View style={styles.detailRow}>
-                    <Ionicons name="shield-checkmark-outline" size={18} color={currentTheme.primary} style={styles.detailIcon} />
+                    <Ionicons name="shield-checkmark-outline" size={19} color={currentTheme.primary} style={styles.detailIcon} />
                     <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>Estado de Sincronización</Text>
-                    <Text style={[styles.detailValue, { color: '#2ecc71', fontWeight: '700' }]}>Activo & Seguro</Text>
+                    <Text style={[styles.detailValue, { color: '#2ecc71', fontWeight: '700' }]}>Activo</Text>
                   </View>
                 </View>
 
@@ -261,23 +254,25 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
                     )}
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[styles.actionBtnOutline, { borderColor: currentTheme.border, backgroundColor: currentTheme.background }]}
-                    onPress={handleManageAccount}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="open-outline" size={18} color={currentTheme.text} style={{ marginRight: 6 }} />
-                    <Text style={[styles.actionBtnOutlineText, { color: currentTheme.text }]}>Administrar Cuenta</Text>
-                  </TouchableOpacity>
+                  <View style={styles.actionsSplitRow}>
+                    <TouchableOpacity
+                      style={[styles.actionBtnOutline, styles.actionBtnHalf, { borderColor: currentTheme.border, backgroundColor: currentTheme.background }]}
+                      onPress={handleManageAccount}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="open-outline" size={16} color={currentTheme.text} style={{ marginRight: 6 }} />
+                      <Text style={[styles.actionBtnOutlineText, { color: currentTheme.text }]} numberOfLines={1}>Administrar</Text>
+                    </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[styles.actionBtnOutline, { borderColor: '#e74c3c40', backgroundColor: '#e74c3c10' }]}
-                    onPress={handleSignOut}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="log-out-outline" size={18} color="#e74c3c" style={{ marginRight: 6 }} />
-                    <Text style={[styles.actionBtnOutlineText, { color: '#e74c3c' }]}>Cerrar Sesión</Text>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionBtnOutline, styles.actionBtnHalf, { borderColor: '#e74c3c40', backgroundColor: '#e74c3c10' }]}
+                      onPress={handleSignOut}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="log-out-outline" size={16} color="#e74c3c" style={{ marginRight: 6 }} />
+                      <Text style={[styles.actionBtnOutlineText, { color: '#e74c3c' }]} numberOfLines={1}>Cerrar Sesión</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </>
             ) : (
@@ -346,7 +341,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ visible, onClose }) 
                 </View>
               </>
             )}
-          </ScrollView>
+          </View>
         </View>
       </View>
     </Modal>
@@ -358,8 +353,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+    paddingTop: 100,
   },
   sheetContainer: {
+    flex: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
@@ -373,13 +370,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#CCCCCC',
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 14,
+    marginBottom: 8,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   titleContainer: {
     flexDirection: 'row',
@@ -396,41 +393,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  scrollContent: {
-    paddingBottom: 10,
+  staticBody: {
+    flex: 1,
   },
   profileHero: {
-    padding: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   heroAvatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    marginBottom: 10,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    marginBottom: 12,
   },
   heroAvatarPlaceholder: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   heroName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
-    marginBottom: 2,
+    marginBottom: 4,
+    textAlign: 'center',
   },
   heroEmail: {
-    fontSize: 13,
-    marginBottom: 10,
+    fontSize: 14,
+    marginBottom: 12,
+    textAlign: 'center',
   },
   badgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: 8,
   },
   authBadge: {
@@ -456,30 +458,30 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
-    marginBottom: 8,
-    marginTop: 6,
+    marginBottom: 6,
+    marginTop: 2,
   },
   detailsGroup: {
     borderRadius: 14,
     borderWidth: 1,
     paddingHorizontal: 14,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   detailIcon: {
     marginRight: 10,
   },
   detailLabel: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '600',
   },
   detailValue: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '600',
   },
   uidText: {
@@ -491,66 +493,90 @@ const styles = StyleSheet.create({
     height: 1,
     width: '100%',
   },
+  infoBannerCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 9,
+    borderRadius: 13,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  infoBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  infoBannerDesc: {
+    fontSize: 11.5,
+    lineHeight: 16,
+  },
   actionsContainer: {
-    gap: 8,
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 6,
+  },
+  actionsSplitRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionBtnHalf: {
+    flex: 1,
   },
   actionBtn: {
     flexDirection: 'row',
-    height: 46,
-    borderRadius: 12,
+    height: 50,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
   },
   actionBtnText: {
     color: '#FFF',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
   },
   actionBtnOutline: {
     flexDirection: 'row',
-    height: 46,
-    borderRadius: 12,
+    height: 50,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
   },
   actionBtnOutlineText: {
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 14.5,
   },
   guestHero: {
-    padding: 20,
+    padding: 14,
     borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  guestIconBadge: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 12,
   },
+  guestIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   guestHeroTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   guestHeroSubtitle: {
-    fontSize: 13,
+    fontSize: 12.5,
     textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 16,
+    lineHeight: 17,
+    marginBottom: 12,
   },
   googleSignInBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
-    height: 46,
+    height: 42,
     borderRadius: 12,
     width: '100%',
   },
@@ -560,21 +586,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   advantagesGrid: {
-    gap: 10,
-    marginBottom: 16,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 6,
   },
   advantageCard: {
-    padding: 14,
+    flexGrow: 1,
+    flexBasis: '48%',
+    padding: 11,
     borderRadius: 14,
     borderWidth: 1,
   },
   advantageTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   advantageDesc: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11.5,
+    lineHeight: 15,
   },
 });

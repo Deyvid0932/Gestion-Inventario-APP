@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { InteractionManager } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,7 +17,7 @@ export interface ActivityItem {
   icon: keyof typeof Ionicons.glyphMap;
 }
 
-const fetchRecentActivity = async (db: any): Promise<ActivityItem[]> => {
+const fetchRecentActivity = async (db: any, limit: number = 5): Promise<ActivityItem[]> => {
   try {
     const activities = await db.getAllAsync(
       `SELECT 
@@ -135,7 +136,8 @@ const fetchRecentActivity = async (db: any): Promise<ActivityItem[]> => {
       WHERE deleted_at IS NOT NULL
 
       ORDER BY date DESC
-      LIMIT 5`
+      LIMIT ?`,
+      [limit]
     );
     return activities as ActivityItem[];
   } catch (error) {
@@ -196,21 +198,27 @@ export const useStatsScreen = () => {
   const lastSyncTime = useAppStore(state => state.lastSyncTime);
   const isSyncing = useAppStore(state => state.isSyncing);
   const syncMessage = useAppStore(state => state.syncMessage);
+  const dataRevision = useAppStore(state => state.dataRevision);
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [fullActivities, setFullActivities] = useState<ActivityItem[]>([]);
+  const [activityModalVisible, setActivityModalVisible] = useState(false);
+  const [loadingFullActivity, setLoadingFullActivity] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   const loadData = useCallback(async (isRefresh = false) => {
     if (!db) return;
-    if (!isRefresh) setLoading(true);
+    if (!isRefresh && !hasLoadedRef.current) setLoading(true);
 
     const [statsData, recentActivity] = await Promise.all([
       StatsService.getStats(db, user?.id),
-      fetchRecentActivity(db)
+      fetchRecentActivity(db, 5)
     ]);
 
+    hasLoadedRef.current = true;
     setStats(statsData);
     setActivities(recentActivity);
 
@@ -218,9 +226,34 @@ export const useStatsScreen = () => {
     if (isRefresh) setRefreshing(false);
   }, [db, user?.id]);
 
+  useEffect(() => {
+    if (db && dataRevision > 0) {
+      loadData(true);
+    }
+  }, [db, dataRevision, loadData]);
+
+  const openActivityHistory = useCallback(async () => {
+    setActivityModalVisible(true);
+    if (!db) return;
+    setLoadingFullActivity(true);
+    try {
+      const list = await fetchRecentActivity(db, 100);
+      setFullActivities(list);
+    } finally {
+      setLoadingFullActivity(false);
+    }
+  }, [db]);
+
+  const closeActivityHistory = useCallback(() => {
+    setActivityModalVisible(false);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      loadData();
+      const task = InteractionManager.runAfterInteractions(() => {
+        loadData();
+      });
+      return () => task.cancel();
     }, [loadData])
   );
 
@@ -243,6 +276,9 @@ export const useStatsScreen = () => {
     state: {
       stats,
       activities,
+      fullActivities,
+      activityModalVisible,
+      loadingFullActivity,
       loading,
       refreshing,
     },
@@ -259,6 +295,8 @@ export const useStatsScreen = () => {
       onRefresh,
       navigateTo,
       formatRelativeTime,
+      openActivityHistory,
+      closeActivityHistory,
     },
   };
 };

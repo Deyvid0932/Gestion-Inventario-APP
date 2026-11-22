@@ -108,7 +108,7 @@ export const FormScreen = () => {
             style={[styles.input, { color: currentTheme.text }]}
             value={val}
             onChangeText={t => {
-              const value = field === 'op' ? t.replace(/\D/g, '').slice(0, 7) : t;
+              const value = field === 'op' ? t.replace(/\D/g, '').slice(0, 6) : t;
               setFormData(prev => ({
                 ...prev,
                 [field]: value,
@@ -118,7 +118,7 @@ export const FormScreen = () => {
             placeholder={placeholder}
             placeholderTextColor={currentTheme.textSecondary}
             keyboardType={field === 'op' ? 'number-pad' : 'default'}
-            maxLength={field === 'op' ? 7 : undefined}
+            maxLength={field === 'op' ? 6 : undefined}
             onFocus={() => setFocusedField(field)}
             onBlur={() => setFocusedField(null)}
           />
@@ -135,7 +135,7 @@ export const FormScreen = () => {
       <Navbar title={title} showBackButton />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
         <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom + 40, 60) }]}
+          contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom + 12, 16) }]}
           keyboardShouldPersistTaps="handled"
           bounces={false}
           overScrollMode="never"
@@ -159,14 +159,18 @@ export const FormScreen = () => {
             {isGarment && (
               <>
                 {renderInput('Estilo', 'style', 'Ej. Polo Slim', false, 'estilo')}
-                <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+                <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
                   <View style={styles.opField}>
-                    {renderInput('OP', 'op', 'Ej. 1', true)}
+                    {renderInput('OP', 'op', '316295', true)}
                   </View>
                   <View style={styles.colorField}>
                     {renderInput('Color', 'color', 'Ej. Rojo')}
                   </View>
                 </View>
+
+                {renderInput('Técnica', 'size', 'Ej. Plastisol, Al Agua', true)}
+
+                {renderInput('Código de Arte', 'art_code', 'Ej. ART-001', true)}
 
                 <View style={styles.inputWrapper}>
                   <View style={styles.labelRow}>
@@ -181,19 +185,19 @@ export const FormScreen = () => {
                         style={[styles.imagePickerBtn, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}
                         onPress={() => pickImage(1, 'camera')}
                       >
-                        <Ionicons name="camera-outline" size={22} color={currentTheme.text} />
+                        <Ionicons name="camera-outline" size={18} color={currentTheme.text} />
                         <Text style={[styles.imagePickerText, { color: currentTheme.text }]}>Cámara</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.imagePickerBtn, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}
                         onPress={() => pickImage(1, 'library')}
                       >
-                        <Ionicons name="images-outline" size={22} color={currentTheme.text} />
+                        <Ionicons name="images-outline" size={18} color={currentTheme.text} />
                         <Text style={[styles.imagePickerText, { color: currentTheme.text }]}>Galería</Text>
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <View style={{ flexDirection: 'row', gap: 12, width: '100%', height: 120 }}>
+                    <View style={{ flexDirection: 'row', gap: 10, width: '100%', height: 92 }}>
                       {imageUri && (
                         <View style={[styles.imagePreviewContainer, { flex: 1, height: '100%' }]}>
                           <TouchableOpacity
@@ -278,8 +282,8 @@ export const FormScreen = () => {
                   )}
                 </View>
 
-                <View style={[styles.inputWrapper, { marginTop: 12 }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <View style={[styles.inputWrapper, { marginTop: 2, marginBottom: 6 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <Ionicons name="notifications-outline" size={18} color={currentTheme.primary} />
                       <Text style={[styles.label, { color: currentTheme.textSecondary, marginBottom: 0 }]}>
@@ -298,54 +302,50 @@ export const FormScreen = () => {
                   </View>
 
                   {alarmEnabled && (
-                    <View style={{ backgroundColor: currentTheme.background, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: currentTheme.border }}>
-                      <Text style={{ fontSize: 12, color: currentTheme.textSecondary, marginBottom: 10 }}>
-                        Programar fecha y hora de la notificación:
-                      </Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                      <TouchableOpacity
+                        style={{
+                          flex: 1,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          paddingVertical: 8,
+                          paddingHorizontal: 10,
+                          borderRadius: 11,
+                          backgroundColor: currentTheme.background,
+                          borderWidth: 1,
+                          borderColor: currentTheme.border
+                        }}
+                        onPress={() => setShowDatePicker(true)}
+                      >
+                        <Ionicons name="calendar-outline" size={15} color={currentTheme.primary} />
+                        <Text style={{ fontSize: 12, color: currentTheme.text, fontWeight: '600' }}>
+                          {alarmDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </Text>
+                      </TouchableOpacity>
 
-                      <View style={{ flexDirection: 'row', gap: 10 }}>
-                        <TouchableOpacity
-                          style={{
-                            flex: 1,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6,
-                            padding: 10,
-                            borderRadius: 12,
-                            backgroundColor: currentTheme.card,
-                            borderWidth: 1,
-                            borderColor: currentTheme.border
-                          }}
-                          onPress={() => setShowDatePicker(true)}
-                        >
-                          <Ionicons name="calendar-outline" size={16} color={currentTheme.primary} />
-                          <Text style={{ fontSize: 12, color: currentTheme.text, fontWeight: '600' }}>
-                            {alarmDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={{
-                            flex: 1,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6,
-                            padding: 10,
-                            borderRadius: 12,
-                            backgroundColor: currentTheme.card,
-                            borderWidth: 1,
-                            borderColor: currentTheme.border
-                          }}
-                          onPress={() => setShowTimePicker(true)}
-                        >
-                          <Ionicons name="time-outline" size={16} color={currentTheme.primary} />
-                          <Text style={{ fontSize: 12, color: currentTheme.text, fontWeight: '600' }}>
-                            {alarmDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
+                      <TouchableOpacity
+                        style={{
+                          flex: 1,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          paddingVertical: 8,
+                          paddingHorizontal: 10,
+                          borderRadius: 11,
+                          backgroundColor: currentTheme.background,
+                          borderWidth: 1,
+                          borderColor: currentTheme.border
+                        }}
+                        onPress={() => setShowTimePicker(true)}
+                      >
+                        <Ionicons name="time-outline" size={15} color={currentTheme.primary} />
+                        <Text style={{ fontSize: 12, color: currentTheme.text, fontWeight: '600' }}>
+                          {alarmDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </TouchableOpacity>
 
                       {showDatePicker && (
                         <DateTimePicker
@@ -384,20 +384,20 @@ export const FormScreen = () => {
                   )}
                 </View>
 
-                <View style={[styles.inputWrapper, { marginTop: 12 }]}>
+                <View style={[styles.inputWrapper, { marginTop: 2, marginBottom: 6 }]}>
                   <View style={[styles.labelRow, { justifyContent: 'space-between' }]}>
                     <Text style={[styles.label, { color: currentTheme.textSecondary, marginBottom: 0 }]}>
                       Envio Testing <Text style={{ color: currentTheme.textSecondary, fontSize: 10, fontWeight: '400' }}>(Opcional)</Text>
                     </Text>
                     {shippingAt ? (
                       <TouchableOpacity onPress={clearShippingAt} accessibilityLabel="Quitar fecha de envío">
-                        <Ionicons name="close-circle" size={20} color={currentTheme.textSecondary} />
+                        <Ionicons name="close-circle" size={18} color={currentTheme.textSecondary} />
                       </TouchableOpacity>
                     ) : null}
                   </View>
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
                     <TouchableOpacity
-                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 10, borderRadius: 12, backgroundColor: currentTheme.card, borderWidth: 1, borderColor: currentTheme.border }}
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 11, backgroundColor: currentTheme.card, borderWidth: 1, borderColor: currentTheme.border }}
                       onPress={() => setShowShippingDatePicker(true)}
                       accessibilityLabel="Elegir día de envío"
                     >
@@ -407,7 +407,7 @@ export const FormScreen = () => {
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 10, borderRadius: 12, backgroundColor: currentTheme.card, borderWidth: 1, borderColor: currentTheme.border }}
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 11, backgroundColor: currentTheme.card, borderWidth: 1, borderColor: currentTheme.border }}
                       onPress={() => setShowShippingTimePicker(true)}
                       accessibilityLabel="Elegir hora de envío"
                     >
@@ -465,7 +465,7 @@ export const FormScreen = () => {
                     backgroundColor: currentTheme.primary,
                     borderColor: currentTheme.border,
                     shadowColor: currentTheme.borderShadow || '#000',
-                    marginTop: 20,
+                    marginTop: 10,
                     paddingVertical: 0,
                     paddingHorizontal: 16,
                   }
@@ -504,74 +504,91 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    padding: 16,
+    padding: 12,
     flexGrow: 1,
   },
   card: {
-    padding: 20,
+    padding: 14,
     width: '100%',
     alignSelf: 'center',
-    marginTop: 10,
+    marginTop: 2,
   },
   inputWrapper: {
-    marginBottom: 16,
+    marginBottom: 7,
   },
   opField: {
-    width: 112,
+    width: 84,
   },
   colorField: {
     flex: 1,
+  },
+  techniqueChipsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: -4,
+    marginBottom: 10,
+  },
+  techniqueChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  techniqueChipText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   label: {
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: '600',
   },
   colorDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    height: 48,
+    paddingHorizontal: 11,
+    height: 40,
   },
   input: {
     flex: 1,
-    fontSize: 15,
-    paddingVertical: 8,
+    fontSize: 13.5,
+    paddingVertical: 4,
   },
   checkIcon: {
-    marginLeft: 8,
+    marginLeft: 6,
   },
   submitButton: {
-    height: 52,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
   submitButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
   },
   imagePickerRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 4,
+    gap: 10,
+    marginTop: 2,
   },
   imagePickerBtn: {
     flex: 1,
-    height: 72,
-    borderRadius: 14,
+    height: 42,
+    borderRadius: 11,
     borderWidth: 1,
     borderStyle: 'dashed',
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,

@@ -19,14 +19,17 @@ interface UserManagementModalProps {
   onClose: () => void;
 }
 
-export const UserManagementModal: React.FC<UserManagementModalProps> = ({ visible, onClose }) => {
-  const currentTheme = useAppStore(state => state.currentTheme);
-  const insets = useSafeAreaInsets();
+export const UserManagementModal: React.FC<UserManagementModalProps> = (props) => {
   const { isAdmin } = useRoles();
-
-  if (!isAdmin) {
+  if (!props.visible || !isAdmin) {
     return null;
   }
+  return <UserManagementModalContent {...props} />;
+};
+
+const UserManagementModalContent: React.FC<UserManagementModalProps> = ({ visible, onClose }) => {
+  const currentTheme = useAppStore(state => state.currentTheme);
+  const insets = useSafeAreaInsets();
 
   const {
     users,
@@ -61,7 +64,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ visibl
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
@@ -74,8 +77,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ visibl
             {
               backgroundColor: currentTheme.card,
               borderColor: currentTheme.border,
-              paddingTop: Math.max(insets.top, 20),
-              paddingBottom: Math.max(insets.bottom + 20, 24),
+              paddingTop: 16,
+              paddingBottom: Math.max(insets.bottom + 20, 48),
             },
           ]}
         >
@@ -154,11 +157,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
+    paddingTop: 100,
   },
   container: {
-    height: '88%',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    flex: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingHorizontal: 18,
     borderWidth: 1,
   },

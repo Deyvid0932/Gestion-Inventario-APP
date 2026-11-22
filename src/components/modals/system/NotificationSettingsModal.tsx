@@ -5,8 +5,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  TouchableWithoutFeedback,
-  ScrollView,
   Linking,
   Platform,
   Alert,
@@ -66,132 +64,158 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.overlay}>
-          <TouchableWithoutFeedback>
-            <View
-              style={[
-                styles.sheetContainer,
-                clayStyles,
-                {
-                  backgroundColor: currentTheme.card,
-                  borderColor: currentTheme.border,
-                  shadowColor: currentTheme.borderShadow || '#000',
-                  maxHeight: '85%',
-                  paddingBottom: Math.max(insets.bottom + 20, 28),
-                },
-              ]}
-            >
-              <View style={styles.dragIndicator} />
+    <Modal visible={visible} transparent statusBarTranslucent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        <View
+          style={[
+            styles.sheetContainer,
+            clayStyles,
+            {
+              backgroundColor: currentTheme.card,
+              borderColor: currentTheme.border,
+              shadowColor: currentTheme.borderShadow || '#000',
+              paddingBottom: Math.max(insets.bottom + 20, 48),
+            },
+          ]}
+        >
+          <View style={styles.dragIndicator} />
 
-              {/* Header */}
-              <View style={styles.headerRow}>
-                <View style={styles.titleContainer}>
-                  <Ionicons name="notifications-outline" size={24} color={currentTheme.primary} style={{ marginRight: 8 }} />
-                  <Text style={[styles.modalTitle, { color: currentTheme.text }]} allowFontScaling={true}>
-                    Ajustes de Notificaciones
-                  </Text>
+          {/* Header */}
+          <View style={styles.headerRow}>
+            <View style={styles.titleContainer}>
+              <Ionicons name="notifications-outline" size={24} color={currentTheme.primary} style={{ marginRight: 8 }} />
+              <Text style={[styles.modalTitle, { color: currentTheme.text }]} allowFontScaling={true}>
+                Ajustes de Notificaciones
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: currentTheme.border + '30' }]}
+              accessibilityLabel="Cerrar modal de notificaciones"
+            >
+              <Ionicons name="close" size={20} color={currentTheme.text} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.staticBody}>
+            {/* Tarjeta de Estado de Permisos */}
+            <View style={[styles.statusCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+              <View style={styles.statusHeader}>
+                <Ionicons
+                  name={hasPermission ? 'notifications-circle' : 'warning-outline'}
+                  size={32}
+                  color={hasPermission ? '#2ecc71' : '#e74c3c'}
+                  style={{ marginRight: 12 }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.statusTitle, { color: currentTheme.text }]}>Estado de Permisos</Text>
+                  <View style={styles.badgeContainer}>
+                    {hasPermission ? (
+                      <View style={[styles.statusBadge, { backgroundColor: '#2ecc7120', borderColor: '#2ecc7160' }]}>
+                        <Ionicons name="checkmark-circle" size={14} color="#2ecc71" style={{ marginRight: 4 }} />
+                        <Text style={[styles.statusBadgeText, { color: '#2ecc71' }]}>✔ Permisos concedidos</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.statusBadge, { backgroundColor: '#e74c3c20', borderColor: '#e74c3c60' }]}>
+                        <Ionicons name="alert-circle" size={14} color="#e74c3c" style={{ marginRight: 4 }} />
+                        <Text style={[styles.statusBadgeText, { color: '#e74c3c' }]}>⚠️ Faltan permisos</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={[styles.closeBtn, { backgroundColor: currentTheme.border + '30' }]}
-                  accessibilityLabel="Cerrar modal de notificaciones"
-                >
-                  <Ionicons name="close" size={20} color={currentTheme.text} />
-                </TouchableOpacity>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                {/* Tarjeta de Estado de Permisos */}
-                <View style={[styles.statusCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                  <View style={styles.statusHeader}>
-                    <Ionicons
-                      name={hasPermission ? 'notifications-circle' : 'warning-outline'}
-                      size={32}
-                      color={hasPermission ? '#2ecc71' : '#e74c3c'}
-                      style={{ marginRight: 12 }}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.statusTitle, { color: currentTheme.text }]}>Estado de Permisos</Text>
-                      <View style={styles.badgeContainer}>
-                        {hasPermission ? (
-                          <View style={[styles.statusBadge, { backgroundColor: '#2ecc7120', borderColor: '#2ecc7160' }]}>
-                            <Ionicons name="checkmark-circle" size={14} color="#2ecc71" style={{ marginRight: 4 }} />
-                            <Text style={[styles.statusBadgeText, { color: '#2ecc71' }]}>✔ Permisos concedidos</Text>
-                          </View>
-                        ) : (
-                          <View style={[styles.statusBadge, { backgroundColor: '#e74c3c20', borderColor: '#e74c3c60' }]}>
-                            <Ionicons name="alert-circle" size={14} color="#e74c3c" style={{ marginRight: 4 }} />
-                            <Text style={[styles.statusBadgeText, { color: '#e74c3c' }]}>⚠️ Faltan permisos</Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  </View>
+              {!hasPermission && (
+                <TouchableOpacity
+                  style={[styles.grantBtn, { backgroundColor: currentTheme.primary }]}
+                  onPress={requestPermission}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.grantBtnText}>Solicitar Permisos Ahora</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
-                  {!hasPermission && (
-                    <TouchableOpacity
-                      style={[styles.grantBtn, { backgroundColor: currentTheme.primary }]}
-                      onPress={requestPermission}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.grantBtnText}>Solicitar Permisos Ahora</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+            {/* Tarjeta Informativa de Batería */}
+            <View style={[styles.warningCard, { backgroundColor: '#EAB30815', borderColor: '#EAB30840' }]}>
+              <View style={styles.warningHeaderRow}>
+                <Ionicons name="battery-charging-outline" size={20} color="#EAB308" style={{ marginRight: 6 }} />
+                <Text style={[styles.warningTitle, { color: '#EAB308', marginBottom: 0 }]}>Optimización de Batería (Android)</Text>
+              </View>
+              <Text style={[styles.warningText, { color: currentTheme.text }]}>
+                Si Android restringe el uso de batería en segundo plano, las alarmas o recordatorios de tus prendas podrían no sonar a tiempo.
+              </Text>
+            </View>
 
-                {/* Tarjeta Informativa de Batería */}
-                <View style={[styles.warningCard, { backgroundColor: '#EAB30815', borderColor: '#EAB30840' }]}>
-                  <Ionicons name="battery-charging-outline" size={24} color="#EAB308" style={{ marginBottom: 6 }} />
-                  <Text style={[styles.warningTitle, { color: '#EAB308' }]}>Optimización de Batería (Android)</Text>
-                  <Text style={[styles.warningText, { color: currentTheme.text }]}>
-                    Si el sistema operativo Android restringe el uso de batería en segundo plano para esta aplicación, algunas alarmas o recordatorios programados en tus prendas podrían no sonar correctamente a tiempo.
+            {/* Cómo funcionan los recordatorios */}
+            <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>RECORDATORIOS DE PRODUCCIÓN</Text>
+            <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border, marginBottom: 14 }]}>
+              <View style={styles.menuRow}>
+                <Ionicons name="alarm-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Alarmas por Prenda</Text>
+                  <Text style={[styles.menuSubLabel, { color: currentTheme.textSecondary }]}>
+                    Programa fecha y hora exacta al registrar o editar una prenda para hacer seguimiento.
                   </Text>
                 </View>
-
-                {/* Accesos Directos al Sistema */}
-                <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>ACCESOS DIRECTOS DEL SISTEMA</Text>
-                <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-                  <TouchableOpacity style={styles.menuRow} onPress={openAppSettings}>
-                    <Ionicons name="settings-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Configuración de Notificaciones</Text>
-                      <Text style={[styles.menuSubLabel, { color: currentTheme.textSecondary }]}>Ajustar sonidos y alertas del sistema</Text>
-                    </View>
-                    <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
-                  </TouchableOpacity>
-
-                  <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-
-                  <TouchableOpacity style={styles.menuRow} onPress={openAppSettings}>
-                    <Ionicons name="key-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Permisos de la Aplicación</Text>
-                      <Text style={[styles.menuSubLabel, { color: currentTheme.textSecondary }]}>Cámara, almacenamiento y notificaciones</Text>
-                    </View>
-                    <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
-                  </TouchableOpacity>
-
-                  {Platform.OS === 'android' && (
-                    <>
-                      <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
-                      <TouchableOpacity style={styles.menuRow} onPress={openAppSettings}>
-                        <Ionicons name="battery-dead-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.menuLabel, { color: currentTheme.text }]}>No Restringir Batería</Text>
-                          <Text style={[styles.menuSubLabel, { color: currentTheme.textSecondary }]}>Permitir ejecución de alarmas en segundo plano</Text>
-                        </View>
-                        <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
-                      </TouchableOpacity>
-                    </>
-                  )}
+              </View>
+              <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+              <View style={styles.menuRow}>
+                <Ionicons name="phone-portrait-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Ejecución 100% Local</Text>
+                  <Text style={[styles.menuSubLabel, { color: currentTheme.textSecondary }]}>
+                    Las notificaciones se disparan desde tu dispositivo incluso si estás sin conexión.
+                  </Text>
                 </View>
-              </ScrollView>
+              </View>
             </View>
-          </TouchableWithoutFeedback>
+
+            {/* Accesos Directos al Sistema */}
+            <Text style={[styles.sectionSubtitle, { color: currentTheme.textSecondary }]}>ACCESOS DIRECTOS DEL SISTEMA</Text>
+            <View style={[styles.menuGroup, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+              <TouchableOpacity style={styles.menuRow} onPress={openAppSettings}>
+                <Ionicons name="settings-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Configuración de Notificaciones</Text>
+                  <Text style={[styles.menuSubLabel, { color: currentTheme.textSecondary }]}>Ajustar sonidos y alertas del sistema</Text>
+                </View>
+                <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
+              </TouchableOpacity>
+
+              <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+              <TouchableOpacity style={styles.menuRow} onPress={openAppSettings}>
+                <Ionicons name="key-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.menuLabel, { color: currentTheme.text }]}>Permisos de la Aplicación</Text>
+                  <Text style={[styles.menuSubLabel, { color: currentTheme.textSecondary }]}>Cámara, almacenamiento y notificaciones</Text>
+                </View>
+                <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
+              </TouchableOpacity>
+
+              {Platform.OS === 'android' && (
+                <>
+                  <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+                  <TouchableOpacity style={styles.menuRow} onPress={openAppSettings}>
+                    <Ionicons name="battery-dead-outline" size={20} color={currentTheme.primary} style={styles.menuIcon} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.menuLabel, { color: currentTheme.text }]}>No Restringir Batería</Text>
+                      <Text style={[styles.menuSubLabel, { color: currentTheme.textSecondary }]}>Permitir ejecución de alarmas</Text>
+                    </View>
+                    <Ionicons name="open-outline" size={16} color={currentTheme.textSecondary} />
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
         </View>
-      </TouchableWithoutFeedback>
+      </View>
     </Modal>
   );
 };
@@ -201,8 +225,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+    paddingTop: 100,
   },
   sheetContainer: {
+    flex: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
@@ -216,13 +242,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#CCCCCC',
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 14,
+    marginBottom: 8,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   titleContainer: {
     flexDirection: 'row',
@@ -239,21 +265,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  scrollContent: {
-    paddingBottom: 10,
+  staticBody: {
+    flex: 1,
   },
   statusCard: {
-    padding: 16,
-    borderRadius: 16,
+    padding: 10,
+    borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   statusHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   statusTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
     marginBottom: 4,
   },
@@ -285,37 +311,42 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   warningCard: {
-    padding: 14,
-    borderRadius: 14,
+    padding: 11,
+    borderRadius: 13,
     borderWidth: 1,
-    marginBottom: 16,
+    marginBottom: 10,
+  },
+  warningHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   warningTitle: {
     fontSize: 13,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   warningText: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 11.5,
+    lineHeight: 16,
   },
   sectionSubtitle: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
     letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   menuGroup: {
     borderRadius: 14,
     borderWidth: 1,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9.5,
   },
   menuIcon: {
     marginRight: 12,

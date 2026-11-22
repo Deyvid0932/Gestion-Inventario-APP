@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Alert, Animated } from 'react-native';
+import { Alert, Animated, InteractionManager } from 'react-native';
 import { useRoute, useFocusEffect, useNavigation, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -99,44 +99,43 @@ export const useBoxContentsScreen = (boxId: string, _boxName: string) => {
     message: '',
   });
 
+  const searchRef = useRef(search);
+  searchRef.current = search;
+  const localCountRef = useRef(localGarments.length);
+  localCountRef.current = localGarments.length;
+
   const fetchGarments = useCallback(async (showLoading = false) => {
     if (!db) return;
     const queryId = ++searchCounter.current;
+    const currentSearch = searchRef.current;
 
-    if (showLoading && localGarments.length === 0) {
+    if (showLoading && localCountRef.current === 0) {
       setLoading(true);
+      fadeAnim.stopAnimation();
       fadeAnim.setValue(0);
     }
 
     try {
-      const result = await GarmentService.getAllGarmentsByBox(db, boxId, search);
+      const result = await GarmentService.getAllGarmentsByBox(db, boxId, currentSearch);
 
       if (queryId === searchCounter.current) {
         setLocalGarments(result);
 
-        if (search === '') {
+        if (currentSearch === '') {
           setGarmentsGlobal(result);
-        }
-
-        if (showLoading || search === '') {
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 300,
-            useNativeDriver: true,
-          }).start();
-        } else {
-          fadeAnim.setValue(1);
         }
       }
     } catch (error) {
       console.error(error);
+      fadeAnim.stopAnimation();
+      fadeAnim.setValue(1);
     } finally {
       if (queryId === searchCounter.current) {
         setRefreshing(false);
         setLoading(false);
       }
     }
-  }, [db, boxId, setGarmentsGlobal, fadeAnim, search, localGarments.length]);
+  }, [db, boxId, setGarmentsGlobal, fadeAnim]);
 
   useEffect(() => {
     // No reemplazar los resultados filtrados por la lista global sin filtrar.
@@ -146,23 +145,35 @@ export const useBoxContentsScreen = (boxId: string, _boxName: string) => {
     if (cached.length > 0) {
       setLocalGarments(cached);
       setLoading(false);
+      fadeAnim.stopAnimation();
       fadeAnim.setValue(1);
     }
   }, [boxId, globalGarments, fadeAnim, search]);
 
   useEffect(() => {
-    if (db && boxId) fetchGarments(false);
+    if (db && boxId && dataRevision > 0) fetchGarments(false);
   }, [db, boxId, dataRevision, fetchGarments]);
 
   useFocusEffect(
     useCallback(() => {
-      if (db && boxId) {
+      if (!db || !boxId) return;
+      const task = InteractionManager.runAfterInteractions(() => {
         fetchGarments(false);
-      }
+      });
+      return () => task.cancel();
     }, [db, boxId, fetchGarments])
   );
 
   const isInitialMount = useRef(true);
+  const handledTargetKeyRef = useRef<string | null>(null);
+  const highlightTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+
+  useEffect(() => {
+    return () => {
+      highlightTimersRef.current.forEach(t => clearTimeout(t));
+      highlightTimersRef.current = [];
+    };
+  }, []);
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -179,19 +190,37 @@ export const useBoxContentsScreen = (boxId: string, _boxName: string) => {
 
   useEffect(() => {
     const targetId = (route.params as any)?.targetGarmentId;
-    if (targetId && localGarments.length > 0) {
-      setHighlightedId(targetId);
-      const index = localGarments.findIndex(g => g.id === targetId);
-      if (index !== -1) {
-        const timer = setTimeout(() => {
-          try {
-            flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-          } catch (_) {}
-        }, 350);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [localGarments, route.params]);
+    if (!targetId || localGarments.length === 0) return;
+
+    const index = localGarments.findIndex(g => g.id === targetId);
+    if (index === -1) return;
+
+    const targetKey = `${boxId}-${targetId}`;
+    if (handledTargetKeyRef.current === targetKey) return;
+    handledTargetKeyRef.current = targetKey;
+
+    highlightTimersRef.current.forEach(t => clearTimeout(t));
+    highlightTimersRef.current = [];
+
+    const scrollTimer = setTimeout(() => {
+      try {
+        flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+      } catch (_) {}
+
+      const waitForCenterMs = index > 6 ? 650 : 380;
+      const highlightTimer = setTimeout(() => {
+        setHighlightedId(targetId);
+        const clearTimer = setTimeout(() => {
+          setHighlightedId(prev => (prev === targetId ? null : prev));
+        }, 2000);
+        highlightTimersRef.current.push(clearTimer);
+      }, waitForCenterMs);
+
+      highlightTimersRef.current.push(highlightTimer);
+    }, 250);
+
+    highlightTimersRef.current.push(scrollTimer);
+  }, [localGarments, route.params, boxId]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -402,6 +431,21 @@ export const useBoxContentsScreen = (boxId: string, _boxName: string) => {
 
   const canEdit = hasRole(['Admin', 'Editor']);
   const showSkeleton = !db || (loading && localGarments.length === 0);
+
+  // Ejecutar el fade-in solo cuando <Animated.View> ya está montado (!showSkeleton)
+  useEffect(() => {
+    if (!showSkeleton) {
+      fadeAnim.stopAnimation();
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (!finished) fadeAnim.setValue(1);
+      });
+    }
+  }, [showSkeleton, fadeAnim]);
+
   const selectedCount = Object.keys(selectedGarments).filter(k => selectedGarments[k]).length;
 
   return {

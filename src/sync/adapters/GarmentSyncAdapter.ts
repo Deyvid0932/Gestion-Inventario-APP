@@ -73,6 +73,8 @@ export class GarmentSyncAdapter implements SyncAdapter {
         op: row.op || '',
         style: row.style,
         color: row.color,
+        size: row.size || null,
+        art_code: row.art_code || null,
         shipping_at: row.shipping_at || null,
         status: row.deleted_at ? 0 : (row.status ?? 1),
         created_at: row.created_at ?? new Date().toISOString(),
@@ -277,6 +279,7 @@ export class GarmentSyncAdapter implements SyncAdapter {
           const styleVal = r.style || '';
           const colorVal = r.color || '';
           const sizeVal = r.size || null;
+          const artCodeVal = r.art_code || null;
           const statusVal = r.deleted_at ? 0 : (r.status ?? 1);
           const createdVal = r.created_at || new Date().toISOString();
           const deletedAtVal = r.deleted_at || null;
@@ -284,14 +287,15 @@ export class GarmentSyncAdapter implements SyncAdapter {
           const batchIdVal = r.deletion_batch_id || null;
 
           await db.runAsync(
-            `INSERT INTO garments (id, box_id, op, style, color, size, shipping_at, status, created_at, updated_at, deleted_at, deleted_by, deletion_batch_id, sync_status) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')
+            `INSERT INTO garments (id, box_id, op, style, color, size, art_code, shipping_at, status, created_at, updated_at, deleted_at, deleted_by, deletion_batch_id, sync_status) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')
              ON CONFLICT(id) DO UPDATE SET
                box_id = excluded.box_id,
                op = excluded.op,
                style = excluded.style,
                color = excluded.color,
                size = excluded.size,
+               art_code = excluded.art_code,
                shipping_at = excluded.shipping_at,
                status = excluded.status,
                created_at = excluded.created_at,
@@ -309,6 +313,7 @@ export class GarmentSyncAdapter implements SyncAdapter {
               styleVal,
               colorVal,
               sizeVal,
+              artCodeVal,
               r.shipping_at || null,
               statusVal,
               createdVal,

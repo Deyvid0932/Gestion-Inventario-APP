@@ -21,39 +21,39 @@ interface PrivacyModalProps {
 
 const PRIVACY_SECTIONS = [
   {
-    title: 'Datos Almacenados en tu Dispositivo',
+    title: 'Datos Almacenados en tu Dispositivo (SQLite)',
     icon: 'server-outline',
-    desc: 'Topytop Kith almacena todos tus lotes, cajas y prendas en una base de datos local SQLite dentro de tu propio teléfono. Todo funciona sin necesidad de internet.',
+    desc: 'Todos tus lotes, cajas, prendas e historial de actividad se guardan en una base de datos local SQLite dentro de tu dispositivo, permitiendo trabajar 100% sin internet.',
   },
   {
-    title: 'Sincronización en la Nube',
+    title: 'Sincronización en Supabase Cloud',
     icon: 'cloud-done-outline',
-    desc: 'Si decides conectar tu cuenta de Google, se crea una copia de seguridad encriptada en Supabase Cloud para proteger tus datos contra pérdidas y sincronizar varios teléfonos.',
+    desc: 'Al conectar tu cuenta de Google, tus datos se respaldan de forma segura en Supabase mediante cifrado SSL/TLS y políticas Row Level Security (RLS) exclusivas para tu usuario.',
+  },
+  {
+    title: 'Imágenes Privadas en Cloudflare R2',
+    icon: 'images-outline',
+    desc: 'Las fotos de prendas y solicitudes se almacenan de forma privada en Cloudflare R2 y se consultan únicamente con URLs firmadas temporales; nunca se publican ni indexan.',
+  },
+  {
+    title: 'Asistente Topytop IA y Escaneo OCR',
+    icon: 'sparkles-outline',
+    desc: 'Topytop IA (vía Groq API) procesa solo las consultas de inventario que envías para responderte. El reconocimiento de texto (ML Kit OCR) se ejecuta localmente en tu teléfono sin enviar imágenes a terceros.',
+  },
+  {
+    title: 'Notificaciones y Recordatorios Locales',
+    icon: 'notifications-outline',
+    desc: 'Las alarmas y recordatorios de prendas se programan directamente en tu dispositivo sin servicios de rastreo ni publicidad.',
   },
   {
     title: 'Lo que NUNCA compartimos',
     icon: 'shield-checkmark-outline',
-    desc: 'Tu información personal, inventarios, imágenes o datos de cuenta NUNCA se venden, alquilan ni comparten con terceros ni empresas anunciantes.',
+    desc: 'Tu correo, inventarios, reportes o fotografías NUNCA se venden, alquilan ni comparten con terceros ni empresas anunciantes.',
   },
   {
-    title: 'Uso de tu Cuenta de Google',
-    icon: 'logo-google',
-    desc: 'Únicamente solicitamos tu correo, nombre y foto de perfil pública para autenticarte de forma segura y asociar tus respaldos privados en Supabase.',
-  },
-  {
-    title: 'Uso de Supabase Infrastructure',
-    icon: 'lock-closed-outline',
-    desc: 'Supabase utiliza encriptación de datos SSL/TLS de nivel bancario y políticas de seguridad Row Level Security (RLS) para que nadie más pueda ver tus prendas.',
-  },
-  {
-    title: 'Uso de Inteligencia Artificial (API Groq, Gemini 3.5 Lite)',
-    icon: 'sparkles-outline',
-    desc: 'Las preguntas que le haces al Asistente IA procesan únicamente el texto de tus prendas para responder a tus consultas de inventario, sin almacenar datos personales.',
-  },
-  {
-    title: 'Tus Derechos y Control de Datos',
+    title: 'Control Total y Exportación',
     icon: 'happy-outline',
-    desc: 'Eres dueño absoluto de tu información. Puedes exportar tus inventarios a Excel, cerrar sesión o eliminar completamente los datos de tu dispositivo en cualquier momento.',
+    desc: 'Eres dueño absoluto de tu información. Puedes exportar tus lotes a Excel o PDF, cerrar sesión o eliminar tus datos locales y en la nube en cualquier momento.',
   },
 ];
 
@@ -68,7 +68,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ visible, onClose }) 
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
@@ -83,8 +83,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ visible, onClose }) 
               backgroundColor: currentTheme.card,
               borderColor: currentTheme.border,
               shadowColor: currentTheme.borderShadow || '#000',
-              maxHeight: '85%',
-              paddingBottom: Math.max(insets.bottom + 16, 24),
+              paddingBottom: 0,
             },
           ]}
         >
@@ -109,13 +108,13 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ visible, onClose }) 
           <ScrollView
             showsVerticalScrollIndicator={false}
             nestedScrollEnabled={true}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + 20, 32) }]}
           >
             <View style={[styles.introCard, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
               <Ionicons name="shield-checkmark" size={32} color={currentTheme.primary} style={{ marginBottom: 8 }} />
               <Text style={[styles.introTitle, { color: currentTheme.text }]}>Transparencia y Seguridad Garantizada</Text>
               <Text style={[styles.introDesc, { color: currentTheme.textSecondary }]}>
-                En Topytop Kith respetamos y protegemos la privacidad de tu información. Diseñamos la aplicación para funcionar de forma privada e independiente.
+                En Topytop Kith v2.0 respetamos y protegemos la privacidad de tu inventario, tus fotografías y tu cuenta en todo momento.
               </Text>
             </View>
 
@@ -158,8 +157,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+    paddingTop: 100,
   },
   sheetContainer: {
+    flex: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,

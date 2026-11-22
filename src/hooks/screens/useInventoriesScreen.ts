@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
-import { Alert } from 'react-native';
+import { Alert, InteractionManager } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -9,6 +9,7 @@ import { InventoryService } from '../../services';
 import { SynchronizationEngine } from '../../sync/SynchronizationEngine';
 import { AuthManager } from '../../services';
 import { useRoles } from '../common/useRoles';
+import { matchesNormalizedSearch } from '../../utils/searchUtils';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -19,6 +20,7 @@ export const useInventoriesScreen = () => {
   const setGarments = useAppStore(state => state.setGarments);
   const themeMode = useAppStore(state => state.themeMode);
   const user = useAppStore(state => state.user);
+  const dataRevision = useAppStore(state => state.dataRevision);
 
   const { hasRole } = useRoles();
   const canEdit = hasRole(['Admin', 'Editor']);
@@ -30,15 +32,16 @@ export const useInventoriesScreen = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [search, setSearch] = useState('');
   const lastNavTime = useRef(0);
+  const lastLoadedRevisionRef = useRef(-1);
 
   const filteredInventories = useMemo(() => {
     if (!search.trim()) return inventories;
-    const q = search.toLowerCase().trim();
-    return inventories.filter(i => {
-      const name = i.name || (i as any).nombre || '';
-      const desc = i.description || (i as any).descripcion || '';
-      return name.toLowerCase().includes(q) || desc.toLowerCase().includes(q);
-    });
+    return inventories.filter(i =>
+      matchesNormalizedSearch(
+        [i.name, (i as any).nombre, i.description, (i as any).descripcion],
+        search
+      )
+    );
   }, [inventories, search]);
 
   const loadAppState = useCallback(async (showSkeleton = false) => {
@@ -56,8 +59,14 @@ export const useInventoriesScreen = () => {
 
   useFocusEffect(
     useCallback(() => {
-      if (db) loadAppState(false);
-    }, [db, loadAppState])
+      if (!db) return;
+      if (lastLoadedRevisionRef.current === dataRevision && inventories.length > 0) return;
+      lastLoadedRevisionRef.current = dataRevision;
+      const task = InteractionManager.runAfterInteractions(() => {
+        loadAppState(false);
+      });
+      return () => task.cancel();
+    }, [db, dataRevision, inventories.length, loadAppState])
   );
 
   const handleRefreshOrSync = async () => {
@@ -87,13 +96,12 @@ export const useInventoriesScreen = () => {
     if (now - lastNavTime.current < 300) return;
     lastNavTime.current = now;
 
-    setGarments([]);
     navigation.navigate('Boxes', {
       inventoryId: id,
       inventoryName: name,
       boxCount,
     });
-  }, [navigation, setGarments]);
+  }, [navigation]);
 
   const deleteInventory = useCallback(async (id: string) => {
     try {

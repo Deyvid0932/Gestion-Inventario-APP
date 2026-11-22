@@ -21,7 +21,12 @@ interface MoveGarmentModalProps {
   currentBoxId: string;
 }
 
-export const MoveGarmentModal = ({ isVisible, onClose, onSelectBox, currentBoxId }: MoveGarmentModalProps) => {
+export const MoveGarmentModal = (props: MoveGarmentModalProps) => {
+  if (!props.isVisible) return null;
+  return <MoveGarmentModalContent {...props} />;
+};
+
+const MoveGarmentModalContent = ({ isVisible, onClose, onSelectBox, currentBoxId }: MoveGarmentModalProps) => {
   const db = useSQLiteContext();
   const currentTheme = useAppStore(state => state.currentTheme);
   const [boxes, setBoxes] = useState<Box[]>([]);
@@ -76,6 +81,7 @@ export const MoveGarmentModal = ({ isVisible, onClose, onSelectBox, currentBoxId
       visible={isVisible}
       animationType="fade"
       transparent={true}
+      statusBarTranslucent
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
@@ -121,11 +127,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
+    paddingTop: 100,
   },
   modalContent: {
+    flex: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '75%',
     padding: 20,
     borderWidth: 1,
   },

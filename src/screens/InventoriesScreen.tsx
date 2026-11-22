@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { Navbar, SkeletonLoader, InventoryCard, EmptyState } from '../components';
 import { Ionicons } from '@expo/vector-icons';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { InventoryStats } from '../types';
 import { useInventoriesScreen } from '../hooks';
@@ -44,9 +43,8 @@ export const InventoriesScreen = () => {
   ), [currentTheme, canEdit, isSearchActive, handleCardPress, handleCardEdit, deleteInventory]);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: currentTheme.background }}>
-      <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
-        <Navbar title="Lotes de Trabajo" />
+    <View style={{ flex: 1, backgroundColor: currentTheme.background }}>
+      <Navbar title="Lotes de Trabajo" />
 
         {/* BARRA SUPERIOR: BUSCADOR + BOTÓN NUEVO */}
         <View style={styles.topActionsBar}>
@@ -58,6 +56,9 @@ export const InventoriesScreen = () => {
               placeholderTextColor={currentTheme.textSecondary}
               value={search}
               onChangeText={setSearch}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
             />
             {search.length > 0 && (
               <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -85,7 +86,7 @@ export const InventoriesScreen = () => {
             <DraggableFlatList
               key={`inventarios-${themeMode}`}
               showsVerticalScrollIndicator={false}
-              extraData={themeMode}
+              extraData={`${themeMode}-${search}`}
               data={filteredInventories}
               renderItem={renderItem}
               keyExtractor={item => item.id}
@@ -128,7 +129,6 @@ export const InventoriesScreen = () => {
           </View>
         )}
       </View>
-    </GestureHandlerRootView>
   );
 };
 

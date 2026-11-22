@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,9 @@ import {
   Platform,
   KeyboardAvoidingView,
   Keyboard,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInRight, FadeInLeft } from 'react-native-reanimated';
 import { Navbar } from '../components';
 import { Image } from 'expo-image';
 import { SearchResult } from '../utils/nlpEngine';
@@ -20,7 +20,7 @@ import { ChatInputBar } from '../components/chat/ChatInputBar';
 import { ChatBoxCard } from '../components/chat/ChatBoxCard';
 import { ChatGarmentCard } from '../components/chat/ChatGarmentCard';
 
-const topytopIaLogo = require('../../assets/topytop_ia_logo.png');
+const topytopIaLogo = require('../../assets/topytop_ia_avatar.png');
 
 export const FAQ_SUGGESTIONS = [
   { id: '1', label: '¿Qué apartados tiene la app?' },
@@ -35,8 +35,8 @@ export const ChatbotScreen = () => {
     messages,
     sessions,
     currentSessionId,
+    isInitialLoading,
     isSidebarOpen,
-    activeModel,
     input,
     isTyping,
     isRecording,
@@ -58,7 +58,92 @@ export const ChatbotScreen = () => {
     handleBoxPress,
   } = handlers;
 
-  const showFaqSuggestions = !isTyping && messages.length <= 1 && (!messages[0] || messages[0].sender === 'bot');
+  const showFaqSuggestions =
+    !isInitialLoading &&
+    !isTyping &&
+    messages.length <= 1 &&
+    (!messages[0] || messages[0].sender === 'bot');
+
+  const renderMessageItem = useCallback(({ item }: { item: any }) => (
+    <View
+      style={[
+        styles.messageRow,
+        item.sender === 'user' ? styles.userRow : styles.botRow,
+      ]}
+    >
+      {item.sender === 'bot' && (
+        <View style={[styles.avatarCircle, { backgroundColor: '#FFFFFF', borderColor: currentTheme.border }]}>
+          <Image
+            source={topytopIaLogo}
+            style={styles.avatarImage}
+            contentFit="contain"
+          />
+        </View>
+      )}
+
+      <View
+        style={[
+          styles.messageBubble,
+          item.sender === 'user'
+            ? [styles.userBubble, { backgroundColor: themeMode === 'light' ? '#E4E4E7' : '#3F3F46' }]
+            : [styles.botBubble, { backgroundColor: currentTheme.card }],
+        ]}
+      >
+        <Text
+                style={[
+                  styles.messageText,
+                  {
+                    color: item.sender === 'user'
+                      ? (themeMode === 'light' ? '#121212' : '#FFFFFF')
+                      : currentTheme.text,
+                  },
+                ]}
+              >
+                {item.text.replace(/\*+/g, '')}
+              </Text>
+
+              {/* Tarjeta de Caja (sin mostrar prendas) */}
+              {item.boxMatch && (
+                <ChatBoxCard
+                  box={item.boxMatch}
+                  theme={currentTheme}
+                  onOpenBox={handleBoxPress}
+                />
+              )}
+
+              {/* Tarjetas de Prendas (para búsquedas individuales) */}
+              {item.matches && item.matches.length > 0 && (
+                <View style={styles.matchesContainer}>
+                  {item.matches.map((match: SearchResult) => (
+                    <ChatGarmentCard
+                      key={match.id}
+                      match={match}
+                      theme={currentTheme}
+                      onPressItem={handleResultItemPress}
+                    />
+                  ))}
+                </View>
+              )}
+      </View>
+    </View>
+  ), [currentTheme, themeMode, handleBoxPress, handleResultItemPress]);
+
+  const listHeaderComponent = useMemo(() => (
+    isTyping ? (
+      <View style={styles.botRow}>
+        <View style={[styles.avatarCircle, { backgroundColor: '#FFFFFF', borderColor: currentTheme.border }]}>
+          <Image
+            source={topytopIaLogo}
+            style={styles.avatarImage}
+            contentFit="contain"
+          />
+        </View>
+        <View style={[styles.messageBubble, styles.botBubble, { backgroundColor: currentTheme.card, width: 60, justifyContent: 'center', alignItems: 'center' }]}>
+          <Ionicons name="ellipsis-horizontal" size={24} color={currentTheme.textSecondary} />
+        </View>
+      </View>
+    ) : null
+  ), [isTyping, currentTheme]);
 
   return (
     <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
@@ -90,128 +175,36 @@ export const ChatbotScreen = () => {
             </View>
             <View style={styles.navInfoCol}>
               <Text style={[styles.navTitle, { color: currentTheme.text }]} numberOfLines={1}>Topytop IA</Text>
-              <View style={styles.navStatusRow}>
-                <View style={styles.navStatusDot} />
-                <Text style={[styles.navModelText, { color: currentTheme.primary }]} numberOfLines={1}>
-                  {activeModel}
-                </Text>
-              </View>
             </View>
           </View>
         }
       />
 
       {/* MENSAJES */}
-      <FlatList
-        ref={flatListRef}
-        key={`chat-messages-${currentSessionId || 'default'}`}
-        style={styles.messageList}
-        data={messages}
-        keyExtractor={item => item.id}
-        inverted
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        contentContainerStyle={styles.chatList}
-        initialNumToRender={15}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-        showsVerticalScrollIndicator={false}
-        extraData={`${currentSessionId}-${messages.length}-${themeMode}`}
-        renderItem={({ item }) => (
-          <Animated.View
-            entering={item.sender === 'user' ? FadeInRight.duration(200) : FadeInLeft.duration(200)}
-            style={[
-              styles.messageRow,
-              item.sender === 'user' ? styles.userRow : styles.botRow,
-            ]}
-          >
-            {item.sender === 'bot' && (
-              <View style={[styles.avatarCircle, { backgroundColor: '#FFFFFF', borderColor: currentTheme.border }]}>
-                <Image
-                  source={topytopIaLogo}
-                  style={styles.avatarImage}
-                  contentFit="contain"
-                />
-              </View>
-            )}
-
-            <View
-              style={[
-                styles.messageBubble,
-                item.sender === 'user'
-                  ? [styles.userBubble, { backgroundColor: themeMode === 'light' ? '#E4E4E7' : '#3F3F46' }]
-                  : [styles.botBubble, { backgroundColor: currentTheme.card }],
-              ]}
-            >
-              <Text
-                style={[
-                  styles.messageText,
-                  {
-                    color: item.sender === 'user'
-                      ? (themeMode === 'light' ? '#121212' : '#FFFFFF')
-                      : currentTheme.text,
-                  },
-                ]}
-              >
-                {item.text.replace(/\*+/g, '')}
-              </Text>
-
-              {item.sender === 'bot' && (
-                <View style={styles.botEngineBadgeRow}>
-                  <Ionicons
-                    name={item.engineUsed === 'ia' ? 'sparkles' : 'flash-outline'}
-                    size={11}
-                    color={item.engineUsed === 'ia' ? '#3B82F6' : '#EAB308'}
-                    style={{ marginRight: 3 }}
-                  />
-                  <Text style={[styles.botEngineText, { color: item.engineUsed === 'ia' ? '#3B82F6' : '#EAB308' }]}>
-                    {item.modelName || (item.engineUsed === 'ia' ? activeModel : 'Motor Local')}
-                  </Text>
-                </View>
-              )}
-
-              {/* Tarjeta de Caja (sin mostrar prendas) */}
-              {item.boxMatch && (
-                <ChatBoxCard
-                  box={item.boxMatch}
-                  theme={currentTheme}
-                  onOpenBox={handleBoxPress}
-                />
-              )}
-
-              {/* Tarjetas de Prendas (para búsquedas individuales) */}
-              {item.matches && item.matches.length > 0 && (
-                <View style={styles.matchesContainer}>
-                  {item.matches.map((match: SearchResult) => (
-                    <ChatGarmentCard
-                      key={match.id}
-                      match={match}
-                      theme={currentTheme}
-                      onPressItem={handleResultItemPress}
-                    />
-                  ))}
-                </View>
-              )}
-            </View>
-          </Animated.View>
-        )}
-        ListHeaderComponent={
-          isTyping ? (
-            <View style={styles.botRow}>
-              <View style={[styles.avatarCircle, { backgroundColor: '#FFFFFF', borderColor: currentTheme.border }]}>
-                <Image
-                  source={topytopIaLogo}
-                  style={styles.avatarImage}
-                  contentFit="contain"
-                />
-              </View>
-              <View style={[styles.messageBubble, styles.botBubble, { backgroundColor: currentTheme.card, width: 60, justifyContent: 'center', alignItems: 'center' }]}>
-                <Ionicons name="ellipsis-horizontal" size={24} color={currentTheme.textSecondary} />
-              </View>
-            </View>
-          ) : null
-        }
-      />
+      {isInitialLoading ? (
+        <View style={[styles.messageList, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="small" color={currentTheme.primary} />
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          key={`chat-messages-${currentSessionId || 'default'}`}
+          style={styles.messageList}
+          data={messages}
+          keyExtractor={item => item.id}
+          inverted
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          contentContainerStyle={styles.chatList}
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          showsVerticalScrollIndicator={false}
+          extraData={`${currentSessionId}-${messages.length}-${themeMode}`}
+          renderItem={renderMessageItem}
+          ListHeaderComponent={listHeaderComponent}
+        />
+      )}
 
       {/* CHIPS DE SUGERENCIAS RÁPIDAS (FAQ) */}
       {showFaqSuggestions && (
@@ -314,22 +307,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.5,
   },
-  navStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 1,
-  },
-  navStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-    marginRight: 5,
-  },
-  navModelText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -386,17 +363,6 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 13.5,
     lineHeight: 19.5,
-  },
-  botEngineBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 5,
-    alignSelf: 'flex-end',
-    opacity: 0.85,
-  },
-  botEngineText: {
-    fontSize: 10,
-    fontWeight: '700',
   },
   messageList: {
     flex: 1,

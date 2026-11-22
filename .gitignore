@@ -6,7 +6,6 @@ node_modules/
 .vscode/
 .agent/
 .github/
-assets/
 supabase/
 .eas/
 src/data/
@@ -66,3 +65,4 @@ yarn-error.*
 *.apk
 *.aab
 coverage/
+scratch/
